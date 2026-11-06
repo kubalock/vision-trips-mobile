@@ -8,6 +8,10 @@ export interface AirtableRecord {
 
 @Injectable()
 export class AirtableService {
+  records(baseId: string, table: string, recordIds: string[]): Promise<AirtableRecord[]> {
+    return Promise.all([...new Set(recordIds)].filter(isRecordId).map((id) => this.record(baseId, table, id)));
+  }
+
   async record(baseId: string, table: string, recordId: string): Promise<AirtableRecord> {
     const token = process.env.AIRTABLE_TOKEN;
     if (!token) throw new ServiceUnavailableException('Airtable is not configured.');
@@ -27,4 +31,8 @@ export class AirtableService {
     if (!response.ok) throw new BadGatewayException('Airtable returned an unexpected response.');
     return (await response.json()) as AirtableRecord;
   }
+}
+
+function isRecordId(value: string): boolean {
+  return /^rec[A-Za-z0-9]{14}$/.test(value);
 }

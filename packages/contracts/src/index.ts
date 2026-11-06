@@ -62,7 +62,68 @@ export interface TripSnapshot {
     theme: ThemeTokens;
   };
   summary: TripSummary;
+  travellers: TravellerSummary[];
+  itinerary: ItineraryItem[];
+  payments?: PaymentSummary;
+  documents: TripDocument[];
   capabilities: TripCapabilities;
+}
+
+export type ItineraryKind = 'flight' | 'stay' | 'cruise' | 'transfer' | 'carhire' | 'parking' | 'train' | 'attraction' | 'misc';
+
+export interface TravellerSummary {
+  name: string;
+  firstName: string;
+  isLead: boolean;
+  assistance: string[];
+  meals: string[];
+}
+
+export interface ItineraryItem {
+  id: string;
+  kind: ItineraryKind;
+  typeLabel: string;
+  title: string;
+  status: string;
+  startDate: string | null;
+  endDate: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  from: string | null;
+  to: string | null;
+  carrier: string | null;
+  flightNumber: string | null;
+  reference: string | null;
+  address: string | null;
+  notes: string | null;
+}
+
+export interface PaymentItem {
+  id: string;
+  label: string;
+  amount: number;
+  currency: string;
+  status: 'outstanding' | 'paid' | 'overdue' | 'local' | 'refund';
+  dueDate: string | null;
+  completedDate: string | null;
+  canPay: boolean;
+}
+
+export interface PaymentSummary {
+  currency: string;
+  total: number;
+  paid: number;
+  balance: number;
+  items: PaymentItem[];
+}
+
+export interface TripDocument {
+  id: string;
+  title: string;
+  description: string;
+  kind: 'confirmation' | 'invoice' | 'receipt' | 'supplier';
+  url: string | null;
+  offlineAvailable: boolean;
 }
 
 export interface LinkExchangeRequest {

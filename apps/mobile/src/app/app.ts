@@ -2,9 +2,13 @@ import { Component, computed, inject, signal } from '@angular/core';
 import type { LinkExchangeChallenge, LinkExchangeResponse, TripSnapshot } from '@vision-trips/contracts';
 import { VisionApiService } from './core/api/vision-api.service';
 import { SavedTripsStore } from './core/storage/saved-trips.store';
+import { DocumentsSection } from './features/trip/documents-section';
+import { ItinerarySection } from './features/trip/itinerary-section';
+import { PaymentsSection } from './features/trip/payments-section';
 
 @Component({
   selector: 'app-root',
+  imports: [DocumentsSection, ItinerarySection, PaymentsSection],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
