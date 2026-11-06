@@ -1,0 +1,21 @@
+.vt-admin .vt-version { font-size: 12px; color: #646970; font-weight: 400; margin-left: 8px; }
+.vt-admin .vt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; margin-top: 16px; }
+.vt-admin .vt-card { background: #fff; border: 1px solid #dcdcde; border-radius: 8px; padding: 18px 20px; }
+.vt-admin .vt-card h2 { margin: 0 0 12px; font-size: 15px; }
+.vt-admin .vt-label { display: block; font-weight: 600; margin-bottom: 4px; }
+.vt-admin .description { display: block; margin-top: 4px; color: #646970; }
+.vt-admin .vt-check label { font-weight: 500; }
+.vt-admin .vt-clear { margin-left: 8px; font-size: 12px; color: #b32d2e; }
+.vt-admin .vt-save { position: sticky; bottom: 0; background: #f0f0f1; padding: 12px 0; margin: 0; }
+.vt-admin .vt-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #d63638; margin-right: 6px; }
+.vt-admin .vt-dot.ok { background: #00a32a; } .vt-admin .vt-dot.warn { background: #dba617; }
+.vt-admin .vt-warn { color: #b32d2e; }
+.vt-admin .vt-inline { display: flex; gap: 10px; align-items: center; margin: 10px 0; }
+.vt-admin .vt-log td { font-size: 12px; vertical-align: top; }
+.vt-admin .vt-log tr.vt-error td { background: #fcf0f1; }
+.vt-admin .vt-log code { font-size: 11px; white-space: pre-wrap; word-break: break-all; }
+.vt-admin .vt-form input[type=text], .vt-admin .vt-form input[type=password] { width: 100%; max-width: 480px; }
+
+.vt-admin .vt-modules { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.vt-admin .vt-module { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: start; padding: 10px 12px; border: 1px solid #dcdcde; border-radius: 8px; background: #fafafa; }
+.vt-admin .vt-module .description { grid-column: 2; margin: 0; }

@@ -1,0 +1,138 @@
+/* Vision Trips — print-first documents (A4). Screen shows a paper sheet; print uses the page margins. */
+:root { --ink:#1B1D1F; --ink-2:#4A4F55; --ink-3:#7A8088; --line:#E1E0DA; --paper:#EFEFEC; --sheet:#fff; --a12: color-mix(in srgb, var(--vt-accent, #1F4F6E) 12%, #fff); }
+*, *::before, *::after { box-sizing: border-box; }
+body.vt-doc { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--vt-body, 'Instrument Sans', system-ui, sans-serif); font-size: 12.5px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+body.vt-doc img { max-width: 100%; height: auto; }
+.vt-doc__bar { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 14px; padding: 10px 16px; background: #fff; border-bottom: 1px solid var(--line); font-size: 14px; }
+.vt-doc__back { color: var(--ink-2); text-decoration: none; }
+.vt-doc__barttl { margin-left: auto; font-weight: 600; }
+.vt-doc__print, .vt-doc__toggle { font: inherit; font-weight: 700; padding: 10px 16px; border-radius: 999px; border: 0; background: var(--vt-accent, #1F4F6E); color: var(--accent-ink, #fff); cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+.vt-doc__print svg { width: 1.1em; height: 1.1em; }
+.vt-doc__fab { position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 20; font: inherit; font-weight: 700; padding: 14px 18px; border-radius: 999px; border: 0; background: var(--vt-accent, #1F4F6E); color: var(--accent-ink, #fff); box-shadow: 0 10px 30px rgba(0,0,0,.25); cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+.vt-doc__fab svg { width: 1.2em; height: 1.2em; }
+@media (min-width: 900px) { .vt-doc__fab { display: none; } }
+.vt-doc__toggle { font-size: 11px; padding: 4px 10px; background: #eee; color: var(--ink); margin-left: 8px; vertical-align: middle; }
+.vt-page { width: 210mm; max-width: 100%; min-height: 297mm; margin: 18px auto; padding: 16mm 15mm; background: var(--sheet); box-shadow: 0 2px 20px rgba(0,0,0,.08); }
+.vt-letterhead { display: grid; grid-template-columns: 1fr auto; gap: 10mm; align-items: start; padding-bottom: 5mm; margin-bottom: 7mm; border-bottom: 1px solid var(--line); }
+.vt-letterhead__brand img { max-height: 20mm; max-width: 70mm; width: auto; display: block; }
+.vt-letterhead__name { font-size: 18px; }
+.vt-letterhead__slogan { margin: 2mm 0 0; font-style: italic; color: var(--ink-3); font-size: 11px; }
+.vt-letterhead__contact { text-align: right; font-size: 10.5px; color: var(--ink-2); display: grid; gap: 1px; justify-items: end; }
+.vt-letterhead__contact strong { color: var(--ink); }
+.vt-letterhead__prop { max-height: 11mm; width: auto; margin-bottom: 2mm; }
+.vt-page__title { font-family: var(--vt-display, Georgia, serif); font-weight: 500; font-size: 28px; line-height: 1.08; margin: 0; letter-spacing: -0.01em; }
+.vt-page__sub { margin: 2mm 0 0; color: var(--ink-2); font-size: 13px; }
+.vt-page__h2 { font-size: 15px; font-weight: 700; margin: 8mm 0 3mm; padding-bottom: 1.5mm; border-bottom: 2px solid var(--a12); break-after: avoid; }
+.vt-page__day { font-size: 12px; font-weight: 700; margin: 5mm 0 2mm; color: var(--ink); break-after: avoid; }
+.vt-page__day span { font-weight: 500; color: var(--ink-3); margin-left: 6px; }
+.vt-meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3mm 6mm; margin: 6mm 0; }
+.vt-meta > div { display: grid; gap: 1px; }
+.vt-meta__wide { grid-column: 1 / -1; }
+.vt-meta dt { font-size: 9.5px; color: var(--ink-3); }
+.vt-meta dd { margin: 0; font-weight: 600; }
+.vt-meta__big { font-size: 20px; }
+.vt-meta__status.is-confirmed { color: #1F7A4D; } .vt-meta__status.is-quotation { color: #B45309; } .vt-meta__status.is-cancelled { color: #B42318; }
+.vt-doc__message { padding: 4mm; border-left: 3px solid var(--vt-accent); background: var(--a12); margin: 0 0 6mm; }
+.vt-doc__message p + p { margin-top: 0.6em; }
+.vt-doc__el { padding: 3mm 0; border-top: 1px solid var(--line); break-inside: avoid; }
+.vt-doc__el-head { display: flex; justify-content: space-between; gap: 6mm; align-items: baseline; }
+.vt-doc__el-head strong { font-size: 13.5px; }
+.vt-doc__el-head span { font-size: 10px; color: var(--ink-3); }
+.vt-doc__kv { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5mm 6mm; margin: 2mm 0 0; }
+.vt-doc__kv > div { display: grid; grid-template-columns: 34mm 1fr; gap: 3mm; }
+.vt-doc__kv dt { color: var(--ink-3); } .vt-doc__kv dd { margin: 0; }
+.vt-doc__ports { margin: 2mm 0 0; font-size: 11px; }
+.vt-doc__long { margin: 2mm 0 0; padding-left: 3mm; border-left: 2px solid var(--a12); color: var(--ink-2); font-size: 11.5px; }
+.vt-doc__long p + p { margin-top: 0.5em; }
+.vt-table { width: 100%; border-collapse: collapse; margin: 2mm 0; font-size: 12px; }
+.vt-table td, .vt-table th { padding: 2.2mm 2mm; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.vt-table th { font-size: 9.5px; color: var(--ink-3); font-weight: 600; }
+.vt-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.vt-table__total td { font-weight: 700; font-size: 14px; color: var(--vt-accent); border-bottom: 0; }
+.vt-table .muted { color: var(--ink-3); font-size: 11px; }
+.vt-table .net { display: none; } body.show-net .vt-table .net { display: table-cell; }
+.vt-totals-table { width: auto; min-width: 70mm; margin-left: auto; }
+.vt-twocol { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; margin: 4mm 0; }
+.vt-twocol--totals { align-items: start; }
+.vt-box { border: 1px solid var(--line); border-radius: 3mm; padding: 4mm; display: grid; gap: 1px; }
+.vt-box__k { font-size: 9.5px; color: var(--ink-3); margin-bottom: 1mm; }
+.vt-doc__note, .vt-doc__bank { font-size: 11.5px; color: var(--ink-2); margin: 3mm 0; }
+.vt-doc__info { column-count: 2; column-gap: 7mm; font-size: 10.5px; color: var(--ink-2); line-height: 1.45; }
+.vt-doc__info article { break-inside: avoid; margin-bottom: 3mm; }
+.vt-doc__info h3 { font-size: 11px; margin: 0 0 1mm; color: var(--ink); }
+.vt-doc__info p { margin: 0 0 1.5mm; }
+.vt-doc__info ul, .vt-doc__info ol { padding-left: 4mm; margin: 0 0 1.5mm; }
+.vt-receipt { padding: 5mm 0; border-top: 1px solid var(--line); break-inside: avoid; }
+.vt-receipt:first-of-type { border-top: 0; }
+.vt-doclist { font-size: 14px; line-height: 2; }
+.vt-doc__tools { display: flex; gap: 10px; align-items: center; margin: 0 0 8mm; font-size: 12px; }
+.vt-doc__tools select { font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); }
+.vt-letter { font-size: 13px; line-height: 1.6; }
+.vt-letter__addr { white-space: pre-line; } .vt-letter__date { margin: 6mm 0 3mm; } .vt-letter__ref { font-weight: 700; margin-bottom: 5mm; }
+.vt-letter__body { margin: 4mm 0 6mm; } .vt-letter__body p + p { margin-top: 0.8em; }
+.vt-page__foot { margin-top: 10mm; padding-top: 3mm; border-top: 1px solid var(--line); font-size: 9.5px; color: var(--ink-3); }
+.vt-page__foot p { margin: 0 0 1mm; }
+.vt-page__gen { color: #A0A4AA; }
+/* ATOL certificate (CAA layout) */
+body.vt-doc--atol { font-family: Arial, Helvetica, sans-serif; }
+.vt-atol { width: 210mm; max-width: 100%; min-height: 297mm; margin: 18px auto; padding: 12mm 18mm 10mm; background: #fff; color: #231F20; box-shadow: 0 2px 20px rgba(0,0,0,.08); display: grid; gap: 3mm; align-content: start; grid-template-rows: auto auto 1fr auto auto auto; }
+.vt-atol__note { margin: 0; border: 0.6pt solid #231F20; text-align: center; font-size: 10.5pt; padding: 2.5mm 4mm; }
+.vt-atol__title { margin: 2mm 0 0; text-align: center; font-size: 46pt; font-weight: 900; line-height: 1; }
+.vt-atol__h2 { margin: 1mm 0 0; text-align: center; font-size: 14pt; font-weight: 900; }
+.vt-atol__p { margin: 0; text-align: center; font-size: 11.5pt; }
+.vt-atol__main { border: 0.6pt solid #231F20; padding: 4mm; font-size: 9.5pt; line-height: 1.2; display: grid; gap: 2mm; align-content: start; }
+.vt-atol__main p { margin: 0; }
+.vt-atol__row { display: flex; justify-content: space-between; font-weight: 900; font-size: 10.5pt; }
+.vt-atol__main > strong { font-size: 10.5pt; margin-top: 2mm; }
+.vt-atol__center { text-align: center; font-weight: 900; font-size: 14pt; margin: 2mm 0 0; }
+.vt-atol__indent { margin-left: 7mm !important; }
+.vt-atol__legal { border: 0.6pt solid #231F20; padding: 3.5mm; font-size: 8.7pt; line-height: 1.25; }
+.vt-atol__tbl { width: 100%; border-collapse: collapse; border: 0.9pt solid #231F20; font-size: 9pt; }
+.vt-atol__tbl th, .vt-atol__tbl td { border: 0.9pt solid #231F20; padding: 1.5mm; text-align: center; vertical-align: middle; }
+.vt-atol__tbl th { font-weight: 900; }
+.vt-atol__copy { margin: 0; text-align: center; font-size: 7pt; }
+.vt-atol__parts { width: 100%; border-collapse: collapse; font-size: 9pt; border: 0.7pt solid #231F20; }
+.vt-atol__parts th, .vt-atol__parts td { border: 0.6pt solid #231F20; padding: 1.7mm; text-align: left; vertical-align: top; }
+.vt-atol__total td { font-weight: 700; }
+/* Print: the sheet is laid out at exactly 210mm with its own 14mm padding, so printer margins and "fit to page"
+   cannot change the layout; colours are forced; rows never split; web fonts are already loaded by then. */
+@page { size: A4 portrait; margin: 0; }
+@media print {
+  html, body { width: 210mm; height: auto; background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body.vt-doc { font-size: 10.5pt; }
+  .vt-doc__bar, .vt-doc__tools, .vt-doc__fab { display: none !important; }
+  .vt-page { width: 210mm; min-height: 0; margin: 0; padding: 14mm; box-shadow: none; page-break-after: always; break-after: page; }
+  .vt-page:last-child { page-break-after: auto; break-after: auto; }
+  .vt-atol { width: 210mm; margin: 0; padding: 12mm 18mm; box-shadow: none; min-height: 0; break-after: page; }
+  .vt-atol:last-child { break-after: auto; }
+  .vt-letterhead, .vt-page__title, .vt-page__h2, .vt-page__day { break-after: avoid; page-break-after: avoid; }
+  .vt-doc__el, .vt-receipt, .vt-box, .vt-meta, .vt-doc__notice, .vt-doc__keyinfo dl > div, tr { break-inside: avoid; page-break-inside: avoid; }
+  table { break-inside: auto; }
+  thead { display: table-header-group; }
+  tfoot { display: table-footer-group; }
+  img { max-width: 100% !important; }
+  a { color: inherit; text-decoration: none; }
+  * { box-shadow: none !important; text-shadow: none !important; }
+  .vt-table .net { display: none; } body.show-net .vt-table .net { display: table-cell; }
+}
+.vt-doc__keyinfo dl { margin: 2mm 0 4mm; display: grid; gap: 2mm; }
+.vt-doc__keyinfo dt { font-weight: 700; font-size: 11px; }
+.vt-doc__keyinfo dd { margin: 0 0 1mm; font-size: 11px; color: var(--ink-2); }
+.vt-doc__notice { padding: 4mm; border: 1px solid var(--line); border-radius: 3mm; font-size: 10.5px; color: var(--ink-2); margin: 3mm 0; }
+.vt-doc__notice h3 { margin: 0 0 1.5mm; font-size: 11.5px; color: var(--ink); }
+.vt-doc__notice p { margin: 0 0 1.5mm; }
+/* Phone reading view (print layout stays A4). */
+@media (max-width: 640px) {
+  .vt-page { width: auto; min-height: 0; margin: 0; padding: 18px 16px 90px; box-shadow: none; }
+  .vt-letterhead { grid-template-columns: 1fr; gap: 4mm; }
+  .vt-letterhead__contact { text-align: left; justify-items: start; }
+  .vt-meta { grid-template-columns: 1fr 1fr; }
+  .vt-twocol { grid-template-columns: 1fr; }
+  .vt-doc__kv { grid-template-columns: 1fr; }
+  .vt-doc__kv > div { grid-template-columns: 30mm 1fr; }
+  .vt-doc__info { column-count: 1; }
+  .vt-totals-table { width: 100%; }
+  .vt-table { font-size: 11.5px; }
+  .vt-atol { padding: 16px; width: auto; min-height: 0; }
+  .vt-atol__title { font-size: 32pt; }
+}
