@@ -35,6 +35,7 @@ export interface TripSummary {
   departureDate: string | null;
   returnDate: string | null;
   heroImageUrl: string | null;
+  gallery: ItineraryImage[];
 }
 
 export interface TripCapabilities {
@@ -69,11 +70,20 @@ export interface TripSnapshot {
   quotation: QuotationState;
   timeline: TripTimeline;
   destinations: DestinationGuide[];
+  extras: TripExtra[];
   travellers: TravellerSummary[];
   itinerary: ItineraryItem[];
   payments?: PaymentSummary;
   documents: TripDocument[];
   capabilities: TripCapabilities;
+}
+
+export interface TripExtra {
+  id: string;
+  name: string;
+  description: string | null;
+  imageUrl: string | null;
+  supplierName: string | null;
 }
 
 export interface QuotationState {

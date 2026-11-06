@@ -6,11 +6,12 @@ import { SavedTripsStore } from './core/storage/saved-trips.store';
 import { DocumentsSection } from './features/trip/documents-section';
 import { DestinationsSection } from './features/trip/destinations-section';
 import { ItinerarySection } from './features/trip/itinerary-section';
+import { ExtrasSection } from './features/trip/extras-section';
 import { PaymentsSection } from './features/trip/payments-section';
 
 @Component({
   selector: 'app-root',
-  imports: [DestinationsSection, DocumentsSection, ItinerarySection, PaymentsSection],
+  imports: [DestinationsSection, DocumentsSection, ExtrasSection, ItinerarySection, PaymentsSection],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })

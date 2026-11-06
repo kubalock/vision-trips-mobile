@@ -64,6 +64,7 @@
       }
       <app-itinerary-section [items]="currentTrip.itinerary" />
       <app-destinations-section [destinations]="currentTrip.destinations" />
+      <app-extras-section [extras]="currentTrip.extras" />
       @if (currentTrip.payments; as payments) { <app-payments-section [payments]="payments" /> }
       <app-documents-section [documents]="currentTrip.documents" />
       <section class="mt-8 rounded-2xl bg-white p-6 ring-1 ring-slate-200" aria-labelledby="support-title">

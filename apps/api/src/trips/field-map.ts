@@ -15,6 +15,7 @@ export const bookingFields = {
   emergencyPhone: ['Customer | Emergency Telephone'], outOfHoursLink: ['Out of Hours Link'], outOfHoursEmail: ['Out of Hours Email'],
   supplierTickets: ['Supplier Tickets Received'], supplierConfirmations: ['Supplier Confirmations Received'],
   hero: ['Hero Image', 'Featured Image', 'Hero'],
+  gallery: ['Gallery', 'Accommodation Gallery', 'Cruise Ship Gallery'],
   brand: ['Brands & Branches'],
   member: ['Members'],
   customerPostcode: ['Customers | Postcode'],
@@ -24,6 +25,7 @@ export const bookingFields = {
   payments: ['Bookings [Payments]'],
   people: ['Customers [People]'],
   customers: ['Customers'],
+  upsells: ['Upsells', 'Bookings [Upsells]'],
   total: ['Total Price'],
   paid: ['MS Paid', 'Customer Payments Completed'],
   balance: ['MS Outstanding', 'MS Outstanding ', 'Booking Balance'],
@@ -78,6 +80,7 @@ export const locationFields = {
   travelAdvice: ['FCDO Travel Advice'], image: ['Featured Image'], latitude: ['Latitude'], longitude: ['Longitude'],
 } as const;
 export const cruisePortFields = { day: ['Day'], port: ['Port'], description: ['Port (SinGS)', 'Overview'], arrive: ['Arrive'], depart: ['Depart'] } as const;
+export const upsellFields = { name: ['Name', 'Title'], description: ['Further Information', 'Description'], image: ['Upsell Featured Image', 'Featured Image', 'Image'], supplier: ['Supplier'] } as const;
 
 export const paymentFields = {
   amount: ['Amount'], currency: ['Mint: Currency', 'Currency'], type: ['Payment Type'], customerType: ['Customer Payment Type'],

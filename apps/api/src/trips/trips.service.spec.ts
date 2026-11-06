@@ -20,6 +20,7 @@ describe('TripsService', () => {
           'Departure Date': '2027-03-01',
           'Return Date': '2027-03-12',
           Destinations: ['recLOCATIONABCDEF'],
+          Gallery: [{ url: 'https://files.example/trip-gallery.jpg', filename: 'Coastline' }],
           'Trip Overview': '<p>A hand-picked Mediterranean journey.</p>',
           'Personalised Message': 'Welcome, Alex — I hope you love it.',
           'SinGS Agent Name': 'Jamie Agent',
@@ -72,6 +73,7 @@ describe('TripsService', () => {
         airlines: [{ id: 'recAIRLINEABCDEFG', fields: { Airline: 'British Airways' } }],
         passengers: [{ id: 'recPAXABCDEFGHIJK', fields: { Passenger: 'Alex Traveller', 'Seat Number': '12A', 'Checked Baggage Allowance': '23kg' } }],
         locations: [{ id: 'recLOCATIONABCDEF', fields: { Name: 'Lisbon', Country: 'Portugal', 'Destination Overview': '<p>Hilltop views and tiled streets.</p>', 'Key Attractions/Experiences': ['Tram 28', 'Belém'], Latitude: 38.72, Longitude: -9.14, 'Featured Image': [{ url: 'https://files.example/lisbon.jpg' }] } }],
+        upsells: [{ id: 'recUPSELLABCDEFGH', fields: { Name: 'Private city tour', Description: '<p>A half-day private guide.</p>', 'Featured Image': [{ url: 'https://files.example/tour.jpg' }], Supplier: ['recSUPPLIERABCDEF'] } }],
       },
     );
 
@@ -95,6 +97,8 @@ describe('TripsService', () => {
     expect(snapshot.quotation.status).toBe('not_applicable');
     expect(snapshot.timeline).toMatchObject({ nextItemTitle: 'London Heathrow to Lisbon', nextItemDate: '2027-03-01' });
     expect(snapshot.destinations[0]).toMatchObject({ name: 'Lisbon', country: 'Portugal', overview: 'Hilltop views and tiled streets.', coordinates: { latitude: 38.72, longitude: -9.14 } });
+    expect(snapshot.summary.gallery[0]).toMatchObject({ url: 'https://files.example/trip-gallery.jpg', alt: 'Coastline' });
+    expect(snapshot.extras[0]).toMatchObject({ name: 'Private city tour', description: 'A half-day private guide.', supplierName: 'Trusted Air' });
     expect(JSON.stringify(snapshot)).not.toContain('recABCDEFGHIJKLMN');
     expect(JSON.stringify(snapshot)).not.toContain('Internal Notes');
     expect(JSON.stringify(snapshot)).not.toContain('secret');
@@ -118,11 +122,13 @@ describe('TripsService', () => {
     const service = new TripsService({} as never);
     const element = { id: 'recELEMENTABCDEFG', fields: { Type: 'Accommodation', Supplier: ['recSUPPLIERABCDEF'], 'Supplier Reference': 'PRIVATE-REF' } };
     const supplier = { id: 'recSUPPLIERABCDEF', fields: { Name: 'Private Supplier' } };
-    const quote = service.mapSnapshot('appABCDEFGHIJKLMN', { id: 'recABCDEFGHIJKLMN', fields: { Status: 'Quotation' } }, { id: '', fields: {} }, 'primary_customer', { elements: [element], suppliers: [supplier] });
-    const traveller = service.mapSnapshot('appABCDEFGHIJKLMN', { id: 'recABCDEFGHIJKLMN', fields: { Status: 'Confirmed' } }, { id: '', fields: {} }, 'fellow_traveller', { elements: [element], suppliers: [supplier] });
+    const upsell = { id: 'recUPSELLABCDEFGH', fields: { Name: 'Optional tour', Supplier: ['recSUPPLIERABCDEF'] } };
+    const quote = service.mapSnapshot('appABCDEFGHIJKLMN', { id: 'recABCDEFGHIJKLMN', fields: { Status: 'Quotation' } }, { id: '', fields: {} }, 'primary_customer', { elements: [element], suppliers: [supplier], upsells: [upsell] });
+    const traveller = service.mapSnapshot('appABCDEFGHIJKLMN', { id: 'recABCDEFGHIJKLMN', fields: { Status: 'Confirmed' } }, { id: '', fields: {} }, 'fellow_traveller', { elements: [element], suppliers: [supplier], upsells: [upsell] });
     for (const snapshot of [quote, traveller]) {
       expect(snapshot.itinerary[0]?.supplier).toBeNull();
       expect(snapshot.itinerary[0]?.reference).toBeNull();
+      expect(snapshot.extras[0]?.supplierName).toBeNull();
       expect(JSON.stringify(snapshot)).not.toContain('Private Supplier');
       expect(JSON.stringify(snapshot)).not.toContain('PRIVATE-REF');
     }

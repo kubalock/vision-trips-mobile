@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { AccessScope, CabinDetail, CruisePort, ItineraryItem, ItineraryKind, PassengerAllocation, PaymentItem, RoomDetail, TravellerSummary, TripDocument, TripSnapshot } from '@vision-trips/contracts';
 import { createHmac } from 'node:crypto';
 import { AirtableService, type AirtableRecord } from '../airtable/airtable.service.js';
-import { airlineFields, airportFields, bookingFields, brandFields, cabinFields, cruisePortFields, customerFields, elementFields, firstAttachmentUrl, firstString, locationFields, numberValue, passengerFields, paymentFields, personFields, pick, roomFields, shipFields, strings, supplierFields, truthy } from './field-map.js';
+import { airlineFields, airportFields, bookingFields, brandFields, cabinFields, cruisePortFields, customerFields, elementFields, firstAttachmentUrl, firstString, locationFields, numberValue, passengerFields, paymentFields, personFields, pick, roomFields, shipFields, strings, supplierFields, truthy, upsellFields } from './field-map.js';
 import { resolveStage } from './stage.js';
 import { themeTokens } from './theme.js';
 
@@ -13,14 +13,16 @@ export class TripsService {
   async snapshot(baseId: string, recordId: string, accessScope: AccessScope): Promise<TripSnapshot> {
     const booking = await this.airtable.record(baseId, 'Bookings', recordId);
     const brandId = strings(pick(booking.fields, bookingFields.brand))[0];
-    const [brand, elements, payments, people, customers] = await Promise.all([
+    const [brand, elements, payments, people, customers, upsells] = await Promise.all([
       brandId ? this.airtable.record(baseId, 'Brands & Branches', brandId) : Promise.resolve(emptyRecord()),
       this.airtable.records(baseId, 'Bookings [Elements]', strings(pick(booking.fields, bookingFields.elements))),
       this.airtable.records(baseId, 'Bookings [Payments]', strings(pick(booking.fields, bookingFields.payments))),
       this.airtable.records(baseId, 'Customers [People]', strings(pick(booking.fields, bookingFields.people))),
       this.airtable.records(baseId, 'Customers', strings(pick(booking.fields, bookingFields.customers))),
+      this.airtable.records(baseId, 'Bookings [Upsells]', strings(pick(booking.fields, bookingFields.upsells))),
     ]);
     const ids = linkedRecordIds(elements);
+    ids.suppliers.push(...upsells.flatMap((record) => recordIds(pick(record.fields, upsellFields.supplier))));
     ids.locations.push(...recordIds(pick(booking.fields, bookingFields.destinations)));
     const [suppliers, airports, airlines, rooms, cabins, passengers, ships, cruisePorts, locations, operators] = await Promise.all([
       this.airtable.records(baseId, 'Suppliers', ids.suppliers),
@@ -37,7 +39,7 @@ export class TripsService {
     const portLocationIds = cruisePorts.flatMap((record) => recordIds(pick(record.fields, cruisePortFields.port)));
     const portLocations = await this.airtable.records(baseId, 'CMS [Locations]', portLocationIds);
     return this.mapSnapshot(baseId, booking, brand, accessScope, {
-      elements, payments, people, customers, suppliers, airports, airlines, rooms, cabins, passengers, ships,
+      elements, payments, people, customers, upsells, suppliers, airports, airlines, rooms, cabins, passengers, ships,
       cruisePorts, locations: [...locations, ...portLocations], operators,
     });
   }
@@ -83,6 +85,7 @@ export class TripsService {
       ? mapPayments(booking, allRelated.payments, stage, tripId)
       : undefined;
     const destinations = mapDestinations(allRelated.locations, tripId);
+    const extras = mapExtras(allRelated.upsells, graph.suppliers, tripId, hideSupplierInfo);
 
     return {
       schemaVersion: 2,
@@ -114,6 +117,7 @@ export class TripsService {
         departureDate: departure,
         returnDate: returns,
         heroImageUrl: firstAttachmentUrl(bookingValue('hero')),
+        gallery: attachmentImages(bookingValue('gallery')),
       },
       experience: {
         overview: safeText(bookingValue('overview')) || null,
@@ -147,6 +151,7 @@ export class TripsService {
       },
       timeline: mapTimeline(itinerary, departure, now),
       destinations,
+      extras,
       travellers,
       itinerary,
       ...(payments ? { payments } : {}),
@@ -201,6 +206,21 @@ function mapDestinations(records: AirtableRecord[], tripId: string): TripSnapsho
   }).slice(0, 12);
 }
 
+function mapExtras(records: AirtableRecord[], suppliers: Map<string, AirtableRecord>, tripId: string, hideSupplierInfo: boolean): TripSnapshot['extras'] {
+  return records.flatMap((record, index) => {
+    const name = safeText(pick(record.fields, upsellFields.name));
+    if (!name) return [];
+    const supplier = firstLinked(pick(record.fields, upsellFields.supplier), suppliers);
+    return [{
+      id: publicChildId(tripId, record.id || String(index), 'ext'),
+      name,
+      description: safeText(pick(record.fields, upsellFields.description)) || null,
+      imageUrl: firstAttachmentUrl(pick(record.fields, upsellFields.image)),
+      supplierName: hideSupplierInfo ? null : recordText(supplier, supplierFields.name) || null,
+    }];
+  });
+}
+
 function mapTravellers(customers: AirtableRecord[], people: AirtableRecord[]): TravellerSummary[] {
   const rows: TravellerSummary[] = [];
   const lead = customers[0];
@@ -224,6 +244,7 @@ interface RelatedRecords {
   payments: AirtableRecord[];
   people: AirtableRecord[];
   customers: AirtableRecord[];
+  upsells: AirtableRecord[];
   suppliers: AirtableRecord[];
   airports: AirtableRecord[];
   airlines: AirtableRecord[];
@@ -236,10 +257,10 @@ interface RelatedRecords {
   operators: AirtableRecord[];
 }
 
-type RecordGraph = { [K in Exclude<keyof RelatedRecords, 'elements' | 'payments' | 'people' | 'customers'>]: Map<string, AirtableRecord> };
+type RecordGraph = { [K in Exclude<keyof RelatedRecords, 'elements' | 'payments' | 'people' | 'customers' | 'upsells'>]: Map<string, AirtableRecord> };
 
 function emptyRelated(): RelatedRecords {
-  return { elements: [], payments: [], people: [], customers: [], suppliers: [], airports: [], airlines: [], rooms: [], cabins: [], passengers: [], ships: [], cruisePorts: [], locations: [], operators: [] };
+  return { elements: [], payments: [], people: [], customers: [], upsells: [], suppliers: [], airports: [], airlines: [], rooms: [], cabins: [], passengers: [], ships: [], cruisePorts: [], locations: [], operators: [] };
 }
 
 function recordGraph(related: RelatedRecords): RecordGraph {
