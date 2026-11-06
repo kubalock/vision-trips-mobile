@@ -26,6 +26,7 @@
               }
             ],
             "styles": [
+              "../../php-plugin/assets/css/vision.css",
               "src/styles.css"
             ]
           },

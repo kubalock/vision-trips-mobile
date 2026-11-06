@@ -5,19 +5,17 @@ import type { DestinationGuide } from '@vision-trips/contracts';
   selector: 'app-destinations-section',
   template: `
     @if (destinations().length) {
-      <section class="mt-8" aria-labelledby="destinations-title">
-        <h2 id="destinations-title" class="text-2xl font-semibold tracking-tight">Your destinations</h2>
-        <div class="mt-4 grid gap-4">
+      <section class="vt-section" aria-labelledby="destinations-title">
+        <h2 id="destinations-title" class="vt-h2">Your destinations</h2>
+        <div class="vt-dests">
           @for (destination of destinations(); track destination.id) {
-            <article class="overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200">
-              @if (destination.imageUrl) { <img class="h-44 w-full object-cover" [src]="destination.imageUrl" [alt]="destination.name" loading="lazy" /> }
-              <div class="p-5">
-                <p class="text-xs font-semibold uppercase tracking-wider text-teal-700">{{ destination.country || 'Destination guide' }}</p>
-                <h3 class="mt-1 text-xl font-semibold">{{ destination.name }}</h3>
-                @if (destination.overview) { <p class="mt-3 text-sm leading-6 text-slate-600">{{ destination.overview }}</p> }
+            <article class="vt-dest">
+              @if (destination.imageUrl) { <span class="vt-dest__img"><img [src]="destination.imageUrl" [alt]="destination.name" loading="lazy" /></span> }
+              <div class="vt-dest__body"><h3 class="vt-h3">{{ destination.name }}<span class="vt-dest__country">{{ destination.country || 'Destination guide' }}</span></h3>
+                @if (destination.overview) { <p class="vt-dest__overview">{{ destination.overview }}</p> }
                 @if (destination.attractions.length) {
                   <div class="mt-4 flex flex-wrap gap-2">
-                    @for (attraction of destination.attractions; track attraction) { <span class="rounded-full bg-teal-50 px-3 py-1 text-xs font-medium text-teal-900">{{ attraction }}</span> }
+                    @for (attraction of destination.attractions; track attraction) { <span class="vt-chip">{{ attraction }}</span> }
                   </div>
                 }
                 @if (destination.practicalInformation || destination.culturalInformation) {
@@ -26,7 +24,7 @@ import type { DestinationGuide } from '@vision-trips/contracts';
                     @if (destination.culturalInformation) { <p class="mt-3 leading-6 text-slate-600">{{ destination.culturalInformation }}</p> }
                   </details>
                 }
-                @if (destination.travelAdviceUrl) { <a class="mt-4 inline-block text-sm font-semibold text-teal-700" [href]="destination.travelAdviceUrl" target="_blank" rel="noopener">Official travel advice ↗</a> }
+                @if (destination.travelAdviceUrl) { <a class="vt-link" [href]="destination.travelAdviceUrl" target="_blank" rel="noopener">Official travel advice ↗</a> }
               </div>
             </article>
           }

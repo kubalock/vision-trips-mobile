@@ -4,29 +4,27 @@ import type { ItineraryItem } from '@vision-trips/contracts';
 @Component({
   selector: 'app-itinerary-section',
   template: `
-    <section class="mt-8" aria-labelledby="itinerary-title">
-      <h2 id="itinerary-title" class="text-2xl font-semibold tracking-tight">Your itinerary</h2>
+    <section class="vt-section" aria-labelledby="itinerary-title">
+      <h2 id="itinerary-title" class="vt-h2">Your itinerary</h2>
       @if (items().length) {
-        <div class="mt-5 grid gap-8">
+        <div class="vt-days">
           @for (group of groupedItems(); track group.date) {
             <section>
-              <div class="mb-3 flex items-baseline gap-3">
-                <p class="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">{{ group.dayLabel }}</p>
-                <h3 class="text-lg font-semibold">{{ group.dateLabel }}</h3>
+              <div class="vt-day__head">
+                <p class="vt-day__n">{{ group.dayLabel }}</p><h3 class="vt-day__label">{{ group.dateLabel }}</h3>
               </div>
-              <ol class="grid gap-3 border-l-2 border-teal-100 pl-4">
+              <ol class="vt-day__items">
                 @for (item of group.items; track item.id) {
-                  <li class="relative overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200">
-                    <span class="absolute -left-[1.32rem] top-7 size-2.5 rounded-full bg-teal-700 ring-4 ring-stone-50"></span>
+                  <li class="vt-el">
                     @if (item.images[0]; as image) { <img class="h-40 w-full object-cover" [src]="image.url" [alt]="image.alt" loading="lazy" /> }
-                    <div class="p-5">
-                      <div class="flex items-start justify-between gap-4">
-                        <div><p class="text-xs font-semibold uppercase tracking-wider text-teal-700">{{ item.typeLabel }}</p><h4 class="mt-1 text-lg font-semibold">{{ item.title }}</h4></div>
-                        @if (item.startTime) { <time class="shrink-0 rounded-full bg-teal-50 px-3 py-1 text-sm font-semibold text-teal-800">{{ item.startTime }}</time> }
+                    <div class="vt-el__row">
+                      <div class="vt-el__main">
+                        <div><p class="vt-el__kind">{{ item.typeLabel }}</p><h4 class="vt-el__title">{{ item.title }}</h4></div>
+                        @if (item.startTime) { <time class="vt-chip">{{ item.startTime }}</time> }
                       </div>
-                      @if (item.from || item.to) { <p class="mt-3 text-sm font-medium text-slate-700">{{ item.from }}{{ item.to ? ' → ' + item.to : '' }}</p> }
-                      @if (item.carrier || item.flightNumber) { <p class="mt-1 text-sm text-slate-600">{{ item.carrier }} {{ item.flightNumber }}</p> }
-                      @if (item.address) { <p class="mt-2 text-sm leading-6 text-slate-600">{{ item.address }}</p> }
+                      @if (item.from || item.to) { <p class="vt-el__route">{{ item.from }}{{ item.to ? ' → ' + item.to : '' }}</p> }
+                      @if (item.carrier || item.flightNumber) { <p class="vt-el__meta">{{ item.carrier }} {{ item.flightNumber }}</p> }
+                      @if (item.address) { <p class="vt-el__meta">{{ item.address }}</p> }
                       @if (item.details.length) {
                         <dl class="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-4 text-sm">
                           @for (detail of item.details; track detail.label) { <div><dt class="text-slate-500">{{ detail.label }}</dt><dd class="mt-0.5 font-medium">{{ detail.value }}</dd></div> }

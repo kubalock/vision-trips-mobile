@@ -57,6 +57,7 @@ export class App implements OnInit, OnDestroy {
   protected readonly canContinue = computed(() => /^app[A-Za-z0-9]{14}$/.test(this.baseId().trim()) && /^rec[A-Za-z0-9]{14}$/.test(this.recordId().trim()) && !this.submitting());
 
   ngOnInit(): void {
+    document.body.classList.add('vt');
     void this.openSharedLinkFromLocation();
     void this.initializeOfflineState();
     if (Capacitor.isNativePlatform()) {
@@ -67,6 +68,7 @@ export class App implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    document.body.classList.remove('vt');
     void this.resumeListener?.remove();
     void this.networkListener?.remove();
   }
