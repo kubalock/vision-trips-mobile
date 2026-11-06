@@ -51,4 +51,21 @@ describe('AirtableService', () => {
       .rejects.toBeInstanceOf(ServiceUnavailableException);
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
+
+  it('writes record fields and native comments', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'recABCDEFGHIJKLMN', fields: { 'Quotation Accepted': true } }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'com123' }), { status: 200 }));
+    const service = new AirtableService();
+
+    await service.updateRecord('appABCDEFGHIJKLMN', 'Bookings', 'recABCDEFGHIJKLMN', { 'Quotation Accepted': true });
+    await service.addComment('appABCDEFGHIJKLMN', 'Bookings', 'recABCDEFGHIJKLMN', 'Accepted online');
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, expect.stringContaining('/Bookings/recABCDEFGHIJKLMN'), expect.objectContaining({
+      method: 'PATCH', body: JSON.stringify({ fields: { 'Quotation Accepted': true }, typecast: true }),
+    }));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, expect.stringContaining('/Bookings/recABCDEFGHIJKLMN/comments'), expect.objectContaining({
+      method: 'POST', body: JSON.stringify({ text: 'Accepted online' }),
+    }));
+  });
 });

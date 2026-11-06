@@ -10,6 +10,7 @@ export const bookingFields = {
   departure: ['Departure Date', 'Departure Date (All)', 'Start Date', 'Departing'],
   return: ['Return Date', 'Return Date (All)', 'End Date', 'Returning'],
   quoteExpiry: ['Quotation Expiry'],
+  quotationAccepted: ['Quotation Accepted'],
   overview: ['Trip Overview'], personalMessage: ['Personalised Message', 'Personalized Message'], includeMessage: ['Include Personalised Message'], agent: ['SinGS Agent Name', 'Created by', 'Created By'],
   cancellationDate: ['Cancellation Date'], cancellationReason: ['Cancellation Reason'],
   atol: ['ATOL'], atolNumber: ['ATOL No.'], licensing: ['Licensing'],

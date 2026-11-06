@@ -8,6 +8,7 @@ describe('LinkTokenService', () => {
   beforeEach(() => {
     process.env.VISION_LINK_SECRET = secret;
     delete process.env.VISION_LINK_SECRET_PREVIOUS;
+    delete process.env.VISION_TRIP_LINK_BASE_URL;
   });
 
   it('parses the existing PHP token format from a trip URL', () => {
@@ -30,6 +31,18 @@ describe('LinkTokenService', () => {
   it('recognizes restricted fellow-traveller links', () => {
     const token = mint({ v: 1, b: 'appABCDEFGHIJKLMN', r: 'recABCDEFGHIJKLMN', s: 'c', e: 0, t: 1 }, secret);
     expect(service.parseLinkOrToken(token).fellowTraveller).toBe(true);
+  });
+
+  it('mints an expiring restricted link compatible with the parser', () => {
+    process.env.VISION_TRIP_LINK_BASE_URL = 'https://trips.example/trip/';
+    const expiresAt = Math.floor(Date.now() / 1_000) + 3_600;
+
+    const link = service.mintFellowTravellerLink('appABCDEFGHIJKLMN', 'recABCDEFGHIJKLMN', expiresAt);
+
+    expect(link).toMatch(/^https:\/\/trips\.example\/trip\//);
+    expect(service.parseLinkOrToken(link)).toMatchObject({
+      baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: true, expiresAt,
+    });
   });
 });
 

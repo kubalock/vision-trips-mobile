@@ -22,6 +22,15 @@ interface TokenPayload {
 
 @Injectable()
 export class LinkTokenService {
+  mintFellowTravellerLink(baseId: string, recordId: string, expiresAt: number): string {
+    const secret = process.env.VISION_LINK_SECRET;
+    if (!secret) throw new Error('VISION_LINK_SECRET is not configured.');
+    const payload = Buffer.from(JSON.stringify({ v: 1, b: baseId, r: recordId, s: 'c', e: expiresAt, t: 1 })).toString('base64url');
+    const signature = createHmac('sha256', secret).update(payload).digest('base64url');
+    const baseUrl = (process.env.VISION_TRIP_LINK_BASE_URL?.trim() || 'http://localhost:4200/trip').replace(/\/$/, '');
+    return `${baseUrl}/${payload}.${signature}`;
+  }
+
   parseLinkOrToken(input: string): ParsedTripToken {
     const token = this.extractToken(input);
     const parts = token.split('.');

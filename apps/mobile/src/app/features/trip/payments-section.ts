@@ -1,5 +1,5 @@
 import { CurrencyPipe } from '@angular/common';
-import { Component, computed, input } from '@angular/core';
+import { Component, computed, input, output } from '@angular/core';
 import type { PaymentSummary } from '@vision-trips/contracts';
 
 @Component({
@@ -18,7 +18,7 @@ import type { PaymentSummary } from '@vision-trips/contracts';
         @for (payment of payments().items; track payment.id) {
           <li class="flex items-center justify-between gap-3 rounded-2xl bg-white p-4 ring-1 ring-slate-200">
             <div><strong>{{ payment.amount | currency: payment.currency }}</strong><p class="text-sm text-slate-500">{{ payment.label }}{{ payment.dueDate ? ' · ' + payment.dueDate : '' }}</p></div>
-            @if (payment.canPay && payment.actionUrl) { <a class="rounded-full bg-teal-700 px-4 py-2 text-sm font-semibold text-white" [href]="payment.actionUrl" target="_blank" rel="noopener">Pay now</a> }
+            @if (payment.canPay) { <button type="button" class="rounded-full bg-teal-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" [disabled]="openingPaymentId() !== null || actionsDisabled()" (click)="pay.emit(payment.id)">{{ openingPaymentId() === payment.id ? 'Opening…' : 'Pay now' }}</button> }
             @else { <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase">{{ payment.status }}</span> }
           </li>
         }
@@ -28,5 +28,8 @@ import type { PaymentSummary } from '@vision-trips/contracts';
 })
 export class PaymentsSection {
   readonly payments = input.required<PaymentSummary>();
+  readonly openingPaymentId = input<string | null>(null);
+  readonly actionsDisabled = input(false);
+  readonly pay = output<string>();
   readonly paidPercent = computed(() => this.payments().total > 0 ? Math.min(100, Math.round(this.payments().paid / this.payments().total * 100)) : 0);
 }

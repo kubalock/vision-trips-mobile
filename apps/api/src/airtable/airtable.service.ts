@@ -68,6 +68,45 @@ export class AirtableService {
     throw new ServiceUnavailableException('Airtable is temporarily unavailable. Try again shortly.');
   }
 
+  async updateRecord(baseId: string, table: string, recordId: string, fields: Record<string, unknown>): Promise<AirtableRecord> {
+    return this.write(baseId, table, recordId, 'PATCH', { fields, typecast: true });
+  }
+
+  async addComment(baseId: string, table: string, recordId: string, text: string): Promise<void> {
+    await this.write(baseId, table, recordId, 'POST', { text: text.slice(0, 1_000) }, 'comments');
+  }
+
+  private async write(
+    baseId: string,
+    table: string,
+    recordId: string,
+    method: 'PATCH' | 'POST',
+    body: Record<string, unknown>,
+    suffix = '',
+  ): Promise<AirtableRecord> {
+    const token = process.env.AIRTABLE_TOKEN;
+    if (!token) throw new ServiceUnavailableException('Airtable is not configured.');
+    const url = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(table)}/${recordId}${suffix ? `/${suffix}` : ''}`;
+    await this.throttle();
+    const response = await fetch(url, {
+      method,
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(Number(process.env.AIRTABLE_REQUEST_TIMEOUT_MS ?? 10_000)),
+    });
+    if (!response.ok) {
+      const detail = await responseText(response);
+      this.logger.warn(`Airtable ${response.status} writing ${table}/${recordId}: ${detail}`);
+      if (response.status === 401 || response.status === 403) throw new ServiceUnavailableException('The Airtable token does not have write access to this base or table.');
+      if (response.status === 404) throw new NotFoundException(`Airtable could not find the ${table} record.`);
+      if (response.status === 422) throw new BadGatewayException(`Airtable rejected the ${table} update. Check the quotation acceptance fields.`);
+      if (response.status === 429 || response.status >= 500) throw new ServiceUnavailableException('Airtable is temporarily unavailable. Try again shortly.');
+      throw new BadGatewayException(`Airtable rejected the ${table} update (status ${response.status}).`);
+    }
+    if (suffix === 'comments') return { id: recordId, fields: {} };
+    return this.parseRecord(response);
+  }
+
   private async throttle(): Promise<void> {
     const previous = this.requestQueue;
     let release: () => void = () => {};

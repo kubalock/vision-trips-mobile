@@ -148,6 +148,21 @@ describe('TripsService', () => {
     expect(snapshot.payments).toBeUndefined();
   });
 
+  it('does not offer quotation acceptance after Airtable records it', () => {
+    const service = new TripsService({} as never);
+    const snapshot = service.mapSnapshot(
+      'appABCDEFGHIJKLMN',
+      { id: 'recABCDEFGHIJKLMN', fields: { Status: 'Quotation', 'Quotation Accepted': true } },
+      { id: '', fields: {} },
+      'primary_customer',
+    );
+
+    expect(snapshot.stage).toBe('quote');
+    expect(snapshot.quotation.status).toBe('available');
+    expect(snapshot.quotation.canAccept).toBe(false);
+    expect(snapshot.capabilities.acceptQuotation).toBe(false);
+  });
+
   it('redacts supplier identity and references from quotations and fellow-traveller links', () => {
     const service = new TripsService({} as never);
     const element = { id: 'recELEMENTABCDEFG', fields: { Type: 'Accommodation', Supplier: ['recSUPPLIERABCDEF'], 'Supplier Reference': 'PRIVATE-REF' } };

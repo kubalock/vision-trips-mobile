@@ -1,6 +1,10 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
-import type { LinkExchangeChallenge, LinkExchangeResponse, MobileSession, TripSnapshot } from '@vision-trips/contracts';
+import { App as CapacitorApp } from '@capacitor/app';
+import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
+import { Network } from '@capacitor/network';
+import { Share } from '@capacitor/share';
+import type { CustomerMessageTopic, LinkExchangeChallenge, LinkExchangeResponse, MobileSession, TripSnapshot } from '@vision-trips/contracts';
 import { VisionApiService } from './core/api/vision-api.service';
 import { SavedTripsStore } from './core/storage/saved-trips.store';
 import { DocumentsSection } from './features/trip/documents-section';
@@ -10,13 +14,15 @@ import { ItinerarySection } from './features/trip/itinerary-section';
 import { ExtrasSection } from './features/trip/extras-section';
 import { PaymentsSection } from './features/trip/payments-section';
 
+type AppView = 'home' | 'itinerary' | 'payments' | 'documents' | 'help';
+
 @Component({
   selector: 'app-root',
   imports: [CommunicationsSection, DestinationsSection, DocumentsSection, ExtrasSection, ItinerarySection, PaymentsSection],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
-export class App {
+export class App implements OnInit, OnDestroy {
   private readonly api = inject(VisionApiService);
   private readonly savedTrips = inject(SavedTripsStore);
   protected readonly baseId = signal('');
@@ -27,8 +33,48 @@ export class App {
   protected readonly challenge = signal<LinkExchangeChallenge | null>(null);
   protected readonly postcode = signal('');
   protected readonly storedSecurely = signal(false);
+  protected readonly activeView = signal<AppView>('home');
+  protected readonly acceptanceName = signal('');
+  protected readonly acceptanceEmail = signal('');
+  protected readonly acceptanceConfirmations = signal<string[]>([]);
+  protected readonly acceptanceComplete = signal(false);
+  protected readonly messageTopic = signal<CustomerMessageTopic>('itinerary');
+  protected readonly customerMessage = signal('');
+  protected readonly messageSent = signal(false);
+  protected readonly openingPaymentId = signal<string | null>(null);
+  protected readonly paymentReturnState = signal<'idle' | 'checking' | 'updated' | 'unchanged' | 'error'>('idle');
+  protected readonly online = signal(true);
+  protected readonly refreshing = signal(false);
+  protected readonly sharing = signal(false);
+  protected readonly shareResult = signal('');
   private readonly session = signal<MobileSession | null>(null);
+  private paymentAwaitingReturn = false;
+  private paymentOpenedAt = 0;
+  private paymentPaidBefore = 0;
+  private paymentIdAwaiting: string | null = null;
+  private resumeListener: PluginListenerHandle | null = null;
+  private networkListener: PluginListenerHandle | null = null;
   protected readonly canContinue = computed(() => /^app[A-Za-z0-9]{14}$/.test(this.baseId().trim()) && /^rec[A-Za-z0-9]{14}$/.test(this.recordId().trim()) && !this.submitting());
+
+  ngOnInit(): void {
+    void this.openSharedLinkFromLocation();
+    void this.initializeOfflineState();
+    if (Capacitor.isNativePlatform()) {
+      void CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+        if (isActive) void this.checkPaymentReturn();
+      }).then((listener) => { this.resumeListener = listener; });
+    }
+  }
+
+  ngOnDestroy(): void {
+    void this.resumeListener?.remove();
+    void this.networkListener?.remove();
+  }
+
+  @HostListener('window:focus')
+  protected onWindowFocus(): void {
+    void this.checkPaymentReturn();
+  }
 
   protected updateBaseId(event: Event): void {
     this.baseId.set((event.target as HTMLInputElement).value);
@@ -62,6 +108,224 @@ export class App {
     this.postcode.set((event.target as HTMLInputElement).value);
   }
 
+  protected updateAcceptanceName(event: Event): void {
+    this.acceptanceName.set((event.target as HTMLInputElement).value);
+  }
+
+  protected updateAcceptanceEmail(event: Event): void {
+    this.acceptanceEmail.set((event.target as HTMLInputElement).value);
+  }
+
+  protected toggleAcceptanceConfirmation(confirmation: string, event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    this.acceptanceConfirmations.update((items) => checked ? [...items, confirmation] : items.filter((item) => item !== confirmation));
+  }
+
+  protected async acceptQuotation(event: Event): Promise<void> {
+    event.preventDefault();
+    const currentSession = this.session();
+    const currentTrip = this.trip();
+    if (!currentSession || !currentTrip?.quotation.canAccept || !this.online()) return;
+    this.submitting.set(true);
+    this.error.set('');
+    try {
+      await this.api.acceptQuotation({
+        name: this.acceptanceName().trim(),
+        email: this.acceptanceEmail().trim(),
+        agreed: true,
+        confirmations: this.acceptanceConfirmations(),
+      }, currentSession.accessToken);
+      this.acceptanceComplete.set(true);
+      this.trip.update((trip) => trip ? {
+        ...trip,
+        quotation: { ...trip.quotation, canAccept: false },
+        capabilities: { ...trip.capabilities, acceptQuotation: false },
+      } : trip);
+      await this.refreshTripAfterWrite();
+    } catch (error) {
+      this.error.set(this.apiError(error, 'We could not record your acceptance. Please try again or contact your travel agent.'));
+    } finally {
+      this.submitting.set(false);
+    }
+  }
+
+  protected updateMessageTopic(event: Event): void {
+    this.messageTopic.set((event.target as HTMLSelectElement).value as CustomerMessageTopic);
+  }
+
+  protected updateCustomerMessage(event: Event): void {
+    this.customerMessage.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  protected async sendCustomerMessage(event: Event): Promise<void> {
+    event.preventDefault();
+    const currentSession = this.session();
+    if (!currentSession || this.messageSent() || this.submitting() || !this.online()) return;
+    this.submitting.set(true);
+    this.error.set('');
+    try {
+      await this.api.sendMessage({ topic: this.messageTopic(), message: this.customerMessage().trim() }, currentSession.accessToken);
+      this.messageSent.set(true);
+      await this.refreshTripAfterWrite();
+    } catch (error) {
+      this.error.set(this.apiError(error, 'We could not send your message. Please try again or contact your travel agent directly.'));
+    } finally {
+      this.submitting.set(false);
+    }
+  }
+
+  protected writeAnotherMessage(): void {
+    this.customerMessage.set('');
+    this.messageSent.set(false);
+    this.error.set('');
+  }
+
+  protected async openPayment(paymentId: string): Promise<void> {
+    const currentSession = this.session();
+    const payments = this.trip()?.payments;
+    if (!currentSession || !payments || this.openingPaymentId() || !this.online()) return;
+    this.openingPaymentId.set(paymentId);
+    this.paymentReturnState.set('idle');
+    this.error.set('');
+    try {
+      const link = await this.api.paymentLink(paymentId, currentSession.accessToken);
+      this.paymentPaidBefore = payments.paid;
+      this.paymentIdAwaiting = paymentId;
+      this.paymentAwaitingReturn = true;
+      this.paymentOpenedAt = Date.now();
+      window.open(link.url, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      this.error.set(this.apiError(error, 'This payment link is no longer available. Refresh the trip and try again.'));
+      this.paymentReturnState.set('error');
+    } finally {
+      this.openingPaymentId.set(null);
+    }
+  }
+
+  protected async shareWithTraveller(): Promise<void> {
+    const currentSession = this.session();
+    const currentTrip = this.trip();
+    if (!currentSession || !currentTrip?.capabilities.shareWithTraveller || !this.online() || this.sharing()) return;
+    this.sharing.set(true);
+    this.shareResult.set('');
+    this.error.set('');
+    try {
+      const link = await this.api.fellowTravellerLink(currentSession.accessToken);
+      const text = `View ${currentTrip.summary.name} in Vision Trips. This restricted link expires ${link.expiresAt.slice(0, 10)}.`;
+      try {
+        await Share.share({ title: currentTrip.summary.name, text, url: link.url, dialogTitle: 'Share trip' });
+        this.shareResult.set('The restricted trip link is ready to share.');
+      } catch {
+        await navigator.clipboard.writeText(link.url);
+        this.shareResult.set('Restricted trip link copied.');
+      }
+    } catch (error) {
+      this.error.set(this.apiError(error, 'We could not create a sharing link. Please try again.'));
+    } finally {
+      this.sharing.set(false);
+    }
+  }
+
+  private async openSharedLinkFromLocation(): Promise<void> {
+    const match = window.location.pathname.match(/\/trip\/([^/]+)/);
+    if (!match?.[1] || this.trip()) return;
+    this.submitting.set(true);
+    this.error.set('');
+    try {
+      const response = await this.api.exchangeLink(match[1]);
+      if (response.status === 'authorized') await this.acceptAuthorized(response);
+      else this.challenge.set(response.challenge);
+    } catch (error) {
+      this.error.set(this.apiError(error, 'This shared trip link is invalid or has expired.'));
+    } finally {
+      this.submitting.set(false);
+    }
+  }
+
+  private async checkPaymentReturn(): Promise<void> {
+    if (!this.paymentAwaitingReturn || Date.now() - this.paymentOpenedAt < 1_000) return;
+    const currentSession = this.session();
+    if (!currentSession) return;
+    this.paymentAwaitingReturn = false;
+    this.paymentReturnState.set('checking');
+    try {
+      const snapshot = await this.api.refreshTrip(currentSession.accessToken);
+      const paidNow = snapshot.payments?.paid ?? 0;
+      const itemNow = snapshot.payments?.items.find((item) => item.id === this.paymentIdAwaiting);
+      this.trip.set(snapshot);
+      this.storedSecurely.set(await this.savedTrips.save(snapshot, currentSession));
+      this.paymentReturnState.set(paidNow > this.paymentPaidBefore || itemNow?.status === 'paid' ? 'updated' : 'unchanged');
+    } catch {
+      this.paymentReturnState.set('error');
+    } finally {
+      this.paymentIdAwaiting = null;
+    }
+  }
+
+  private async refreshTripAfterWrite(): Promise<void> {
+    const currentSession = this.session();
+    if (!currentSession) return;
+    try {
+      const snapshot = await this.api.refreshTrip(currentSession.accessToken);
+      this.trip.set(snapshot);
+      this.storedSecurely.set(await this.savedTrips.save(snapshot, currentSession));
+    } catch {
+      // The write already succeeded. Keep the optimistic state and refresh next time the trip opens.
+    }
+  }
+
+  protected async refreshCurrentTrip(showError = true): Promise<void> {
+    const currentSession = this.session();
+    if (!currentSession || this.refreshing()) return;
+    if (!this.online()) {
+      this.markFreshness('offline');
+      if (showError) this.error.set('You are offline. Your last saved trip is still available.');
+      return;
+    }
+    this.refreshing.set(true);
+    if (showError) this.error.set('');
+    try {
+      let activeSession = currentSession;
+      let snapshot: TripSnapshot;
+      try {
+        snapshot = await this.api.refreshTrip(activeSession.accessToken);
+      } catch (error) {
+        if (!(error instanceof HttpErrorResponse) || error.status !== 401) throw error;
+        activeSession = await this.api.refreshSession(activeSession.refreshToken);
+        this.session.set(activeSession);
+        snapshot = await this.api.refreshTrip(activeSession.accessToken);
+      }
+      this.trip.set(snapshot);
+      this.storedSecurely.set(await this.savedTrips.save(snapshot, activeSession));
+    } catch (error) {
+      this.markFreshness(this.online() ? 'stale' : 'offline');
+      if (showError) this.error.set(this.apiError(error, 'We could not refresh this trip. Your saved copy is still available.'));
+    } finally {
+      this.refreshing.set(false);
+    }
+  }
+
+  private async initializeOfflineState(): Promise<void> {
+    const status = await Network.getStatus();
+    this.online.set(status.connected);
+    this.networkListener = await Network.addListener('networkStatusChange', ({ connected }) => {
+      this.online.set(connected);
+      if (!connected) this.markFreshness('offline');
+      else if (this.trip()) void this.refreshCurrentTrip(false);
+    });
+    if (!Capacitor.isNativePlatform() || this.trip()) return;
+    const saved = (await this.savedTrips.all()).sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0];
+    if (!saved || this.trip()) return;
+    this.session.set(saved.session);
+    this.trip.set({ ...saved.snapshot, freshness: { ...saved.snapshot.freshness, status: status.connected && !isSnapshotStale(saved.snapshot) ? 'fresh' : status.connected ? 'stale' : 'offline' } });
+    this.storedSecurely.set(true);
+    if (status.connected) await this.refreshCurrentTrip(false);
+  }
+
+  private markFreshness(status: 'stale' | 'offline'): void {
+    this.trip.update((trip) => trip ? { ...trip, freshness: { ...trip.freshness, status } } : trip);
+  }
+
   protected async verifyPostcode(event: Event): Promise<void> {
     event.preventDefault();
     const challenge = this.challenge();
@@ -82,7 +346,27 @@ export class App {
     this.trip.set(response.snapshot);
     this.session.set(response.session);
     this.challenge.set(null);
+    this.activeView.set('home');
     this.storedSecurely.set(await this.savedTrips.save(response.snapshot, response.session));
+  }
+
+  protected selectView(view: AppView): void {
+    this.activeView.set(view);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  protected openAnotherTrip(): void {
+    this.trip.set(null);
+    this.session.set(null);
+    this.activeView.set('home');
+    this.acceptanceComplete.set(false);
+    this.acceptanceConfirmations.set([]);
+    this.customerMessage.set('');
+    this.messageSent.set(false);
+    this.paymentAwaitingReturn = false;
+    this.paymentReturnState.set('idle');
+    this.openingPaymentId.set(null);
+    this.shareResult.set('');
   }
 
   protected async downloadCalendar(): Promise<void> {
@@ -133,4 +417,8 @@ export class App {
     if (Array.isArray(message)) return message.filter((item): item is string => typeof item === 'string').join(' ');
     return fallback;
   }
+}
+
+function isSnapshotStale(snapshot: TripSnapshot): boolean {
+  return !snapshot.freshness.nextRefreshAfter || Date.parse(snapshot.freshness.nextRefreshAfter) <= Date.now();
 }

@@ -1,151 +1,78 @@
-<main class="min-h-dvh bg-stone-50 text-slate-900">
-  <section class="mx-auto flex min-h-dvh max-w-lg flex-col px-6 py-10 sm:justify-center">
-    <div class="mb-10 flex items-center gap-3">
-      <span class="grid size-11 place-items-center rounded-2xl bg-teal-700 text-xl font-bold text-white">V</span>
-      <div>
-        <p class="text-lg font-semibold">Vision Trips</p>
-        <p class="text-sm text-slate-500">Every part of your trip, in one place.</p>
-      </div>
-    </div>
+<main class="min-h-dvh bg-stone-50 pb-24 text-slate-900">
+  <section class="mx-auto flex min-h-dvh max-w-lg flex-col px-6 py-8">
+    <header class="mb-7 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3"><span class="grid size-11 place-items-center rounded-2xl bg-teal-700 text-xl font-bold text-white">V</span><div><p class="text-lg font-semibold">Vision Trips</p><p class="text-sm text-slate-500">Every part of your trip, in one place.</p></div></div>
+      @if (trip()) { <button type="button" class="text-sm font-semibold text-slate-500" (click)="openAnotherTrip()">Switch trip</button> }
+    </header>
 
     @if (trip(); as currentTrip) {
-      <article class="overflow-hidden rounded-[2rem] bg-white shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
-        @if (currentTrip.summary.heroImageUrl) {
-          <img class="h-52 w-full object-cover" [src]="currentTrip.summary.heroImageUrl" alt="" />
+      <aside class="mb-5 flex items-center justify-between gap-3 rounded-2xl px-4 py-3 text-sm" [class.bg-emerald-50]="currentTrip.freshness.status === 'fresh'" [class.text-emerald-950]="currentTrip.freshness.status === 'fresh'" [class.bg-amber-50]="currentTrip.freshness.status === 'stale'" [class.text-amber-950]="currentTrip.freshness.status === 'stale'" [class.bg-slate-200]="currentTrip.freshness.status === 'offline'">
+        <div><p class="font-semibold">{{ currentTrip.freshness.status === 'fresh' ? 'Trip up to date' : currentTrip.freshness.status === 'offline' ? 'Offline — showing saved trip' : 'Trip may be out of date' }}</p><p class="mt-0.5 text-xs opacity-75">Last updated {{ currentTrip.freshness.sourceUpdatedAt.slice(0, 16).replace('T', ' ') }}</p></div>
+        <button type="button" class="shrink-0 rounded-full bg-white px-3 py-2 text-xs font-semibold shadow-sm disabled:opacity-50" [disabled]="refreshing() || !online()" (click)="refreshCurrentTrip()">{{ refreshing() ? 'Refreshing…' : 'Refresh' }}</button>
+      </aside>
+      @if (activeView() === 'home') {
+        <article class="overflow-hidden rounded-[2rem] bg-white shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
+          @if (currentTrip.summary.heroImageUrl) { <img class="h-52 w-full object-cover" [src]="currentTrip.summary.heroImageUrl" alt="" /> }
+          <div class="p-7"><p class="text-sm font-semibold uppercase tracking-widest text-teal-700">{{ currentTrip.stage }}</p><h1 class="mt-2 text-3xl font-semibold tracking-tight">{{ currentTrip.summary.name }}</h1><p class="mt-3 text-slate-600">{{ currentTrip.summary.reference }}</p><p class="mt-1 text-slate-600">{{ currentTrip.summary.departureDate || 'Dates to be confirmed' }}@if (currentTrip.summary.returnDate) { — {{ currentTrip.summary.returnDate }} }</p>
+            <div class="mt-4 flex flex-wrap gap-2">@for (type of currentTrip.summary.holidayTypes; track type) { <span class="rounded-full bg-teal-50 px-3 py-1 text-xs font-medium text-teal-900">{{ type }}</span> }@if (currentTrip.summary.durationDays !== null) { <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium">{{ currentTrip.summary.durationDays }} nights</span> }</div>
+            <p class="mt-4 text-sm text-slate-500">{{ storedSecurely() ? 'Saved securely on this device.' : 'Web preview: this trip has not been stored on this device.' }}</p>
+            <button type="button" class="mt-5 rounded-full bg-teal-700 px-5 py-3 font-semibold text-white" (click)="downloadCalendar()">Add to calendar</button>
+          </div>
+        </article>
+        @if (acceptanceComplete()) {
+          <section class="mt-6 rounded-2xl bg-emerald-50 p-6 text-emerald-950 ring-1 ring-emerald-200"><h2 class="text-xl font-semibold">Quotation accepted</h2><p class="mt-2 text-sm leading-6">Your acceptance has been recorded. Your travel agent will confirm the booking after checking each part with the suppliers.</p></section>
+        } @else if (currentTrip.quotation.canAccept) {
+          <section class="mt-6 rounded-2xl bg-white p-6 ring-1 ring-slate-200"><p class="text-sm font-semibold uppercase tracking-widest text-teal-700">Ready to book?</p><h2 class="mt-2 text-2xl font-semibold">Accept this quotation</h2><p class="mt-2 text-sm leading-6 text-slate-600">Review and confirm each section. Acceptance does not mark the booking as confirmed until your travel agent has checked with the suppliers.</p>
+            <form class="mt-5" (submit)="acceptQuotation($event)"><label for="acceptance-name" class="text-sm font-semibold">Full name</label><input id="acceptance-name" autocomplete="name" [value]="acceptanceName()" (input)="updateAcceptanceName($event)" class="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3"><label for="acceptance-email" class="mt-4 block text-sm font-semibold">Email address</label><input id="acceptance-email" type="email" autocomplete="email" [value]="acceptanceEmail()" (input)="updateAcceptanceEmail($event)" class="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3">
+              <fieldset class="mt-5"><legend class="text-sm font-semibold">I have reviewed and agree to:</legend><div class="mt-3 grid gap-3">@for (confirmation of currentTrip.quotation.requiredConfirmations; track confirmation) { <label class="flex items-start gap-3 rounded-xl bg-slate-50 p-3 text-sm"><input type="checkbox" class="mt-1 size-4" (change)="toggleAcceptanceConfirmation(confirmation, $event)"><span class="capitalize">{{ confirmation }}</span></label> }</div></fieldset>
+              <button type="submit" [disabled]="submitting() || !online() || !acceptanceName().trim() || !acceptanceEmail().trim() || acceptanceConfirmations().length !== currentTrip.quotation.requiredConfirmations.length" class="mt-5 w-full rounded-full bg-teal-700 px-5 py-4 font-semibold text-white disabled:opacity-40">{{ submitting() ? 'Recording your acceptance…' : online() ? 'Accept quotation' : 'Connect to accept' }}</button>
+            </form>@if (error()) { <p class="mt-4 rounded-xl bg-red-50 p-4 text-sm text-red-800">{{ error() }}</p> }
+          </section>
         }
-        <div class="p-7">
-          <p class="text-sm font-semibold uppercase tracking-widest text-teal-700">{{ currentTrip.stage }}</p>
-          <h1 class="mt-2 text-3xl font-semibold tracking-tight">{{ currentTrip.summary.name }}</h1>
-          <p class="mt-3 text-slate-600">{{ currentTrip.summary.reference }}</p>
-          <p class="mt-1 text-slate-600">
-            {{ currentTrip.summary.departureDate || 'Dates to be confirmed' }}
-            @if (currentTrip.summary.returnDate) { — {{ currentTrip.summary.returnDate }} }
-          </p>
-          <p class="mt-4 text-sm text-slate-500">
-            {{ storedSecurely() ? 'Saved securely on this device.' : 'Web preview: this trip has not been stored on this device.' }}
-          </p>
-          <button type="button" class="mt-6 rounded-full border border-slate-300 px-5 py-3 font-semibold" (click)="trip.set(null)">
-            Open another trip
-          </button>
-          <button type="button" class="ml-2 mt-6 rounded-full bg-teal-700 px-5 py-3 font-semibold text-white" (click)="downloadCalendar()">Add to calendar</button>
-        </div>
-      </article>
-      @if (currentTrip.timeline.nextItemTitle || currentTrip.timeline.daysUntilDeparture !== null) {
-        <section class="mt-6 rounded-2xl bg-teal-800 p-6 text-white shadow-lg shadow-teal-900/10" aria-labelledby="up-next-title">
-          <p class="text-xs font-semibold uppercase tracking-[0.18em] text-teal-100">Up next</p>
-          <h2 id="up-next-title" class="mt-2 text-xl font-semibold">{{ currentTrip.timeline.nextItemTitle || 'Your trip is coming up' }}</h2>
-          @if (currentTrip.timeline.nextItemDate) { <p class="mt-2 text-sm text-teal-50">{{ currentTrip.timeline.nextItemDate }}{{ currentTrip.timeline.nextItemTime ? ' at ' + currentTrip.timeline.nextItemTime : '' }}</p> }
-          @if (currentTrip.timeline.daysUntilDeparture !== null && currentTrip.timeline.daysUntilDeparture > 0) { <p class="mt-3 text-sm font-medium text-teal-100">{{ currentTrip.timeline.daysUntilDeparture }} days until departure</p> }
-        </section>
+        @if (currentTrip.timeline.nextItemTitle || currentTrip.timeline.daysUntilDeparture !== null) { <section class="mt-6 rounded-2xl bg-teal-800 p-6 text-white"><p class="text-xs font-semibold uppercase tracking-[0.18em] text-teal-100">Up next</p><h2 class="mt-2 text-xl font-semibold">{{ currentTrip.timeline.nextItemTitle || 'Your trip is coming up' }}</h2>@if (currentTrip.timeline.nextItemDate) { <p class="mt-2 text-sm text-teal-50">{{ currentTrip.timeline.nextItemDate }}{{ currentTrip.timeline.nextItemTime ? ' at ' + currentTrip.timeline.nextItemTime : '' }}</p> }@if (currentTrip.timeline.daysUntilDeparture !== null && currentTrip.timeline.daysUntilDeparture > 0) { <p class="mt-3 text-sm text-teal-100">{{ currentTrip.timeline.daysUntilDeparture }} days until departure</p> }</section> }
+        @if (currentTrip.experience.overview || currentTrip.experience.personalisedMessage) { <section class="mt-8 rounded-2xl bg-white p-6 ring-1 ring-slate-200"><h2 class="text-2xl font-semibold">About your trip</h2>@if (currentTrip.experience.personalisedMessage) { <p class="mt-3 leading-7 text-slate-700">{{ currentTrip.experience.personalisedMessage }}</p> }@if (currentTrip.experience.overview) { <p class="mt-3 leading-7 text-slate-600">{{ currentTrip.experience.overview }}</p> }@if (currentTrip.experience.agentName) { <p class="mt-4 text-sm font-semibold text-teal-700">Planned by {{ currentTrip.experience.agentName }}</p> }</section> }
+        @if (currentTrip.stage === 'cancelled') { <section class="mt-6 rounded-2xl bg-red-50 p-5 text-red-950"><p class="font-semibold">This booking has been cancelled.</p>@if (currentTrip.bookingStatus.cancellationReason) { <p class="mt-2 text-sm">{{ currentTrip.bookingStatus.cancellationReason }}</p> }</section> }
+        @if (currentTrip.travellers.length) { <section class="mt-8"><h2 class="text-2xl font-semibold">Travelling</h2><ul class="mt-3 flex flex-wrap gap-2">@for (traveller of currentTrip.travellers; track traveller.name) { <li class="rounded-full bg-white px-3 py-2 text-sm ring-1 ring-slate-200">{{ traveller.name }}</li> }</ul></section> }
+        <app-destinations-section [destinations]="currentTrip.destinations" />
+        <app-extras-section [extras]="currentTrip.extras" />
+        <app-communications-section [communications]="currentTrip.communications" />
+      } @else if (activeView() === 'itinerary') {
+        <header><p class="text-sm font-semibold uppercase tracking-widest text-teal-700">Trip plan</p><h1 class="mt-1 text-3xl font-semibold">Itinerary</h1></header><app-itinerary-section [items]="currentTrip.itinerary" />
+      } @else if (activeView() === 'payments') {
+        <header><p class="text-sm font-semibold uppercase tracking-widest text-teal-700">Your booking</p><h1 class="mt-1 text-3xl font-semibold">Payments</h1></header>
+        @if (paymentReturnState() === 'updated') { <p class="mt-5 rounded-2xl bg-emerald-50 p-4 text-sm font-medium text-emerald-950 ring-1 ring-emerald-200">Payment received. Your balance has been updated.</p> }
+        @else if (paymentReturnState() === 'unchanged') { <p class="mt-5 rounded-2xl bg-amber-50 p-4 text-sm text-amber-950 ring-1 ring-amber-200">Your payment is still awaiting confirmation. Pull the latest trip details again shortly if you completed it.</p> }
+        @else if (paymentReturnState() === 'checking') { <p class="mt-5 rounded-2xl bg-slate-100 p-4 text-sm text-slate-700">Checking for your payment…</p> }
+        @else if (paymentReturnState() === 'error') { <p class="mt-5 rounded-2xl bg-red-50 p-4 text-sm text-red-900 ring-1 ring-red-200">We could not check the latest payment status. Your travel agent can confirm whether it was received.</p> }
+        @if (currentTrip.payments; as payments) { <app-payments-section [payments]="payments" [openingPaymentId]="openingPaymentId()" [actionsDisabled]="!online()" (pay)="openPayment($event)" /> } @else { <p class="mt-5 rounded-2xl bg-white p-5 text-slate-600 ring-1 ring-slate-200">Payment information is only available to the lead customer.</p> }
+      } @else if (activeView() === 'documents') {
+        <header><p class="text-sm font-semibold uppercase tracking-widest text-teal-700">Travel wallet</p><h1 class="mt-1 text-3xl font-semibold">Documents</h1></header><app-documents-section [documents]="currentTrip.documents" (download)="downloadDocument($event)" />
+      } @else {
+        <header><p class="text-sm font-semibold uppercase tracking-widest text-teal-700">We’re here for you</p><h1 class="mt-1 text-3xl font-semibold">Help</h1></header>
+        <section class="mt-6 rounded-2xl bg-white p-6 ring-1 ring-slate-200"><h2 class="text-xl font-semibold">Contact {{ currentTrip.support.companyName }}</h2><div class="mt-4 grid gap-3">@if (currentTrip.support.phone) { <a class="rounded-xl border border-slate-200 p-4 font-semibold" [href]="'tel:' + currentTrip.support.phone">Call · {{ currentTrip.support.phone }}</a> }@if (currentTrip.support.email) { <a class="rounded-xl border border-slate-200 p-4 font-semibold" [href]="'mailto:' + currentTrip.support.email">Email · {{ currentTrip.support.email }}</a> }@if (currentTrip.support.emergencyPhone) { <a class="rounded-xl bg-red-50 p-4 font-semibold text-red-900" [href]="'tel:' + currentTrip.support.emergencyPhone">Emergency line · {{ currentTrip.support.emergencyPhone }}</a> }</div></section>
+        @if (currentTrip.capabilities.sendMessage) {
+          <section class="mt-6 rounded-2xl bg-white p-6 ring-1 ring-slate-200"><h2 class="text-xl font-semibold">Ask your travel agent</h2>
+            @if (messageSent()) { <div class="mt-4 rounded-xl bg-emerald-50 p-4 text-emerald-950"><p class="font-semibold">Message sent</p><p class="mt-1 text-sm">Your question has been added to the booking for your travel agent.</p></div><button type="button" class="mt-4 text-sm font-semibold text-teal-700" (click)="writeAnotherMessage()">Send another message</button> }
+            @else { <form class="mt-4" (submit)="sendCustomerMessage($event)"><label for="message-topic" class="text-sm font-semibold">What is this about?</label><select id="message-topic" [value]="messageTopic()" (change)="updateMessageTopic($event)" class="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3"><option value="itinerary">Itinerary</option><option value="payment">Payment</option><option value="documents">Documents</option><option value="accessibility">Accessibility or assistance</option><option value="other">Something else</option></select><label for="customer-message" class="mt-4 block text-sm font-semibold">Your message</label><textarea id="customer-message" rows="5" maxlength="800" [value]="customerMessage()" (input)="updateCustomerMessage($event)" class="mt-2 w-full resize-y rounded-xl border border-slate-300 px-4 py-3" placeholder="How can your travel agent help?"></textarea><div class="mt-1 flex justify-between text-xs text-slate-500"><span>At least 10 characters</span><span>{{ customerMessage().length }}/800</span></div><button type="submit" [disabled]="submitting() || !online() || customerMessage().trim().length < 10" class="mt-4 w-full rounded-full bg-teal-700 px-5 py-4 font-semibold text-white disabled:opacity-40">{{ submitting() ? 'Sending…' : online() ? 'Send message' : 'Connect to send' }}</button></form>@if (error()) { <p class="mt-4 rounded-xl bg-red-50 p-4 text-sm text-red-800">{{ error() }}</p> } }
+          </section>
+        }
+        @if (currentTrip.capabilities.shareWithTraveller) {
+          <section class="mt-6 rounded-2xl bg-white p-6 ring-1 ring-slate-200"><h2 class="text-xl font-semibold">Share this trip</h2><p class="mt-2 text-sm leading-6 text-slate-600">Create a seven-day restricted link. Fellow travellers can see the itinerary and documents, but not prices, payments, supplier references, or quotation acceptance.</p><button type="button" class="mt-4 w-full rounded-full bg-slate-900 px-5 py-4 font-semibold text-white disabled:opacity-40" [disabled]="sharing() || !online()" (click)="shareWithTraveller()">{{ sharing() ? 'Creating link…' : online() ? 'Share with a traveller' : 'Connect to share' }}</button>@if (shareResult()) { <p class="mt-3 text-sm font-medium text-emerald-800">{{ shareResult() }}</p> }</section>
+        }
+        <section class="mt-6 rounded-2xl bg-white p-6 ring-1 ring-slate-200"><h2 class="text-xl font-semibold">Financial protection</h2><p class="mt-3 text-sm leading-6 text-slate-600">{{ currentTrip.protection.summary }}</p>@if (currentTrip.protection.holderName) { <p class="mt-3 text-sm font-medium">Holder: {{ currentTrip.protection.holderName }}</p> }</section>
       }
-      @if (currentTrip.experience.overview || currentTrip.experience.personalisedMessage) {
-        <section class="mt-8 rounded-2xl bg-white p-6 ring-1 ring-slate-200" aria-labelledby="trip-overview-title">
-          <h2 id="trip-overview-title" class="text-2xl font-semibold tracking-tight">About your trip</h2>
-          @if (currentTrip.experience.personalisedMessage) { <p class="mt-3 leading-7 text-slate-700">{{ currentTrip.experience.personalisedMessage }}</p> }
-          @if (currentTrip.experience.overview) { <p class="mt-3 leading-7 text-slate-600">{{ currentTrip.experience.overview }}</p> }
-          @if (currentTrip.experience.agentName) { <p class="mt-4 text-sm font-semibold text-teal-700">Planned by {{ currentTrip.experience.agentName }}</p> }
-        </section>
-      }
-      @if (currentTrip.stage === 'cancelled') {
-        <section class="mt-6 rounded-2xl bg-red-50 p-5 text-red-950" aria-label="Cancellation information">
-          <p class="font-semibold">This booking has been cancelled.</p>
-          @if (currentTrip.bookingStatus.cancellationReason) { <p class="mt-2 text-sm leading-6">{{ currentTrip.bookingStatus.cancellationReason }}</p> }
-        </section>
-      }
-      @if (currentTrip.travellers.length) {
-        <section class="mt-8" aria-labelledby="travellers-title">
-          <h2 id="travellers-title" class="text-2xl font-semibold tracking-tight">Travelling</h2>
-          <ul class="mt-3 flex flex-wrap gap-2">
-            @for (traveller of currentTrip.travellers; track traveller.name) {
-              <li class="rounded-full bg-white px-3 py-2 text-sm ring-1 ring-slate-200">{{ traveller.name }}</li>
-            }
-          </ul>
-        </section>
-      }
-      <app-itinerary-section [items]="currentTrip.itinerary" />
-      <app-destinations-section [destinations]="currentTrip.destinations" />
-      <app-extras-section [extras]="currentTrip.extras" />
-      <app-communications-section [communications]="currentTrip.communications" />
-      @if (currentTrip.payments; as payments) { <app-payments-section [payments]="payments" /> }
-      <app-documents-section [documents]="currentTrip.documents" (download)="downloadDocument($event)" />
-      <section class="mt-8 rounded-2xl bg-white p-6 ring-1 ring-slate-200" aria-labelledby="support-title">
-        <h2 id="support-title" class="text-2xl font-semibold tracking-tight">Help and protection</h2>
-        <p class="mt-3 text-sm leading-6 text-slate-600">{{ currentTrip.protection.summary }}</p>
-        <div class="mt-4 flex flex-wrap gap-2">
-          @if (currentTrip.support.phone) { <a class="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold" [href]="'tel:' + currentTrip.support.phone">Call us</a> }
-          @if (currentTrip.support.email) { <a class="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold" [href]="'mailto:' + currentTrip.support.email">Email us</a> }
-          @if (currentTrip.support.emergencyPhone) { <a class="rounded-full bg-red-50 px-4 py-2 text-sm font-semibold text-red-900" [href]="'tel:' + currentTrip.support.emergencyPhone">Emergency line</a> }
-        </div>
-      </section>
+
+      <nav class="fixed inset-x-0 bottom-0 z-20 mx-auto flex max-w-lg items-end justify-around border-t border-slate-200 bg-white/95 px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur" aria-label="Trip navigation">
+        <button type="button" class="rounded-xl px-3 py-2 text-xs font-semibold" [class.text-teal-700]="activeView() === 'home'" (click)="selectView('home')">⌂<span class="mt-1 block">Home</span></button>
+        <button type="button" class="rounded-xl px-3 py-2 text-xs font-semibold" [class.text-teal-700]="activeView() === 'itinerary'" (click)="selectView('itinerary')">≡<span class="mt-1 block">Itinerary</span></button>
+        @if (currentTrip.payments) { <button type="button" class="rounded-xl px-3 py-2 text-xs font-semibold" [class.text-teal-700]="activeView() === 'payments'" (click)="selectView('payments')">£<span class="mt-1 block">Payments</span></button> }
+        <button type="button" class="rounded-xl px-3 py-2 text-xs font-semibold" [class.text-teal-700]="activeView() === 'documents'" (click)="selectView('documents')">▤<span class="mt-1 block">Documents</span></button>
+        <button type="button" class="rounded-xl px-3 py-2 text-xs font-semibold" [class.text-teal-700]="activeView() === 'help'" (click)="selectView('help')">?<span class="mt-1 block">Help</span></button>
+      </nav>
     } @else if (challenge(); as currentChallenge) {
-      <div class="rounded-[2rem] bg-white p-7 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
-        <p class="mb-2 text-sm font-semibold uppercase tracking-widest text-teal-700">Verify your trip</p>
-        <h1 class="text-3xl font-semibold tracking-tight">Just a quick security check</h1>
-        <p class="mt-3 text-base leading-7 text-slate-600">Enter the postcode on the booking.</p>
-        @if (currentChallenge.methods.includes('postcode')) {
-          <form class="mt-7" (submit)="verifyPostcode($event)">
-            <label for="postcode" class="text-sm font-semibold">Booking postcode</label>
-            <input id="postcode" autocomplete="postal-code" [value]="postcode()" (input)="updatePostcode($event)"
-              class="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-4 uppercase outline-none focus:border-teal-700 focus:ring-4 focus:ring-teal-700/10" />
-            <button type="submit" [disabled]="submitting() || !postcode().trim()"
-              class="mt-4 w-full rounded-full bg-teal-700 px-5 py-4 font-semibold text-white disabled:opacity-40">
-              {{ submitting() ? 'Checking…' : 'Verify and save trip' }}
-            </button>
-          </form>
-        } @else {
-          <p class="mt-5 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">Email verification is required for this booking and will be enabled next.</p>
-        }
-        @if (error()) { <p class="mt-4 text-sm text-red-800" role="alert">{{ error() }}</p> }
-      </div>
+      <div class="rounded-[2rem] bg-white p-7 shadow-xl ring-1 ring-slate-200"><p class="text-sm font-semibold uppercase tracking-widest text-teal-700">Verify your trip</p><h1 class="mt-2 text-3xl font-semibold">Just a quick security check</h1><p class="mt-3 text-slate-600">Enter the postcode on the booking.</p>@if (currentChallenge.methods.includes('postcode')) { <form class="mt-7" (submit)="verifyPostcode($event)"><label for="postcode" class="text-sm font-semibold">Booking postcode</label><input id="postcode" autocomplete="postal-code" [value]="postcode()" (input)="updatePostcode($event)" class="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-4 uppercase"><button type="submit" [disabled]="submitting() || !postcode().trim()" class="mt-4 w-full rounded-full bg-teal-700 px-5 py-4 font-semibold text-white disabled:opacity-40">{{ submitting() ? 'Checking…' : 'Verify and save trip' }}</button></form> } @else { <p class="mt-5 rounded-xl bg-amber-50 p-4 text-sm text-amber-900">Email verification is required and will be enabled next.</p> }@if (error()) { <p class="mt-4 text-sm text-red-800">{{ error() }}</p> }</div>
     } @else {
-      <div class="rounded-[2rem] bg-white p-7 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
-        <p class="mb-2 text-sm font-semibold uppercase tracking-widest text-teal-700">Open your trip</p>
-        <h1 class="text-3xl font-semibold tracking-tight">Where are you heading?</h1>
-        <p class="mt-3 text-base leading-7 text-slate-600">Enter the Airtable IDs for the booking you want to preview locally.</p>
-
-        <form class="mt-7" (submit)="openTrip($event)">
-          <label for="base-id" class="text-sm font-semibold">Airtable base ID</label>
-          <input
-            id="base-id"
-            name="base-id"
-            type="text"
-            autocomplete="off"
-            spellcheck="false"
-            [value]="baseId()"
-            (input)="updateBaseId($event)"
-            placeholder="appXXXXXXXXXXXXXX"
-            class="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-4 text-base outline-none transition focus:border-teal-700 focus:ring-4 focus:ring-teal-700/10"
-          />
-          <label for="record-id" class="mt-5 block text-sm font-semibold">Booking record ID</label>
-          <input
-            id="record-id"
-            name="record-id"
-            type="text"
-            autocomplete="off"
-            spellcheck="false"
-            [value]="recordId()"
-            (input)="updateRecordId($event)"
-            placeholder="recXXXXXXXXXXXXXX"
-            class="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-4 text-base outline-none transition focus:border-teal-700 focus:ring-4 focus:ring-teal-700/10"
-          />
-          <button
-            type="submit"
-            [disabled]="!canContinue()"
-            class="mt-4 w-full rounded-full bg-teal-700 px-5 py-4 font-semibold text-white transition enabled:hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {{ submitting() ? 'Opening your trip…' : 'Open local preview' }}
-          </button>
-        </form>
-
-        @if (error()) {
-          <p class="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">{{ error() }}</p>
-        }
-
-        <p class="mt-5 text-center text-xs leading-5 text-slate-500">
-          Local development only. This direct-ID entry route is disabled in production.
-        </p>
-      </div>
-      <p class="mt-8 text-center text-sm text-slate-500">Saved trips will appear here after verification.</p>
+      <div class="rounded-[2rem] bg-white p-7 shadow-xl ring-1 ring-slate-200"><p class="text-sm font-semibold uppercase tracking-widest text-teal-700">Open your trip</p><h1 class="mt-2 text-3xl font-semibold">Where are you heading?</h1><p class="mt-3 text-slate-600">Enter the Airtable IDs for the booking you want to preview locally.</p><form class="mt-7" (submit)="openTrip($event)"><label for="base-id" class="text-sm font-semibold">Airtable base ID</label><input id="base-id" type="text" autocomplete="off" spellcheck="false" [value]="baseId()" (input)="updateBaseId($event)" placeholder="appXXXXXXXXXXXXXX" class="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-4"><label for="record-id" class="mt-5 block text-sm font-semibold">Booking record ID</label><input id="record-id" type="text" autocomplete="off" spellcheck="false" [value]="recordId()" (input)="updateRecordId($event)" placeholder="recXXXXXXXXXXXXXX" class="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-4"><button type="submit" [disabled]="!canContinue()" class="mt-4 w-full rounded-full bg-teal-700 px-5 py-4 font-semibold text-white disabled:opacity-40">{{ submitting() ? 'Opening your trip…' : 'Open local preview' }}</button></form>@if (error()) { <p class="mt-4 rounded-xl bg-red-50 p-4 text-sm text-red-800">{{ error() }}</p> }<p class="mt-5 text-center text-xs text-slate-500">Local development only. Direct-ID entry is disabled in production.</p></div>
     }
   </section>
 </main>

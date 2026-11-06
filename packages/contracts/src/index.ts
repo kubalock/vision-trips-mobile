@@ -129,6 +129,42 @@ export interface QuotationState {
   requiredConfirmations: string[];
 }
 
+export interface QuotationAcceptanceRequest {
+  name: string;
+  email: string;
+  agreed: boolean;
+  confirmations: string[];
+}
+
+export interface QuotationAcceptanceResponse {
+  accepted: true;
+  acceptedAt: string;
+}
+
+export type CustomerMessageTopic = 'itinerary' | 'payment' | 'documents' | 'accessibility' | 'other';
+
+export interface CustomerMessageRequest {
+  topic: CustomerMessageTopic;
+  message: string;
+}
+
+export interface CustomerMessageResponse {
+  sent: true;
+  sentAt: string;
+}
+
+export interface PaymentLinkResponse {
+  paymentId: string;
+  url: string;
+  amount: number;
+  currency: string;
+}
+
+export interface FellowTravellerLinkResponse {
+  url: string;
+  expiresAt: string;
+}
+
 export interface TripTimeline {
   daysUntilDeparture: number | null;
   nextItemId: string | null;

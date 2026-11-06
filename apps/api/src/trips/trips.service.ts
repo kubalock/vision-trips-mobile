@@ -74,6 +74,7 @@ export class TripsService {
     const departure = dateString(bookingValue('departure'));
     const returns = dateString(bookingValue('return'));
     const quoteExpiry = dateString(bookingValue('quoteExpiry'));
+    const quotationAccepted = truthy(bookingValue('quotationAccepted')) || truthy(booking.fields[process.env.AIRTABLE_ACCEPTED_FIELD?.trim() || 'Quotation Accepted']);
     const tags = strings(bookingValue('tags'));
     const now = new Date();
     const version = dateTimeString(booking.fields['Last modified time']) ?? booking.createdTime ?? now.toISOString();
@@ -166,7 +167,7 @@ export class TripsService {
       quotation: {
         status: stage === 'quote' ? 'available' : stage === 'quote_expired' ? 'expired' : 'not_applicable',
         expiresAt: quoteExpiry,
-        canAccept: accessScope === 'primary_customer' && stage === 'quote',
+        canAccept: accessScope === 'primary_customer' && stage === 'quote' && !quotationAccepted,
         requiredConfirmations: stage === 'quote' ? ['package details', 'traveller names', 'important information', 'financial protection', 'terms and conditions'] : [],
       },
       timeline: mapTimeline(itinerary, departure, now),
@@ -183,7 +184,7 @@ export class TripsService {
       ...(payments ? { payments } : {}),
       documents,
       capabilities: {
-        acceptQuotation: accessScope === 'primary_customer' && stage === 'quote',
+        acceptQuotation: accessScope === 'primary_customer' && stage === 'quote' && !quotationAccepted,
         makePayment: accessScope === 'primary_customer' && !['closed', 'cancelled', 'quote_expired'].includes(stage),
         shareWithTraveller: accessScope === 'primary_customer',
         sendMessage: true,
