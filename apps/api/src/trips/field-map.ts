@@ -44,7 +44,26 @@ export const elementFields = {
   carrier: ['Carrier', 'Airline'], flightNumber: ['Flight No.', 'Flight Number'], accommodation: ['Accommodation Name', 'Hotel Name', 'Hotel'],
   cruiseName: ['Cruise Name'], ship: ['Cruise Ship', 'Cruise Ships', 'Ship'], supplierReference: ['Supplier Reference', 'Supplier Ref', 'Supplier Ref.'],
   address: ['Address'], notes: ['Important Information', 'Further Information'], docs: ['Customer Documentation'],
+  supplier: ['Supplier', 'Suppliers'], hideSupplier: ['Hide Supplier Info'], images: ['Image Gallery', 'Featured Image(s)', 'Featured Images', 'Featured Image', 'Images', 'Photos'],
+  rooms: ['Rooms', 'Bookings [Rooms]'], cabins: ['Cabin Details', 'Bookings [Cabins]'], passengers: ['Passengers & Guests', 'Bookings [Passengers]'],
+  visitingPorts: ['Visiting Ports'], cruiseLine: ['Cruise Line'], location: ['Location', 'Destinations', 'Destination', 'Top Destination'],
+  emergencyName: ['Emergency Supplier Name'], emergencyPhone: ['Emergency Phone Number(s)'],
+  rating: ['Rating'], nights: ['Nights'], flightClass: ['Flight Class'], direction: ['Direction'], voyageCode: ['Voyage Code'],
+  vehicleType: ['Vehicle Type'], pickupInstructions: ['Pick Up Instructions', 'Pickup Instructions'], dropoffInstructions: ['Drop Off Instructions', 'Dropoff Instructions'],
+  trainName: ['Train Name/Number'], carriageClass: ['Carriage Class(es)'], seatNumbers: ['Seat Number(s)'],
+  onboardCredit: ['Onboard Credit'], onboardCreditCurrency: ['Onboard Credit Currency'],
 } as const;
+
+export const supplierFields = { name: ['Name', 'Supplier Name(s)'], logo: ['Logo'], terms: ['Legal Notices URL'] } as const;
+export const airportFields = { name: ['Name', 'Airport'], iata: ['IATA Code'] } as const;
+export const airlineFields = { name: ['Airline', 'Name'], iata: ['iata'], logo: ['Logo', 'Airline Logo', 'logo'] } as const;
+export const roomFields = { type: ['Room Type', 'Name', 'Room'], board: ['Board Basis', 'Board', 'Meal Plan'], view: ['Room Views'], requests: ['Special Requests'] } as const;
+export const cabinFields = { name: ['Cabin Name', 'Name'], grade: ['Cabin Grade'], number: ['Cabin Number'], deck: ['Cabin Deck', 'Deck'], side: ['Ship Side'], position: ['Cabin Position'], bed: ['Bed Type'], seating: ['Seating'], table: ['Table Size'], dining: ['Dining Option'] } as const;
+export const passengerFields = { name: ['Passenger', 'Passenger Name'], pnr: ['PNR'], class: ['Flight Class'], seat: ['Seat Number'], cabinBag: ['Cabin Baggage Allowance'], checkedBag: ['Checked Baggage Allowance'], extras: ['Extras'], meal: ['Meal Request'], ssr: ['Special Requests'] } as const;
+export const shipFields = { name: ['Name'], cover: ['Cover Image', 'cover_image'], profile: ['Profile Image', 'profile_image'] } as const;
+export const operatorFields = { name: ['Name', 'Operator'], logo: ['Logo', 'logo', 'Profile Image', 'profile_image'] } as const;
+export const locationFields = { name: ['Name', 'Resort', 'Area', 'Country'] } as const;
+export const cruisePortFields = { day: ['Day'], port: ['Port'], description: ['Port (SinGS)', 'Overview'], arrive: ['Arrive'], depart: ['Depart'] } as const;
 
 export const paymentFields = {
   amount: ['Amount'], currency: ['Mint: Currency', 'Currency'], type: ['Payment Type'], customerType: ['Customer Payment Type'],

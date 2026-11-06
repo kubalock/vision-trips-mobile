@@ -96,6 +96,73 @@ export interface ItineraryItem {
   reference: string | null;
   address: string | null;
   notes: string | null;
+  supplier: ItinerarySupplier | null;
+  images: ItineraryImage[];
+  rooms: RoomDetail[];
+  cabins: CabinDetail[];
+  passengers: PassengerAllocation[];
+  cruisePorts: CruisePort[];
+  emergencyContact: EmergencyContact | null;
+  details: ItineraryDetail[];
+}
+
+export interface ItinerarySupplier {
+  name: string;
+  logoUrl: string | null;
+  termsUrl: string | null;
+}
+
+export interface ItineraryImage {
+  url: string;
+  alt: string;
+}
+
+export interface RoomDetail {
+  type: string;
+  board: string | null;
+  view: string | null;
+  requests: string | null;
+}
+
+export interface CabinDetail {
+  name: string;
+  grade: string | null;
+  number: string | null;
+  deck: string | null;
+  side: string | null;
+  position: string | null;
+  bed: string | null;
+  dining: string | null;
+}
+
+export interface PassengerAllocation {
+  name: string;
+  bookingReference: string | null;
+  travelClass: string | null;
+  seat: string | null;
+  cabinBaggage: string | null;
+  checkedBaggage: string | null;
+  extras: string | null;
+  meal: string | null;
+  assistance: string | null;
+}
+
+export interface CruisePort {
+  day: string;
+  port: string;
+  arrivalTime: string | null;
+  departureTime: string | null;
+  description: string | null;
+}
+
+export interface EmergencyContact {
+  name: string;
+  phone: string;
+}
+
+export interface ItineraryDetail {
+  label: string;
+  value: string;
 }
 
 export interface PaymentItem {

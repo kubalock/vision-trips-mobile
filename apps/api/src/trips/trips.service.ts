@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import type { AccessScope, ItineraryItem, ItineraryKind, PaymentItem, TravellerSummary, TripDocument, TripSnapshot } from '@vision-trips/contracts';
+import type { AccessScope, CabinDetail, CruisePort, ItineraryItem, ItineraryKind, PassengerAllocation, PaymentItem, RoomDetail, TravellerSummary, TripDocument, TripSnapshot } from '@vision-trips/contracts';
 import { createHmac } from 'node:crypto';
 import { AirtableService, type AirtableRecord } from '../airtable/airtable.service.js';
-import { bookingFields, brandFields, customerFields, elementFields, firstAttachmentUrl, firstString, numberValue, paymentFields, personFields, pick, strings, truthy } from './field-map.js';
+import { airlineFields, airportFields, bookingFields, brandFields, cabinFields, cruisePortFields, customerFields, elementFields, firstAttachmentUrl, firstString, locationFields, numberValue, passengerFields, paymentFields, personFields, pick, roomFields, shipFields, strings, supplierFields, truthy } from './field-map.js';
 import { resolveStage } from './stage.js';
 import { themeTokens } from './theme.js';
 
@@ -20,7 +20,25 @@ export class TripsService {
       this.airtable.records(baseId, 'Customers [People]', strings(pick(booking.fields, bookingFields.people))),
       this.airtable.records(baseId, 'Customers', strings(pick(booking.fields, bookingFields.customers))),
     ]);
-    return this.mapSnapshot(baseId, booking, brand, accessScope, { elements, payments, people, customers });
+    const ids = linkedRecordIds(elements);
+    const [suppliers, airports, airlines, rooms, cabins, passengers, ships, cruisePorts, locations, operators] = await Promise.all([
+      this.airtable.records(baseId, 'Suppliers', ids.suppliers),
+      this.airtable.records(baseId, 'CMS [Airports]', ids.airports),
+      this.airtable.records(baseId, 'CMS [Airlines]', ids.airlines),
+      this.airtable.records(baseId, 'Bookings [Rooms]', ids.rooms),
+      this.airtable.records(baseId, 'Bookings [Cabin]', ids.cabins),
+      this.airtable.records(baseId, 'Bookings [Passengers]', ids.passengers),
+      this.airtable.records(baseId, 'CMS [Cruise Ships]', ids.ships),
+      this.airtable.records(baseId, 'Bookings [Cruise Itinerary]', ids.cruisePorts),
+      this.airtable.records(baseId, 'CMS [Locations]', ids.locations),
+      this.airtable.records(baseId, 'CMS [Cruise Operators]', ids.operators),
+    ]);
+    const portLocationIds = cruisePorts.flatMap((record) => recordIds(pick(record.fields, cruisePortFields.port)));
+    const portLocations = await this.airtable.records(baseId, 'CMS [Locations]', portLocationIds);
+    return this.mapSnapshot(baseId, booking, brand, accessScope, {
+      elements, payments, people, customers, suppliers, airports, airlines, rooms, cabins, passengers, ships,
+      cruisePorts, locations: [...locations, ...portLocations], operators,
+    });
   }
 
   async verificationProfile(baseId: string, recordId: string): Promise<{
@@ -41,8 +59,9 @@ export class TripsService {
     booking: AirtableRecord,
     brand: AirtableRecord,
     accessScope: AccessScope,
-    related: { elements: AirtableRecord[]; payments: AirtableRecord[]; people: AirtableRecord[]; customers: AirtableRecord[] } = { elements: [], payments: [], people: [], customers: [] },
+    related: Partial<RelatedRecords> = {},
   ): TripSnapshot {
+    const allRelated = { ...emptyRelated(), ...related };
     const bookingValue = (key: keyof typeof bookingFields) => pick(booking.fields, bookingFields[key]);
     const brandValue = (key: keyof typeof brandFields) => pick(brand.fields, brandFields[key]);
     const status = firstString(bookingValue('status')) || 'Quotation';
@@ -53,11 +72,14 @@ export class TripsService {
     const now = new Date();
     const version = dateTimeString(booking.fields['Last modified time']) ?? booking.createdTime ?? now.toISOString();
     const tripId = publicTripId(baseId, booking.id);
-    const itinerary = related.elements.map((record, index) => mapElement(record, tripId, index)).filter((item) => item.status.toLowerCase() !== 'cancelled');
-    const travellers = mapTravellers(related.customers, related.people);
-    const documents = mapDocuments(related.elements, itinerary, tripId);
+    const stage = resolveStage(status, departure, returns, quoteExpiry);
+    const hideSupplierInfo = accessScope === 'fellow_traveller' || stage === 'quote' || stage === 'quote_expired';
+    const graph = recordGraph(allRelated);
+    const itinerary = allRelated.elements.map((record, index) => mapElement(record, tripId, index, graph, hideSupplierInfo)).filter((item) => item.status.toLowerCase() !== 'cancelled');
+    const travellers = mapTravellers(allRelated.customers, allRelated.people);
+    const documents = mapDocuments(allRelated.elements, itinerary, tripId);
     const payments = accessScope === 'primary_customer'
-      ? mapPayments(booking, related.payments, resolveStage(status, departure, returns, quoteExpiry), tripId)
+      ? mapPayments(booking, allRelated.payments, stage, tripId)
       : undefined;
 
     return {
@@ -65,7 +87,7 @@ export class TripsService {
       tripId,
       version,
       serverTime: now.toISOString(),
-      stage: resolveStage(status, departure, returns, quoteExpiry),
+      stage,
       accessScope,
       freshness: {
         status: 'fresh',
@@ -96,8 +118,8 @@ export class TripsService {
       ...(payments ? { payments } : {}),
       documents,
       capabilities: {
-        acceptQuotation: accessScope === 'primary_customer' && resolveStage(status, departure, returns, quoteExpiry) === 'quote',
-        makePayment: accessScope === 'primary_customer' && !['closed', 'cancelled', 'quote_expired'].includes(resolveStage(status, departure, returns, quoteExpiry)),
+        acceptQuotation: accessScope === 'primary_customer' && stage === 'quote',
+        makePayment: accessScope === 'primary_customer' && !['closed', 'cancelled', 'quote_expired'].includes(stage),
         shareWithTraveller: accessScope === 'primary_customer',
         sendMessage: true,
       },
@@ -123,31 +145,122 @@ function mapTravellers(customers: AirtableRecord[], people: AirtableRecord[]): T
   return rows;
 }
 
-function mapElement(record: AirtableRecord, tripId: string, index: number): ItineraryItem {
+interface RelatedRecords {
+  elements: AirtableRecord[];
+  payments: AirtableRecord[];
+  people: AirtableRecord[];
+  customers: AirtableRecord[];
+  suppliers: AirtableRecord[];
+  airports: AirtableRecord[];
+  airlines: AirtableRecord[];
+  rooms: AirtableRecord[];
+  cabins: AirtableRecord[];
+  passengers: AirtableRecord[];
+  ships: AirtableRecord[];
+  cruisePorts: AirtableRecord[];
+  locations: AirtableRecord[];
+  operators: AirtableRecord[];
+}
+
+type RecordGraph = { [K in Exclude<keyof RelatedRecords, 'elements' | 'payments' | 'people' | 'customers'>]: Map<string, AirtableRecord> };
+
+function emptyRelated(): RelatedRecords {
+  return { elements: [], payments: [], people: [], customers: [], suppliers: [], airports: [], airlines: [], rooms: [], cabins: [], passengers: [], ships: [], cruisePorts: [], locations: [], operators: [] };
+}
+
+function recordGraph(related: RelatedRecords): RecordGraph {
+  const index = (records: AirtableRecord[]) => new Map(records.map((record) => [record.id, record]));
+  return {
+    suppliers: index(related.suppliers), airports: index(related.airports), airlines: index(related.airlines), rooms: index(related.rooms),
+    cabins: index(related.cabins), passengers: index(related.passengers), ships: index(related.ships), cruisePorts: index(related.cruisePorts),
+    locations: index(related.locations), operators: index(related.operators),
+  };
+}
+
+function linkedRecordIds(elements: AirtableRecord[]) {
+  const collect = (key: keyof typeof elementFields) => elements.flatMap((record) => recordIds(pick(record.fields, elementFields[key])));
+  return {
+    suppliers: collect('supplier'), airports: [...collect('from'), ...collect('to')], airlines: collect('carrier'), rooms: collect('rooms'),
+    cabins: collect('cabins'), passengers: collect('passengers'), ships: collect('ship'), cruisePorts: collect('visitingPorts'),
+    locations: collect('location'), operators: collect('cruiseLine'),
+  };
+}
+
+function mapElement(record: AirtableRecord, tripId: string, index: number, graph: RecordGraph, hideSupplierInfo: boolean): ItineraryItem {
   const value = (key: keyof typeof elementFields) => pick(record.fields, elementFields[key]);
   const typeLabel = safeText(value('type')) || 'Trip item';
   const kind = kindFor(typeLabel);
-  const from = safeText(value('from'));
-  const to = safeText(value('to'));
+  const from = resolveLinkedText(value('from'), graph.airports, airportFields.name);
+  const to = resolveLinkedText(value('to'), graph.airports, airportFields.name);
   const accommodation = safeText(value('accommodation'));
-  const cruiseName = safeText(value('cruiseName')) || safeText(value('ship'));
+  const ship = firstLinked(value('ship'), graph.ships);
+  const cruiseName = safeText(value('cruiseName')) || recordText(ship, shipFields.name);
   const heading = cleanHeading(safeText(value('heading')));
   const title = kind === 'flight' && (from || to) ? `${from || 'Flight'} to ${to || 'destination'}`
     : kind === 'stay' && accommodation ? accommodation
     : kind === 'cruise' && cruiseName ? cruiseName
     : kind === 'transfer' && (from || to) ? `Transfer: ${from}${to ? ` to ${to}` : ''}`
     : heading || typeLabel;
+  const supplierRecord = firstLinked(value('supplier'), graph.suppliers);
+  const supplierName = recordText(supplierRecord, supplierFields.name);
+  const supplierHidden = hideSupplierInfo || truthy(value('hideSupplier'));
+  const carrierRecord = firstLinked(value('carrier'), graph.airlines);
+  const rooms = linked(value('rooms'), graph.rooms).map(mapRoom).filter((item): item is RoomDetail => Boolean(item));
+  const cabins = linked(value('cabins'), graph.cabins).map(mapCabin).filter((item): item is CabinDetail => Boolean(item));
+  const passengers = linked(value('passengers'), graph.passengers).map(mapPassenger).filter((item): item is PassengerAllocation => Boolean(item));
+  const cruisePorts = linked(value('visitingPorts'), graph.cruisePorts).map((port) => mapCruisePort(port, graph.locations)).filter((item): item is CruisePort => Boolean(item));
   return {
     id: publicChildId(tripId, record.id || String(index), 'itm'), kind, typeLabel, title,
     status: safeText(value('status')),
     startDate: dateString(value('start')), endDate: dateString(value('end')),
     startTime: timeString(value('departTime')), endTime: timeString(value('arriveTime')),
-    from: from || null, to: to || null, carrier: safeText(value('carrier')) || null,
+    from: from || null, to: to || null, carrier: recordText(carrierRecord, airlineFields.name) || safeText(value('carrier')) || null,
     flightNumber: safeText(value('flightNumber')).replace(/\s/g, '') || null,
-    reference: safeText(value('supplierReference')) || null,
+    reference: supplierHidden ? null : safeText(value('supplierReference')) || null,
     address: safeText(value('address')) || null,
     notes: safeText(value('notes')) || null,
+    supplier: supplierHidden || !supplierName ? null : { name: supplierName, logoUrl: firstAttachmentUrl(supplierRecord?.fields ? pick(supplierRecord.fields, supplierFields.logo) : undefined), termsUrl: safeUrl(supplierRecord?.fields ? pick(supplierRecord.fields, supplierFields.terms) : undefined) },
+    images: attachmentImages(value('images')),
+    rooms, cabins, passengers, cruisePorts,
+    emergencyContact: emergencyContact(value('emergencyName'), value('emergencyPhone')),
+    details: elementDetails(kind, value),
   };
+}
+
+function mapRoom(record: AirtableRecord): RoomDetail | null {
+  const type = recordText(record, roomFields.type);
+  if (!type) return null;
+  return { type, board: nullableRecordText(record, roomFields.board), view: nullableRecordText(record, roomFields.view), requests: nullableRecordText(record, roomFields.requests) };
+}
+
+function mapCabin(record: AirtableRecord): CabinDetail | null {
+  const name = recordText(record, cabinFields.name);
+  if (!name) return null;
+  const dining = [recordText(record, cabinFields.seating), recordText(record, cabinFields.table), recordText(record, cabinFields.dining)].filter(Boolean).join(' · ');
+  return { name, grade: nullableRecordText(record, cabinFields.grade), number: nullableRecordText(record, cabinFields.number), deck: nullableRecordText(record, cabinFields.deck), side: nullableRecordText(record, cabinFields.side), position: nullableRecordText(record, cabinFields.position), bed: nullableRecordText(record, cabinFields.bed), dining: dining || null };
+}
+
+function mapPassenger(record: AirtableRecord): PassengerAllocation | null {
+  const name = recordText(record, passengerFields.name);
+  if (!name) return null;
+  return { name, bookingReference: nullableRecordText(record, passengerFields.pnr), travelClass: nullableRecordText(record, passengerFields.class), seat: nullableRecordText(record, passengerFields.seat), cabinBaggage: nullableRecordText(record, passengerFields.cabinBag), checkedBaggage: nullableRecordText(record, passengerFields.checkedBag), extras: nullableRecordText(record, passengerFields.extras), meal: nullableRecordText(record, passengerFields.meal), assistance: nullableRecordText(record, passengerFields.ssr) };
+}
+
+function mapCruisePort(record: AirtableRecord, locations: Map<string, AirtableRecord>): CruisePort | null {
+  const port = resolveLinkedText(pick(record.fields, cruisePortFields.port), locations, locationFields.name);
+  if (!port) return null;
+  return { day: safeText(pick(record.fields, cruisePortFields.day)), port, arrivalTime: timeString(pick(record.fields, cruisePortFields.arrive)), departureTime: timeString(pick(record.fields, cruisePortFields.depart)), description: safeText(pick(record.fields, cruisePortFields.description)) || null };
+}
+
+function elementDetails(kind: ItineraryKind, value: (key: keyof typeof elementFields) => unknown) {
+  const candidates: Array<[string, keyof typeof elementFields]> = kind === 'flight'
+    ? [['Class', 'flightClass'], ['Direction', 'direction']]
+    : kind === 'stay' ? [['Rating', 'rating'], ['Nights', 'nights']]
+    : kind === 'cruise' ? [['Voyage', 'voyageCode'], ['Onboard credit', 'onboardCredit']]
+    : kind === 'transfer' || kind === 'carhire' ? [['Vehicle', 'vehicleType'], ['Pick-up instructions', 'pickupInstructions'], ['Drop-off instructions', 'dropoffInstructions']]
+    : kind === 'train' ? [['Train', 'trainName'], ['Class', 'carriageClass'], ['Seats', 'seatNumbers']]
+    : [];
+  return candidates.map(([label, key]) => ({ label, value: safeText(value(key)) })).filter((detail) => detail.value);
 }
 
 function mapPayments(booking: AirtableRecord, records: AirtableRecord[], stage: string, tripId: string) {
@@ -198,6 +311,52 @@ function publicChildId(tripId: string, sourceId: string, prefix: string): string
   const secret = process.env.VISION_LINK_SECRET;
   if (!secret) throw new Error('VISION_LINK_SECRET is not configured.');
   return `${prefix}_${createHmac('sha256', secret).update(`${tripId}|${sourceId}`).digest('base64url').slice(0, 18)}`;
+}
+
+function recordIds(value: unknown): string[] {
+  return strings(value).filter((id) => /^rec[A-Za-z0-9]{14}$/.test(id));
+}
+
+function linked(value: unknown, records: Map<string, AirtableRecord>): AirtableRecord[] {
+  return recordIds(value).map((id) => records.get(id)).filter((record): record is AirtableRecord => Boolean(record));
+}
+
+function firstLinked(value: unknown, records: Map<string, AirtableRecord>): AirtableRecord | undefined {
+  return linked(value, records)[0];
+}
+
+function recordText(record: AirtableRecord | undefined, fields: readonly string[]): string {
+  return record ? safeText(pick(record.fields, fields)) : '';
+}
+
+function nullableRecordText(record: AirtableRecord, fields: readonly string[]): string | null {
+  return recordText(record, fields) || null;
+}
+
+function resolveLinkedText(value: unknown, records: Map<string, AirtableRecord>, fields: readonly string[]): string {
+  const resolved = linked(value, records).map((record) => recordText(record, fields)).filter(Boolean).join(', ');
+  return resolved || safeText(value);
+}
+
+function attachmentImages(value: unknown): Array<{ url: string; alt: string }> {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((attachment) => {
+    const file = attachment as { url?: unknown; filename?: unknown };
+    return typeof file.url === 'string' && file.url.startsWith('https://')
+      ? [{ url: file.url, alt: safeText(file.filename) || 'Trip image' }]
+      : [];
+  }).slice(0, 12);
+}
+
+function safeUrl(value: unknown): string | null {
+  const url = safeText(value);
+  return /^https:\/\//i.test(url) ? url : null;
+}
+
+function emergencyContact(nameValue: unknown, phoneValue: unknown): { name: string; phone: string } | null {
+  const phone = safeText(phoneValue).replace(/[^0-9+() .-]/g, '').slice(0, 40);
+  if (!phone) return null;
+  return { name: safeText(nameValue) || 'Supplier emergency line', phone };
 }
 
 function safeText(value: unknown): string {
