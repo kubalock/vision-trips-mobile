@@ -15,6 +15,13 @@ export class LinkExchangesController {
     return this.exchanges.create(body?.linkOrCode);
   }
 
+  @Post('local')
+  @ApiBody({ schema: { example: { baseId: 'appXXXXXXXXXXXXXX', recordId: 'recXXXXXXXXXXXXXX' } } })
+  @ApiCreatedResponse({ description: 'A local-development trip snapshot. Disabled in production.' })
+  createLocal(@Body() body: { baseId?: unknown; recordId?: unknown }): Promise<LinkExchangeResponse> {
+    return this.exchanges.createLocal(body?.baseId, body?.recordId);
+  }
+
   @Post(':exchangeId/verify/knowledge')
   verifyPostcode(
     @Param('exchangeId') exchangeId: string,

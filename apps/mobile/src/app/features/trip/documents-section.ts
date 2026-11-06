@@ -14,7 +14,7 @@ import type { TripDocument } from '@vision-trips/contracts';
                 <span><strong class="block">{{ document.title }}</strong><span class="text-sm text-slate-500">{{ document.description }}</span></span><span aria-hidden="true">↗</span>
               </a>
             } @else {
-              <div class="p-4"><strong class="block">{{ document.title }}</strong><span class="text-sm text-slate-500">{{ document.description }}</span></div>
+              <div class="flex items-center justify-between gap-4 p-4"><span><strong class="block">{{ document.title }}</strong><span class="text-sm text-slate-500">{{ document.description }}</span></span><span class="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">{{ document.status === 'pending' ? 'Coming soon' : 'Unavailable' }}</span></div>
             }
           </li>
         }

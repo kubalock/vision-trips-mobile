@@ -45,7 +45,7 @@ export interface TripCapabilities {
 }
 
 export interface TripSnapshot {
-  schemaVersion: 1;
+  schemaVersion: 2;
   tripId: string;
   version: string;
   serverTime: string;
@@ -62,11 +62,46 @@ export interface TripSnapshot {
     theme: ThemeTokens;
   };
   summary: TripSummary;
+  experience: TripExperience;
+  support: TripSupport;
+  protection: TripProtection;
+  bookingStatus: BookingStatus;
   travellers: TravellerSummary[];
   itinerary: ItineraryItem[];
   payments?: PaymentSummary;
   documents: TripDocument[];
   capabilities: TripCapabilities;
+}
+
+export interface TripExperience {
+  overview: string | null;
+  personalisedMessage: string | null;
+  agentName: string | null;
+}
+
+export interface TripSupport {
+  companyName: string;
+  phone: string | null;
+  email: string | null;
+  websiteUrl: string | null;
+  emergencyPhone: string | null;
+  outOfHoursUrl: string | null;
+  outOfHoursEmail: string | null;
+}
+
+export interface TripProtection {
+  scheme: 'atol' | 'non_air_package' | 'not_applicable' | 'unknown';
+  atolNumber: string | null;
+  licensing: string | null;
+  summary: string;
+}
+
+export interface BookingStatus {
+  sourceStatus: string;
+  cancellationDate: string | null;
+  cancellationReason: string | null;
+  supplierTicketsReceived: boolean;
+  supplierConfirmationsReceived: boolean;
 }
 
 export type ItineraryKind = 'flight' | 'stay' | 'cruise' | 'transfer' | 'carhire' | 'parking' | 'train' | 'attraction' | 'misc';
@@ -191,10 +226,16 @@ export interface TripDocument {
   kind: 'confirmation' | 'invoice' | 'receipt' | 'supplier';
   url: string | null;
   offlineAvailable: boolean;
+  status: 'ready' | 'pending' | 'unavailable';
 }
 
 export interface LinkExchangeRequest {
   linkOrCode: string;
+}
+
+export interface LocalTripExchangeRequest {
+  baseId: string;
+  recordId: string;
 }
 
 export interface LinkExchangeChallenge {

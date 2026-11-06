@@ -16,4 +16,4 @@ npm run start:api
 npm run start:mobile
 ```
 
-Copy `apps/api/.env.example` to `apps/api/.env` before connecting to Airtable. Never expose the Airtable token to the mobile application.
+Copy `apps/api/.env.example` to `apps/api/.env` before connecting to Airtable. The API loads this file automatically in local development. Never expose the Airtable token to the mobile application.

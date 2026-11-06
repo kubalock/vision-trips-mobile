@@ -66,6 +66,26 @@ export class LinkExchangesService {
     return { status: 'authorized', exchangeId, expiresAt, snapshot, session };
   }
 
+  async createLocal(baseId: unknown, recordId: unknown): Promise<LinkExchangeResponse> {
+    if (process.env.NODE_ENV === 'production') throw new NotFoundException('Not found.');
+    if (typeof baseId !== 'string' || !/^app[A-Za-z0-9]{14}$/.test(baseId.trim())) {
+      throw new BadRequestException('Enter a valid Airtable base ID.');
+    }
+    if (typeof recordId !== 'string' || !/^rec[A-Za-z0-9]{14}$/.test(recordId.trim())) {
+      throw new BadRequestException('Enter a valid Airtable booking record ID.');
+    }
+    const exchangeId = randomUUID();
+    const snapshot = await this.trips.snapshot(baseId.trim(), recordId.trim(), 'primary_customer');
+    const session = this.sessions.issue({ baseId: baseId.trim(), recordId: recordId.trim(), fellowTraveller: false });
+    return {
+      status: 'authorized',
+      exchangeId,
+      expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+      snapshot,
+      session,
+    };
+  }
+
   async verifyPostcode(exchangeId: string, postcode: unknown): Promise<LinkExchangeResponse> {
     const pending = this.pending.get(exchangeId);
     if (!pending || pending.expiresAt < Date.now()) {

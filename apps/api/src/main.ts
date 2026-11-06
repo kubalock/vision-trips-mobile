@@ -2,6 +2,13 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module.js';
 
+try {
+  process.loadEnvFile();
+} catch (error) {
+  const code = (error as NodeJS.ErrnoException).code;
+  if (code !== 'ENOENT') throw error;
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix('v1');

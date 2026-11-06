@@ -22,5 +22,7 @@ describe('App', () => {
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('h1')?.textContent).toContain('Where are you heading?');
+    expect(compiled.querySelector('label[for="base-id"]')?.textContent).toContain('Airtable base ID');
+    expect(compiled.querySelector('label[for="record-id"]')?.textContent).toContain('Booking record ID');
   });
 });

@@ -77,13 +77,13 @@ export class TripsService {
     const graph = recordGraph(allRelated);
     const itinerary = allRelated.elements.map((record, index) => mapElement(record, tripId, index, graph, hideSupplierInfo)).filter((item) => item.status.toLowerCase() !== 'cancelled');
     const travellers = mapTravellers(allRelated.customers, allRelated.people);
-    const documents = mapDocuments(allRelated.elements, itinerary, tripId);
+    const documents = mapDocuments(allRelated.elements, itinerary, tripId, stage, accessScope);
     const payments = accessScope === 'primary_customer'
       ? mapPayments(booking, allRelated.payments, stage, tripId)
       : undefined;
 
     return {
-      schemaVersion: 1,
+      schemaVersion: 2,
       tripId,
       version,
       serverTime: now.toISOString(),
@@ -112,6 +112,30 @@ export class TripsService {
         departureDate: departure,
         returnDate: returns,
         heroImageUrl: firstAttachmentUrl(bookingValue('hero')),
+      },
+      experience: {
+        overview: safeText(bookingValue('overview')) || null,
+        personalisedMessage: bookingValue('includeMessage') === undefined || truthy(bookingValue('includeMessage'))
+          ? safeText(bookingValue('personalMessage')) || null
+          : null,
+        agentName: safeText(bookingValue('agent')) || null,
+      },
+      support: {
+        companyName: firstString(brandValue('name')) || 'Your travel company',
+        phone: safePhone(brandValue('phone')),
+        email: safeEmail(brandValue('email')),
+        websiteUrl: safeWebUrl(brandValue('website')),
+        emergencyPhone: safePhone(bookingValue('emergencyPhone')) ?? safePhone(brandValue('emergencyPhone')),
+        outOfHoursUrl: safeWebUrl(bookingValue('outOfHoursLink')) ?? safeWebUrl(brandValue('outOfHoursLink')),
+        outOfHoursEmail: safeEmail(bookingValue('outOfHoursEmail')) ?? safeEmail(brandValue('outOfHoursEmail')),
+      },
+      protection: mapProtection(bookingValue, itinerary),
+      bookingStatus: {
+        sourceStatus: status,
+        cancellationDate: dateString(bookingValue('cancellationDate')),
+        cancellationReason: stage === 'cancelled' ? safeText(bookingValue('cancellationReason')) || null : null,
+        supplierTicketsReceived: truthy(bookingValue('supplierTickets')),
+        supplierConfirmationsReceived: truthy(bookingValue('supplierConfirmations')),
       },
       travellers,
       itinerary,
@@ -196,11 +220,12 @@ function mapElement(record: AirtableRecord, tripId: string, index: number, graph
   const ship = firstLinked(value('ship'), graph.ships);
   const cruiseName = safeText(value('cruiseName')) || recordText(ship, shipFields.name);
   const heading = cleanHeading(safeText(value('heading')));
+  const specificName = safeText(value('eventName')) || safeText(value('parkingName')) || safeText(value('miscName'));
   const title = kind === 'flight' && (from || to) ? `${from || 'Flight'} to ${to || 'destination'}`
     : kind === 'stay' && accommodation ? accommodation
     : kind === 'cruise' && cruiseName ? cruiseName
     : kind === 'transfer' && (from || to) ? `Transfer: ${from}${to ? ` to ${to}` : ''}`
-    : heading || typeLabel;
+    : heading || specificName || typeLabel;
   const supplierRecord = firstLinked(value('supplier'), graph.suppliers);
   const supplierName = recordText(supplierRecord, supplierFields.name);
   const supplierHidden = hideSupplierInfo || truthy(value('hideSupplier'));
@@ -257,10 +282,33 @@ function elementDetails(kind: ItineraryKind, value: (key: keyof typeof elementFi
     ? [['Class', 'flightClass'], ['Direction', 'direction']]
     : kind === 'stay' ? [['Rating', 'rating'], ['Nights', 'nights']]
     : kind === 'cruise' ? [['Voyage', 'voyageCode'], ['Onboard credit', 'onboardCredit']]
-    : kind === 'transfer' || kind === 'carhire' ? [['Vehicle', 'vehicleType'], ['Pick-up instructions', 'pickupInstructions'], ['Drop-off instructions', 'dropoffInstructions']]
+    : kind === 'transfer' ? [['Vehicle', 'vehicleType'], ['Pick-up instructions', 'pickupInstructions'], ['Drop-off instructions', 'dropoffInstructions']]
+    : kind === 'carhire' ? [['Vehicle', 'carType'], ['Make', 'carMake'], ['Model', 'carModel'], ['Registration', 'carRegistration'], ['Child seats', 'childSeats'], ['Pick-up instructions', 'pickupInstructions']]
+    : kind === 'parking' ? [['Parking code', 'parkingCode'], ['Registration', 'carRegistration'], ['Pick-up instructions', 'pickupInstructions']]
     : kind === 'train' ? [['Train', 'trainName'], ['Class', 'carriageClass'], ['Seats', 'seatNumbers']]
     : [];
   return candidates.map(([label, key]) => ({ label, value: safeText(value(key)) })).filter((detail) => detail.value);
+}
+
+function mapProtection(
+  bookingValue: (key: keyof typeof bookingFields) => unknown,
+  itinerary: ItineraryItem[],
+): TripSnapshot['protection'] {
+  const selection = safeText(bookingValue('atol'));
+  const atolNumber = safeText(bookingValue('atolNumber')) || null;
+  const licensing = safeText(bookingValue('licensing')) || null;
+  const normalized = `${selection} ${licensing ?? ''}`.toLowerCase();
+  const hasFlight = itinerary.some((item) => item.kind === 'flight');
+  if (/not applicable|accommodation only|airline ticket agent/.test(normalized)) {
+    return { scheme: 'not_applicable', atolNumber: null, licensing, summary: 'ATOL protection does not apply to this booking.' };
+  }
+  if (/non-air package/.test(normalized)) {
+    return { scheme: 'non_air_package', atolNumber: null, licensing, summary: 'This is a package without a flight; check your booking confirmation for its financial protection.' };
+  }
+  if (hasFlight && atolNumber) {
+    return { scheme: 'atol', atolNumber, licensing, summary: `This flight-inclusive booking records ATOL number ${atolNumber}. See your ATOL certificate for the protection details.` };
+  }
+  return { scheme: 'unknown', atolNumber, licensing, summary: 'See your booking confirmation for the financial protection that applies to this trip.' };
 }
 
 function mapPayments(booking: AirtableRecord, records: AirtableRecord[], stage: string, tripId: string) {
@@ -287,15 +335,19 @@ function mapPayments(booking: AirtableRecord, records: AirtableRecord[], stage: 
   return { currency, total: numberValue(pick(booking.fields, bookingFields.total)), paid: numberValue(pick(booking.fields, bookingFields.paid)), balance: numberValue(pick(booking.fields, bookingFields.balance)), items };
 }
 
-function mapDocuments(records: AirtableRecord[], itinerary: ItineraryItem[], tripId: string): TripDocument[] {
-  const documents: TripDocument[] = [{ id: `${tripId}:confirmation`, title: 'Booking confirmation', description: 'Full itinerary and important information', kind: 'confirmation', url: null, offlineAvailable: false }];
+function mapDocuments(records: AirtableRecord[], itinerary: ItineraryItem[], tripId: string, stage: string, accessScope: AccessScope): TripDocument[] {
+  const isQuote = stage === 'quote' || stage === 'quote_expired';
+  const documents: TripDocument[] = [{ id: `${tripId}:confirmation`, title: isQuote ? 'Trip quotation' : 'Booking confirmation', description: 'Full itinerary and important information', kind: 'confirmation', url: null, offlineAvailable: false, status: 'pending' }];
+  if (accessScope === 'primary_customer' && !isQuote) {
+    documents.push({ id: `${tripId}:invoice`, title: 'Booking invoice', description: 'Your booking costs and payment history', kind: 'invoice', url: null, offlineAvailable: false, status: 'pending' });
+  }
   records.forEach((record, index) => {
     const attachments = pick(record.fields, elementFields.docs);
     if (!Array.isArray(attachments)) return;
     attachments.forEach((attachment, attachmentIndex) => {
       const file = attachment as { url?: unknown; filename?: unknown };
       if (typeof file.url !== 'string' || !file.url.startsWith('https://')) return;
-      documents.push({ id: publicChildId(tripId, `${record.id}:${attachmentIndex}`, 'doc'), title: safeText(file.filename) || 'Travel document', description: itinerary[index]?.title ?? 'Trip document', kind: 'supplier', url: file.url, offlineAvailable: false });
+      documents.push({ id: publicChildId(tripId, `${record.id}:${attachmentIndex}`, 'doc'), title: safeText(file.filename) || 'Travel document', description: itinerary[index]?.title ?? 'Trip document', kind: 'supplier', url: file.url, offlineAvailable: false, status: 'ready' });
     });
   });
   return documents;
@@ -351,6 +403,28 @@ function attachmentImages(value: unknown): Array<{ url: string; alt: string }> {
 function safeUrl(value: unknown): string | null {
   const url = safeText(value);
   return /^https:\/\//i.test(url) ? url : null;
+}
+
+function safeWebUrl(value: unknown): string | null {
+  const raw = safeText(value);
+  if (!raw) return null;
+  const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  try {
+    const url = new URL(candidate);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function safeEmail(value: unknown): string | null {
+  const email = safeText(value).toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
+}
+
+function safePhone(value: unknown): string | null {
+  const phone = safeText(value).replace(/[^0-9+() .-]/g, '').slice(0, 40);
+  return /\d{5}/.test(phone.replace(/\D/g, '')) ? phone : null;
 }
 
 function emergencyContact(nameValue: unknown, phoneValue: unknown): { name: string; phone: string } | null {

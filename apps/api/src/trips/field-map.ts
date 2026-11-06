@@ -8,6 +8,11 @@ export const bookingFields = {
   departure: ['Departure Date', 'Departure Date (All)', 'Start Date', 'Departing'],
   return: ['Return Date', 'Return Date (All)', 'End Date', 'Returning'],
   quoteExpiry: ['Quotation Expiry'],
+  overview: ['Trip Overview'], personalMessage: ['Personalised Message', 'Personalized Message'], includeMessage: ['Include Personalised Message'], agent: ['SinGS Agent Name', 'Created by', 'Created By'],
+  cancellationDate: ['Cancellation Date'], cancellationReason: ['Cancellation Reason'],
+  atol: ['ATOL'], atolNumber: ['ATOL No.'], licensing: ['Licensing'],
+  emergencyPhone: ['Customer | Emergency Telephone'], outOfHoursLink: ['Out of Hours Link'], outOfHoursEmail: ['Out of Hours Email'],
+  supplierTickets: ['Supplier Tickets Received'], supplierConfirmations: ['Supplier Confirmations Received'],
   hero: ['Hero Image', 'Featured Image', 'Hero'],
   brand: ['Brands & Branches'],
   member: ['Members'],
@@ -33,6 +38,8 @@ export const brandFields = {
   logo: ['Transparent Logo', 'Logo'],
   tone: ['Member Tone'],
   theme: ['Theme'],
+  phone: ['Customer | Telephone', 'Telephone', 'Phone'], email: ['Customer | Email Address', 'Email'], website: ['Customer | Website', 'Website'],
+  emergencyPhone: ['Customer | Emergency Telephone'], outOfHoursLink: ['Out of Hours Link'], outOfHoursEmail: ['Out of Hours Email'],
 } as const;
 
 export const elementFields = {
@@ -52,6 +59,8 @@ export const elementFields = {
   vehicleType: ['Vehicle Type'], pickupInstructions: ['Pick Up Instructions', 'Pickup Instructions'], dropoffInstructions: ['Drop Off Instructions', 'Dropoff Instructions'],
   trainName: ['Train Name/Number'], carriageClass: ['Carriage Class(es)'], seatNumbers: ['Seat Number(s)'],
   onboardCredit: ['Onboard Credit'], onboardCreditCurrency: ['Onboard Credit Currency'],
+  eventName: ['Event Name'], miscName: ['Misc. Name', 'Misc Name'], parkingName: ['Car Parking Name'], parkingCode: ['Car Parking Code'],
+  carMake: ['Car Make'], carModel: ['Car Model'], carRegistration: ['Car Registration'], carType: ['Car Type'], childSeats: ['Child Seats'],
 } as const;
 
 export const supplierFields = { name: ['Name', 'Supplier Name(s)'], logo: ['Logo'], terms: ['Legal Notices URL'] } as const;

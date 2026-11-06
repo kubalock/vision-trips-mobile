@@ -14,6 +14,12 @@ export class VisionApiService {
     );
   }
 
+  exchangeLocalTrip(baseId: string, recordId: string): Promise<LinkExchangeResponse> {
+    return firstValueFrom(
+      this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges/local`, { baseId, recordId }),
+    );
+  }
+
   verifyPostcode(exchangeId: string, postcode: string): Promise<LinkExchangeResponse> {
     return firstValueFrom(
       this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges/${exchangeId}/verify/knowledge`, { postcode }),

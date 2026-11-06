@@ -27,6 +27,8 @@ export class AirtableService {
     } catch {
       throw new BadGatewayException('Airtable could not be reached.');
     }
+    if (response.status === 401) throw new ServiceUnavailableException('The Airtable token is invalid or expired.');
+    if (response.status === 403) throw new ServiceUnavailableException('The Airtable token does not have access to this base or table.');
     if (response.status === 404) throw new NotFoundException('Trip not found.');
     if (!response.ok) throw new BadGatewayException('Airtable returned an unexpected response.');
     return (await response.json()) as AirtableRecord;

@@ -19,6 +19,13 @@ describe('TripsService', () => {
           Tags: ['Ocean Cruise'],
           'Departure Date': '2027-03-01',
           'Return Date': '2027-03-12',
+          'Trip Overview': '<p>A hand-picked Mediterranean journey.</p>',
+          'Personalised Message': 'Welcome, Alex — I hope you love it.',
+          'SinGS Agent Name': 'Jamie Agent',
+          ATOL: 'Single-Contract Package',
+          'ATOL No.': ['1234'],
+          Licensing: 'Package (Principal)',
+          'Supplier Confirmations Received': true,
           'MS Outstanding': 3200,
           'Internal Notes': 'must never leave the API',
         },
@@ -28,6 +35,10 @@ describe('TripsService', () => {
         fields: {
           'Trading Name': 'Example Travel',
           'Primary Colour': '#155b75',
+          'Customer | Telephone': '020 7946 0123',
+          'Customer | Email Address': 'help@example.com',
+          'Customer | Website': 'example.com',
+          'Customer | Emergency Telephone': '07700 900123',
           'Mint | API Key': 'secret',
         },
       },
@@ -73,7 +84,12 @@ describe('TripsService', () => {
     expect(snapshot.itinerary[0]?.images[0]).toMatchObject({ url: 'https://files.example/flight.jpg' });
     expect(snapshot.travellers[0]).toMatchObject({ name: 'Alex Traveller', isLead: true });
     expect(snapshot.payments?.items[0]).toMatchObject({ amount: 1000, status: 'paid' });
-    expect(snapshot.documents[1]).toMatchObject({ title: 'Flight ticket.pdf', kind: 'supplier' });
+    expect(snapshot.documents.find((document) => document.kind === 'supplier')).toMatchObject({ title: 'Flight ticket.pdf', status: 'ready' });
+    expect(snapshot.schemaVersion).toBe(2);
+    expect(snapshot.experience).toMatchObject({ overview: 'A hand-picked Mediterranean journey.', agentName: 'Jamie Agent' });
+    expect(snapshot.support).toMatchObject({ phone: '020 7946 0123', email: 'help@example.com', emergencyPhone: '07700 900123' });
+    expect(snapshot.protection).toMatchObject({ scheme: 'atol', atolNumber: '1234' });
+    expect(snapshot.bookingStatus.supplierConfirmationsReceived).toBe(true);
     expect(JSON.stringify(snapshot)).not.toContain('recABCDEFGHIJKLMN');
     expect(JSON.stringify(snapshot)).not.toContain('Internal Notes');
     expect(JSON.stringify(snapshot)).not.toContain('secret');

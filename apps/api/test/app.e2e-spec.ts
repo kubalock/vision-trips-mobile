@@ -61,6 +61,27 @@ describe('AppController (e2e)', () => {
     fetchMock.mockRestore();
   });
 
+  it('/v1/link-exchanges/local rejects malformed Airtable ids', async () => {
+    await request(app.getHttpServer())
+      .post('/v1/link-exchanges/local')
+      .send({ baseId: 'not-a-base', recordId: 'not-a-record' })
+      .expect(400);
+  });
+
+  it('/v1/link-exchanges/local is unavailable in production', async () => {
+    const previous = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      await request(app.getHttpServer())
+        .post('/v1/link-exchanges/local')
+        .send({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN' })
+        .expect(404);
+    } finally {
+      if (previous === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previous;
+    }
+  });
+
   afterEach(async () => {
     await app.close();
   });
