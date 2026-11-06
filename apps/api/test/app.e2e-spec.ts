@@ -44,6 +44,7 @@ describe('AppController (e2e)', () => {
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(new Response(JSON.stringify(booking), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(booking), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify(brand), { status: 200 }));
     const token = mint({ v: 1, b: 'appABCDEFGHIJKLMN', r: 'recABCDEFGHIJKLMN', s: 'c', e: 0 });
 
@@ -56,7 +57,7 @@ describe('AppController (e2e)', () => {
     expect(response.body.snapshot.summary.name).toBe('Mediterranean Escape');
     expect(JSON.stringify(response.body)).not.toContain('recABCDEFGHIJKLMN');
     expect(JSON.stringify(response.body)).not.toContain('Internal Notes');
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     fetchMock.mockRestore();
   });
 

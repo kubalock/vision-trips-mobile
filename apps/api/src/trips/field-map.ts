@@ -11,6 +11,9 @@ export const bookingFields = {
   hero: ['Hero Image', 'Featured Image', 'Hero'],
   brand: ['Brands & Branches'],
   member: ['Members'],
+  customerPostcode: ['Customers | Postcode'],
+  customerEmail: ['Customers | Email'],
+  enable2fa: ['Enable 2FA'],
 } as const;
 
 export const brandFields = {

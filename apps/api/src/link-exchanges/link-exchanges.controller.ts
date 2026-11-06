@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Param, Post } from '@nestjs/common';
 import { ApiBody, ApiCreatedResponse, ApiTags } from '@nestjs/swagger';
 import type { LinkExchangeResponse } from '@vision-trips/contracts';
 import { LinkExchangesService } from './link-exchanges.service.js';
@@ -13,5 +13,13 @@ export class LinkExchangesController {
   @ApiCreatedResponse({ description: 'An authorized trip snapshot or a verification challenge.' })
   create(@Body() body: { linkOrCode?: unknown }): Promise<LinkExchangeResponse> {
     return this.exchanges.create(body?.linkOrCode);
+  }
+
+  @Post(':exchangeId/verify/knowledge')
+  verifyPostcode(
+    @Param('exchangeId') exchangeId: string,
+    @Body() body: { postcode?: unknown },
+  ): Promise<LinkExchangeResponse> {
+    return this.exchanges.verifyPostcode(exchangeId, body?.postcode);
   }
 }

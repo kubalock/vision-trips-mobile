@@ -82,6 +82,7 @@ export interface AuthorizedLinkExchange {
   exchangeId: string;
   expiresAt: string;
   snapshot: TripSnapshot;
+  session: MobileSession;
 }
 
 export interface VerificationRequiredLinkExchange {
@@ -90,3 +91,18 @@ export interface VerificationRequiredLinkExchange {
 }
 
 export type LinkExchangeResponse = AuthorizedLinkExchange | VerificationRequiredLinkExchange;
+
+export interface MobileSession {
+  accessToken: string;
+  accessExpiresAt: string;
+  refreshToken: string;
+  refreshExpiresAt: string;
+}
+
+export interface RefreshSessionRequest {
+  refreshToken: string;
+}
+
+export interface KnowledgeVerificationRequest {
+  postcode: string;
+}

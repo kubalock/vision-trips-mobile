@@ -17,6 +17,19 @@ export class TripsService {
     return this.mapSnapshot(baseId, booking, brand, accessScope);
   }
 
+  async verificationProfile(baseId: string, recordId: string): Promise<{
+    postcode: string;
+    email: string;
+    forceOtp: boolean;
+  }> {
+    const booking = await this.airtable.record(baseId, 'Bookings', recordId);
+    return {
+      postcode: firstString(pick(booking.fields, bookingFields.customerPostcode)),
+      email: firstString(pick(booking.fields, bookingFields.customerEmail)),
+      forceOtp: Boolean(pick(booking.fields, bookingFields.enable2fa)),
+    };
+  }
+
   mapSnapshot(baseId: string, booking: AirtableRecord, brand: AirtableRecord, accessScope: AccessScope): TripSnapshot {
     const bookingValue = (key: keyof typeof bookingFields) => pick(booking.fields, bookingFields[key]);
     const brandValue = (key: keyof typeof brandFields) => pick(brand.fields, brandFields[key]);

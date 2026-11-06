@@ -21,11 +21,34 @@
             {{ currentTrip.summary.departureDate || 'Dates to be confirmed' }}
             @if (currentTrip.summary.returnDate) { — {{ currentTrip.summary.returnDate }} }
           </p>
+          <p class="mt-4 text-sm text-slate-500">
+            {{ storedSecurely() ? 'Saved securely on this device.' : 'Web preview: this trip has not been stored on this device.' }}
+          </p>
           <button type="button" class="mt-6 rounded-full border border-slate-300 px-5 py-3 font-semibold" (click)="trip.set(null)">
             Open another trip
           </button>
         </div>
       </article>
+    } @else if (challenge(); as currentChallenge) {
+      <div class="rounded-[2rem] bg-white p-7 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
+        <p class="mb-2 text-sm font-semibold uppercase tracking-widest text-teal-700">Verify your trip</p>
+        <h1 class="text-3xl font-semibold tracking-tight">Just a quick security check</h1>
+        <p class="mt-3 text-base leading-7 text-slate-600">Enter the postcode on the booking.</p>
+        @if (currentChallenge.methods.includes('postcode')) {
+          <form class="mt-7" (submit)="verifyPostcode($event)">
+            <label for="postcode" class="text-sm font-semibold">Booking postcode</label>
+            <input id="postcode" autocomplete="postal-code" [value]="postcode()" (input)="updatePostcode($event)"
+              class="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-4 uppercase outline-none focus:border-teal-700 focus:ring-4 focus:ring-teal-700/10" />
+            <button type="submit" [disabled]="submitting() || !postcode().trim()"
+              class="mt-4 w-full rounded-full bg-teal-700 px-5 py-4 font-semibold text-white disabled:opacity-40">
+              {{ submitting() ? 'Checking…' : 'Verify and save trip' }}
+            </button>
+          </form>
+        } @else {
+          <p class="mt-5 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">Email verification is required for this booking and will be enabled next.</p>
+        }
+        @if (error()) { <p class="mt-4 text-sm text-red-800" role="alert">{{ error() }}</p> }
+      </div>
     } @else {
       <div class="rounded-[2rem] bg-white p-7 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
         <p class="mb-2 text-sm font-semibold uppercase tracking-widest text-teal-700">Open your trip</p>

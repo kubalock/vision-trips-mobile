@@ -13,4 +13,10 @@ export class VisionApiService {
       this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges`, { linkOrCode }),
     );
   }
+
+  verifyPostcode(exchangeId: string, postcode: string): Promise<LinkExchangeResponse> {
+    return firstValueFrom(
+      this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges/${exchangeId}/verify/knowledge`, { postcode }),
+    );
+  }
 }
