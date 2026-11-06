@@ -36,6 +36,14 @@ export interface TripSummary {
   returnDate: string | null;
   heroImageUrl: string | null;
   gallery: ItineraryImage[];
+  durationDays: number | null;
+  countries: string[];
+  holidayTypes: string[];
+  travellerType: string | null;
+  sector: string | null;
+  totalTravellers: number;
+  groupBooking: boolean;
+  giftVoucher: boolean;
 }
 
 export interface TripCapabilities {
@@ -46,7 +54,7 @@ export interface TripCapabilities {
 }
 
 export interface TripSnapshot {
-  schemaVersion: 2;
+  schemaVersion: 3;
   tripId: string;
   version: string;
   serverTime: string;
@@ -61,6 +69,7 @@ export interface TripSnapshot {
     name: string;
     logoUrl: string | null;
     theme: ThemeTokens;
+    profile: BrandProfile;
   };
   summary: TripSummary;
   experience: TripExperience;
@@ -78,6 +87,17 @@ export interface TripSnapshot {
   payments?: PaymentSummary;
   documents: TripDocument[];
   capabilities: TripCapabilities;
+}
+
+export interface BrandProfile {
+  slogan: string | null;
+  about: string | null;
+  address: string | null;
+  openingHours: string | null;
+  socialLinks: Array<{ network: 'instagram' | 'facebook' | 'linkedin' | 'x'; url: string }>;
+  reviewLinks: Array<{ provider: 'trustpilot' | 'google'; url: string }>;
+  privacyUrl: string | null;
+  complaintsUrl: string | null;
 }
 
 export interface TripCommunication {
@@ -151,6 +171,11 @@ export interface TripProtection {
   atolNumber: string | null;
   licensing: string | null;
   summary: string;
+  mode: string;
+  contractType: 'package' | 'package_no_flight' | 'flight_only' | 'accommodation_only' | 'agent_services' | 'ticket_agent' | 'unknown';
+  holderName: string | null;
+  organiserName: string | null;
+  hasFlight: boolean;
 }
 
 export interface BookingStatus {
@@ -159,6 +184,13 @@ export interface BookingStatus {
   cancellationReason: string | null;
   supplierTicketsReceived: boolean;
   supplierConfirmationsReceived: boolean;
+  tasks: {
+    confirmation: boolean;
+    reconfirmed: boolean;
+    travelDocuments: boolean;
+    preDepartureCall: boolean;
+    followUp: boolean;
+  };
 }
 
 export type ItineraryKind = 'flight' | 'stay' | 'cruise' | 'transfer' | 'carhire' | 'parking' | 'train' | 'attraction' | 'misc';
@@ -169,6 +201,9 @@ export interface TravellerSummary {
   isLead: boolean;
   assistance: string[];
   meals: string[];
+  nationality: string | null;
+  passportExpiry: string | null;
+  insuranceStatus: string | null;
 }
 
 export interface ItineraryItem {
@@ -196,6 +231,15 @@ export interface ItineraryItem {
   cruisePorts: CruisePort[];
   emergencyContact: EmergencyContact | null;
   details: ItineraryDetail[];
+  fromCode: string | null;
+  toCode: string | null;
+  carrierCode: string | null;
+  carrierLogoUrl: string | null;
+  arrivesNextDay: boolean;
+  packageIncluded: boolean;
+  termsUrl: string | null;
+  confirmationReceived: boolean;
+  ticketsReceived: boolean;
 }
 
 export interface ItinerarySupplier {
@@ -275,6 +319,11 @@ export interface PaymentSummary {
   paid: number;
   balance: number;
   items: PaymentItem[];
+  totalIncludingResort: number | null;
+  nextDueAmount: number | null;
+  nextDueDate: string | null;
+  balanceDueDate: string | null;
+  alternativeCurrency: { currency: string; amount: number } | null;
 }
 
 export interface TripDocument {

@@ -19,6 +19,14 @@ describe('TripsService', () => {
           Tags: ['Ocean Cruise'],
           'Departure Date': '2027-03-01',
           'Return Date': '2027-03-12',
+          'Trip Duration': 11,
+          Countries: ['Portugal'],
+          'Holiday Type(s)': ['City Break'],
+          'Traveller Type': 'Couple',
+          Sector: 'Leisure',
+          'Total Passengers & Guests': 2,
+          'Group Booking': false,
+          'Gift Voucher': true,
           Destinations: ['recLOCATIONABCDEF'],
           Gallery: [{ url: 'https://files.example/trip-gallery.jpg', filename: 'Coastline' }],
           'Customer Communication': ['recCOMMUNICATIONA'],
@@ -29,6 +37,14 @@ describe('TripsService', () => {
           'ATOL No.': ['1234'],
           Licensing: 'Package (Principal)',
           'Supplier Confirmations Received': true,
+          'Travel Documents': true,
+          'Total Customer Cost including Resort Payments': 5200,
+          'Next Customer Payment Amount': 500,
+          'Next Customer Payment Due Date': '2027-01-10',
+          balanceDueDate: '2027-02-01',
+          'Alternative Currency': true,
+          'Alternative Currency Type': 'EUR',
+          'EUR Amount': 6000,
           'MS Outstanding': 3200,
           'Internal Notes': 'must never leave the API',
         },
@@ -55,6 +71,12 @@ describe('TripsService', () => {
             'Dep. Airport Name': 'London Heathrow',
             'Arr. Airport Name': 'Lisbon',
             'Flight No.': 'BA 500',
+            'Dep. IATA Code': 'LHR',
+            'Arr. IATA Code': 'LIS',
+            Package: true,
+            'Customers T&Cs': 'https://example.com/terms',
+            'Confirmation Received': true,
+            'Tickets Received': true,
             'Start Date': '2027-03-01',
             Carrier: ['recAIRLINEABCDEFG'],
             'Passengers & Guests': ['recPAXABCDEFGHIJK'],
@@ -71,7 +93,7 @@ describe('TripsService', () => {
         customers: [{ id: 'recCUSTOMERABCDEF', fields: { 'Full Name': 'Alex Traveller', 'First Name': 'Alex' } }],
         people: [],
         suppliers: [{ id: 'recSUPPLIERABCDEF', fields: { Name: 'Trusted Air', 'Legal Notices URL': 'https://example.com/terms' } }],
-        airlines: [{ id: 'recAIRLINEABCDEFG', fields: { Airline: 'British Airways' } }],
+        airlines: [{ id: 'recAIRLINEABCDEFG', fields: { Airline: 'British Airways', iata: 'BA', Logo: [{ url: 'https://files.example/ba.png' }] } }],
         passengers: [{ id: 'recPAXABCDEFGHIJK', fields: { Passenger: 'Alex Traveller', 'Seat Number': '12A', 'Checked Baggage Allowance': '23kg' } }],
         locations: [{ id: 'recLOCATIONABCDEF', fields: { Name: 'Lisbon', Country: 'Portugal', 'Destination Overview': '<p>Hilltop views and tiled streets.</p>', 'Key Attractions/Experiences': ['Tram 28', 'Belém'], Latitude: 38.72, Longitude: -9.14, 'Featured Image': [{ url: 'https://files.example/lisbon.jpg' }] } }],
         upsells: [{ id: 'recUPSELLABCDEFGH', fields: { Name: 'Private city tour', Description: '<p>A half-day private guide.</p>', 'Featured Image': [{ url: 'https://files.example/tour.jpg' }], Supplier: ['recSUPPLIERABCDEF'] } }],
@@ -91,11 +113,12 @@ describe('TripsService', () => {
     expect(snapshot.travellers[0]).toMatchObject({ name: 'Alex Traveller', isLead: true });
     expect(snapshot.payments?.items[0]).toMatchObject({ amount: 1000, status: 'paid' });
     expect(snapshot.documents.find((document) => document.kind === 'supplier')).toMatchObject({ title: 'Flight ticket.pdf', status: 'ready' });
-    expect(snapshot.schemaVersion).toBe(2);
+    expect(snapshot.schemaVersion).toBe(3);
     expect(snapshot.experience).toMatchObject({ overview: 'A hand-picked Mediterranean journey.', agentName: 'Jamie Agent' });
     expect(snapshot.support).toMatchObject({ phone: '020 7946 0123', email: 'help@example.com', emergencyPhone: '07700 900123' });
     expect(snapshot.protection).toMatchObject({ scheme: 'atol', atolNumber: '1234' });
     expect(snapshot.bookingStatus.supplierConfirmationsReceived).toBe(true);
+    expect(snapshot.bookingStatus.tasks.travelDocuments).toBe(true);
     expect(snapshot.quotation.status).toBe('not_applicable');
     expect(snapshot.timeline).toMatchObject({ nextItemTitle: 'London Heathrow to Lisbon', nextItemDate: '2027-03-01' });
     expect(snapshot.destinations[0]).toMatchObject({ name: 'Lisbon', country: 'Portugal', overview: 'Hilltop views and tiled streets.', coordinates: { latitude: 38.72, longitude: -9.14 } });
@@ -103,6 +126,9 @@ describe('TripsService', () => {
     expect(snapshot.extras[0]).toMatchObject({ name: 'Private city tour', description: 'A half-day private guide.', supplierName: 'Trusted Air' });
     expect(snapshot.communications[0]).toMatchObject({ type: 'Email', subject: 'Your documents are ready', content: 'Your travel documents are now available.' });
     expect(snapshot.integrations.destinationGuides).toBe('available');
+    expect(snapshot.summary).toMatchObject({ durationDays: 11, countries: ['Portugal'], holidayTypes: ['City Break'], totalTravellers: 2, giftVoucher: true });
+    expect(snapshot.itinerary[0]).toMatchObject({ fromCode: 'LHR', toCode: 'LIS', carrierCode: 'BA', packageIncluded: true, confirmationReceived: true, ticketsReceived: true });
+    expect(snapshot.payments).toMatchObject({ totalIncludingResort: 5200, nextDueAmount: 500, nextDueDate: '2027-01-10', balanceDueDate: '2027-02-01', alternativeCurrency: { currency: 'EUR', amount: 6000 } });
     expect(JSON.stringify(snapshot)).not.toContain('recABCDEFGHIJKLMN');
     expect(JSON.stringify(snapshot)).not.toContain('Internal Notes');
     expect(JSON.stringify(snapshot)).not.toContain('secret');

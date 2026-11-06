@@ -4,6 +4,7 @@ export const bookingFields = {
   status: ['Status'],
   tags: ['Tags'],
   holidayTypes: ['Holiday Type(s)'],
+  travellerType: ['Traveller Type'], duration: ['Trip Duration'], countries: ['Countries'],
   destinations: ['Destinations'],
   sector: ['Sector'],
   departure: ['Departure Date', 'Departure Date (All)', 'Start Date', 'Departing'],
@@ -12,8 +13,11 @@ export const bookingFields = {
   overview: ['Trip Overview'], personalMessage: ['Personalised Message', 'Personalized Message'], includeMessage: ['Include Personalised Message'], agent: ['SinGS Agent Name', 'Created by', 'Created By'],
   cancellationDate: ['Cancellation Date'], cancellationReason: ['Cancellation Reason'],
   atol: ['ATOL'], atolNumber: ['ATOL No.'], licensing: ['Licensing'],
+  leadSupplier: ['leadSupplier'], useGlobalAtol: ['Use Global ATOL'], memberProposition: ['Member | Proposition'], memberCompany: ['Members | Company Name'],
   emergencyPhone: ['Customer | Emergency Telephone'], outOfHoursLink: ['Out of Hours Link'], outOfHoursEmail: ['Out of Hours Email'],
   supplierTickets: ['Supplier Tickets Received'], supplierConfirmations: ['Supplier Confirmations Received'],
+  taskConfirmation: ['Booking Confirmation'], taskReconfirmed: ['Booking Reconfirmed'], taskDocuments: ['Travel Documents'], taskPredeparture: ['Pre-Departure Call'], taskFollowup: ['Post-Travel Follow-Up'],
+  group: ['Group Booking'], giftVoucher: ['Gift Voucher'], totalTravellers: ['Total Passengers & Guests', 'Total Passengers'],
   hero: ['Hero Image', 'Featured Image', 'Hero'],
   gallery: ['Gallery', 'Accommodation Gallery', 'Cruise Ship Gallery'],
   brand: ['Brands & Branches'],
@@ -31,6 +35,8 @@ export const bookingFields = {
   paid: ['MS Paid', 'Customer Payments Completed'],
   balance: ['MS Outstanding', 'MS Outstanding ', 'Booking Balance'],
   currency: ['Currency'],
+  totalIncludingResort: ['Total Customer Cost including Resort Payments'], nextDueAmount: ['Next Customer Payment Amount'], nextDueDate: ['Next Customer Payment Due Date'], balanceDueDate: ['balanceDueDate'],
+  alternativeCurrency: ['Alternative Currency'], alternativeCurrencyType: ['Alternative Currency Type'], usdAmount: ['USD Amount'], eurAmount: ['EUR Amount'],
 } as const;
 
 export const brandFields = {
@@ -42,6 +48,9 @@ export const brandFields = {
   logo: ['Transparent Logo', 'Logo'],
   tone: ['Member Tone'],
   theme: ['Theme'],
+  company: ['Company Name'], proposition: ['Proposition'], trustNumber: ['Trust Account | Account Number'],
+  slogan: ['Slogan'], about: ['About & Bio'], physicalAddress: ['Physical Address'], address1: ['Shop | Address Line 1', 'Address Line 1'], address2: ['Address Line 2'], town: ['Shop | Town/City', 'Town/City'], postcode: ['Shop | Post Code', 'Post Code'], country: ['Shop | Country', 'Country'], hours: ['Opening Hours'],
+  instagram: ['Social Media: Instagram'], facebook: ['Social Media: Facebook'], linkedin: ['Social Media: LinkedIn'], x: ['Social Media: X/Twitter'], trustpilot: ['Trustpilot Reviews URL'], googleReviews: ['Google Reviews URL'], privacy: ['Privacy Policy'], complaints: ['Complaints'],
   phone: ['Customer | Telephone', 'Telephone', 'Phone'], email: ['Customer | Email Address', 'Email'], website: ['Customer | Website', 'Website'],
   emergencyPhone: ['Customer | Emergency Telephone'], outOfHoursLink: ['Out of Hours Link'], outOfHoursEmail: ['Out of Hours Email'],
 } as const;
@@ -65,6 +74,8 @@ export const elementFields = {
   onboardCredit: ['Onboard Credit'], onboardCreditCurrency: ['Onboard Credit Currency'],
   eventName: ['Event Name'], miscName: ['Misc. Name', 'Misc Name'], parkingName: ['Car Parking Name'], parkingCode: ['Car Parking Code'],
   carMake: ['Car Make'], carModel: ['Car Model'], carRegistration: ['Car Registration'], carType: ['Car Type'], childSeats: ['Child Seats'],
+  fromCode: ['Dep. IATA Code'], toCode: ['Arr. IATA Code'], iata: ['IATA', 'IATA Code'], package: ['Package'], termsUrl: ['Customers T&Cs'],
+  confirmationReceived: ['Confirmation Received'], ticketsReceived: ['Tickets Received'],
 } as const;
 
 export const supplierFields = { name: ['Name', 'Supplier Name(s)'], logo: ['Logo'], terms: ['Legal Notices URL'] } as const;
@@ -92,9 +103,11 @@ export const paymentFields = {
 
 export const personFields = {
   name: ['Full Name', 'Name'], first: ['First Name', 'Preferred Name'], last: ['Last Name'], ssr: ['Special Service Request'], meal: ['Meal Request'],
+  nationality: ['Nationality'], passportExpiry: ['Expiry Date'], insurance: ['Travel Insurance'],
 } as const;
 
 export const customerFields = { name: ['Full Name', 'Name'], first: ['First Name'], last: ['Last Name'] } as const;
+export const memberFields = { company: ['Company Name'], proposition: ['Proposition'], tAtolEnabled: ['T-ATOL Enabled'], tAtolNumber: ['T-ATOL Number'], number: ['Members | Number', 'Member Number'] } as const;
 
 export function pick(fields: Record<string, unknown>, candidates: readonly string[]): unknown {
   for (const name of candidates) {
