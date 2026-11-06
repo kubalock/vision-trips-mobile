@@ -135,6 +135,20 @@ describe('TripsService', () => {
     expect(JSON.stringify(snapshot)).not.toContain('Net');
   });
 
+  it('builds the five legal review sections for a quotation', () => {
+    const service = new TripsService({} as never);
+    const snapshot = service.mapSnapshot(
+      'appABCDEFGHIJKLMN',
+      { id: 'recABCDEFGHIJKLMN', fields: { Status: 'Quotation', 'Trip Name': 'Lisbon', 'Booking Reference': 'VT-2' } },
+      { id: '', fields: { 'Trading Name': 'Example Travel' } },
+      'primary_customer',
+      { elements: [{ id: 'recELEMENTABCDEFG', fields: { Type: 'Accommodation', Name: 'City Hotel', 'Customers T&Cs': 'https://example.com/terms' } }] },
+    );
+
+    expect(snapshot.quotation.reviewSections.map((section) => section.id)).toEqual(['package', 'names', 'important', 'protection', 'terms']);
+    expect(snapshot.quotation.reviewSections.find((section) => section.id === 'terms')?.links).toContainEqual({ label: 'Accommodation terms', url: 'https://example.com/terms' });
+  });
+
   it('removes financial capabilities from fellow-traveller snapshots', () => {
     const service = new TripsService({} as never);
     const snapshot = service.mapSnapshot(

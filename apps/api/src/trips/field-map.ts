@@ -11,6 +11,7 @@ export const bookingFields = {
   return: ['Return Date', 'Return Date (All)', 'End Date', 'Returning'],
   quoteExpiry: ['Quotation Expiry'],
   quotationAccepted: ['Quotation Accepted'],
+  quotationAcceptedAt: ['Quotation Accepted At'], quotationAcceptedBy: ['Quotation Accepted By'], quotationAcceptanceEvidence: ['Quotation Acceptance Evidence'],
   overview: ['Trip Overview'], personalMessage: ['Personalised Message', 'Personalized Message'], includeMessage: ['Include Personalised Message'], agent: ['SinGS Agent Name', 'Created by', 'Created By'],
   cancellationDate: ['Cancellation Date'], cancellationReason: ['Cancellation Reason'],
   atol: ['ATOL'], atolNumber: ['ATOL No.'], licensing: ['Licensing'],

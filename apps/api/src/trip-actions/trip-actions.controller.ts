@@ -6,13 +6,20 @@ import { AirtableService } from '../airtable/airtable.service.js';
 import { SessionsService } from '../sessions/sessions.service.js';
 import { TripsService } from '../trips/trips.service.js';
 import { LinkTokenService } from '../security/link-token.service.js';
+import { AcceptanceNotificationsService } from './acceptance-notifications.service.js';
 
 @ApiTags('trip actions')
 @Controller('trips/current')
 export class TripActionsController {
   private readonly logger = new Logger(TripActionsController.name);
 
-  constructor(private readonly sessions: SessionsService, private readonly trips: TripsService, private readonly airtable: AirtableService, private readonly linkTokens: LinkTokenService) {}
+  constructor(
+    private readonly sessions: SessionsService,
+    private readonly trips: TripsService,
+    private readonly airtable: AirtableService,
+    private readonly linkTokens: LinkTokenService,
+    private readonly notifications: AcceptanceNotificationsService,
+  ) {}
 
   @Get()
   @ApiBearerAuth()
@@ -100,18 +107,26 @@ export class TripActionsController {
     }
     const acceptedAt = new Date().toISOString();
     const table = process.env.AIRTABLE_BOOKINGS_TABLE?.trim() || 'Bookings';
+    const evidence = JSON.stringify({
+      acceptedAt, name, email, ip: request.ip || 'unknown', userAgent: request.get('user-agent') || 'unknown',
+      snapshotVersion: snapshot.version, confirmations, reference: snapshot.summary.reference,
+    });
     await this.airtable.updateRecord(principal.baseId, table, principal.recordId, {
       [process.env.AIRTABLE_ACCEPTED_FIELD?.trim() || 'Quotation Accepted']: true,
       [process.env.AIRTABLE_ACCEPTED_AT_FIELD?.trim() || 'Quotation Accepted At']: acceptedAt,
       [process.env.AIRTABLE_ACCEPTED_BY_FIELD?.trim() || 'Quotation Accepted By']: `${name} <${email}>`,
       [process.env.AIRTABLE_ACCEPTED_IP_FIELD?.trim() || 'Quotation Accepted IP']: request.ip || 'unknown',
+      [process.env.AIRTABLE_ACCEPTANCE_EVIDENCE_FIELD?.trim() || 'Quotation Acceptance Evidence']: evidence,
     });
     try {
-      await this.airtable.addComment(principal.baseId, table, principal.recordId, `Quotation accepted online by ${name} <${email}> at ${acceptedAt}. Booking status was not changed.`);
+      await this.airtable.addComment(principal.baseId, table, principal.recordId, `Quotation accepted online by ${name} <${email}> at ${acceptedAt}. Reviewed: ${confirmations.join(', ')}. Snapshot: ${snapshot.version}. Booking status was not changed.`);
     } catch (error) {
       this.logger.warn(`Acceptance was saved but its Airtable comment failed: ${error instanceof Error ? error.message : 'unknown error'}`);
     }
-    return { accepted: true, acceptedAt };
+    const notifications = await this.notifications.send(snapshot, { name, email }, acceptedAt);
+    const deposit = snapshot.payments?.items.find((payment) => payment.canPay && payment.actionUrl && /deposit/i.test(payment.label))
+      ?? snapshot.payments?.items.find((payment) => payment.canPay && payment.actionUrl);
+    return { accepted: true, acceptedAt, receiptAvailable: true, paymentUrl: deposit?.actionUrl ?? null, notifications };
   }
 
   @Get('calendar.ics')
@@ -138,16 +153,40 @@ export class TripActionsController {
     @Headers('authorization') authorization: string | undefined,
     @Param('kind') kind: string,
   ): Promise<StreamableFile> {
-    if (kind !== 'confirmation' && kind !== 'invoice') throw new BadRequestException('Unknown document type.');
+    if (kind !== 'confirmation' && kind !== 'invoice' && kind !== 'acceptance') throw new BadRequestException('Unknown document type.');
     const principal = this.sessions.validateAccess(authorization);
-    if (kind === 'invoice' && principal.fellowTraveller) throw new ForbiddenException('Invoices are only available to the lead customer.');
+    if ((kind === 'invoice' || kind === 'acceptance') && principal.fellowTraveller) throw new ForbiddenException('This document is only available to the lead customer.');
     const snapshot = await this.trips.snapshot(principal.baseId, principal.recordId, principal.fellowTraveller ? 'fellow_traveller' : 'primary_customer');
-    const html = buildDocument(snapshot, kind);
+    let html: string;
+    if (kind === 'acceptance') {
+      const booking = await this.airtable.record(principal.baseId, process.env.AIRTABLE_BOOKINGS_TABLE?.trim() || 'Bookings', principal.recordId);
+      const evidenceField = process.env.AIRTABLE_ACCEPTANCE_EVIDENCE_FIELD?.trim() || 'Quotation Acceptance Evidence';
+      const evidence = parseAcceptanceEvidence(booking.fields[evidenceField]);
+      if (!evidence) throw new ConflictException('No quotation acceptance receipt is available.');
+      html = buildAcceptanceReceipt(snapshot, evidence);
+    } else {
+      html = buildDocument(snapshot, kind);
+    }
     return new StreamableFile(Buffer.from(html), {
       type: 'text/html; charset=utf-8',
       disposition: `attachment; filename="${safeFilename(snapshot.summary.reference)}-${kind}.html"`,
     });
   }
+}
+
+interface AcceptanceEvidence { acceptedAt: string; name: string; email: string; ip: string; userAgent: string; snapshotVersion: string; confirmations: string[]; reference: string }
+
+function parseAcceptanceEvidence(value: unknown): AcceptanceEvidence | null {
+  if (typeof value !== 'string') return null;
+  try {
+    const parsed = JSON.parse(value) as Partial<AcceptanceEvidence>;
+    return typeof parsed.acceptedAt === 'string' && typeof parsed.name === 'string' && typeof parsed.email === 'string' && Array.isArray(parsed.confirmations) ? parsed as AcceptanceEvidence : null;
+  } catch { return null; }
+}
+
+export function buildAcceptanceReceipt(snapshot: Awaited<ReturnType<TripsService['snapshot']>>, evidence: AcceptanceEvidence): string {
+  const reviewed = snapshot.quotation.reviewSections.filter((section) => evidence.confirmations.includes(section.id));
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Quotation acceptance receipt</title><style>body{font:16px/1.5 system-ui,sans-serif;color:#172033;max-width:760px;margin:40px auto;padding:0 24px}header{border-bottom:2px solid #0f766e;padding-bottom:20px}h1{margin-bottom:4px}section{border-bottom:1px solid #ddd;padding:14px 0}dt{color:#64748b}dd{font-weight:600;margin:0 0 10px}@media print{body{margin:0}}</style></head><body><header><p>${escapeHtml(snapshot.brand.name)}</p><h1>Quotation acceptance receipt</h1><p>${escapeHtml(snapshot.summary.reference)} · ${escapeHtml(snapshot.summary.name)}</p></header><dl><dt>Accepted by</dt><dd>${escapeHtml(evidence.name)} · ${escapeHtml(evidence.email)}</dd><dt>Accepted at</dt><dd>${escapeHtml(evidence.acceptedAt)}</dd><dt>Quotation version</dt><dd>${escapeHtml(evidence.snapshotVersion)}</dd></dl><h2>Reviewed sections</h2>${reviewed.map((section) => `<section><strong>${escapeHtml(section.title)}</strong><p>${escapeHtml(section.introduction)}</p></section>`).join('')}<p>This receipt records online acceptance. It does not by itself confirm supplier availability or change the booking status.</p></body></html>`;
 }
 
 export function buildDocument(snapshot: Awaited<ReturnType<TripsService['snapshot']>>, kind: 'confirmation' | 'invoice'): string {

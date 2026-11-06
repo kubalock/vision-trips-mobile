@@ -22,7 +22,7 @@ This matrix compares the standalone API snapshot with the customer-facing PHP do
 | Documents | Supplier files, generated confirmation/quotation and invoice | Implemented |
 | Agent-only documents | Letters, front file and net-cost reports | Excluded from customer snapshot |
 | Communications and upsells | Sent customer messages and customer-safe extras | Implemented |
-| Quote acceptance write-back | Readiness only | Workflow pending explicit Airtable field mapping |
+| Quote acceptance write-back | Five-section forced review, explicit evidence, receipt, notifications and deposit handoff | Implemented |
 | Analytics, audit logs and raw Airtable data | None | Excluded |
 
 The snapshot is an allowlisted mobile contract, not a serialization of PHP `$raw` arrays.

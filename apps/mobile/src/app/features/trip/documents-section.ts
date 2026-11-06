@@ -26,5 +26,5 @@ import type { TripDocument } from '@vision-trips/contracts';
 })
 export class DocumentsSection {
   readonly documents = input.required<TripDocument[]>();
-  readonly download = output<'confirmation' | 'invoice'>();
+  readonly download = output<'confirmation' | 'invoice' | 'acceptance'>();
 }

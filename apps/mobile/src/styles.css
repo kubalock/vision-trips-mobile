@@ -49,6 +49,8 @@ button { font: inherit; }
 .vt-app .ring-slate-200 { --tw-ring-color: var(--line); }
 .vt-app :is(h1, h2, h3, h4) { font-family: var(--vt-display); letter-spacing: var(--vt-track); }
 .vt-app input[type="checkbox"] { accent-color: var(--vt-accent); }
+.vt-app .vt-read__confirm { position: sticky; bottom: 0; display: flex; align-items: flex-start; gap: 10px; margin-top: 14px; padding: 12px; border-radius: var(--r-s); background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: var(--shadow-s); }
+.vt-app .vt-read__confirm input { flex: 0 0 auto; width: 20px; height: 20px; min-height: 0; margin-top: 1px; }
 .vt-app .vt-el__row { grid-template-columns: 1fr; }
 .vt-app .vt-el__main > .vt-chip { justify-self: start; margin-top: 6px; }
 .vt-app .vt-el__main > :is(dl, details, div, a) { max-width: 100%; }

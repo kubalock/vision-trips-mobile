@@ -37,7 +37,9 @@ export class App implements OnInit, OnDestroy {
   protected readonly acceptanceName = signal('');
   protected readonly acceptanceEmail = signal('');
   protected readonly acceptanceConfirmations = signal<string[]>([]);
+  protected readonly acceptanceSectionsOpened = signal<string[]>([]);
   protected readonly acceptanceComplete = signal(false);
+  protected readonly acceptanceNotice = signal('');
   protected readonly messageTopic = signal<CustomerMessageTopic>('itinerary');
   protected readonly customerMessage = signal('');
   protected readonly messageSent = signal(false);
@@ -123,6 +125,24 @@ export class App implements OnInit, OnDestroy {
     this.acceptanceConfirmations.update((items) => checked ? [...items, confirmation] : items.filter((item) => item !== confirmation));
   }
 
+  protected markAcceptanceSectionOpened(sectionId: string, event: Event): void {
+    const details = event.target as HTMLDetailsElement;
+    if (!details.open) return;
+    requestAnimationFrame(() => {
+      const body = details.querySelector<HTMLElement>('.vt-read__body');
+      if (body && body.scrollHeight <= body.clientHeight + 2) this.markAcceptanceSectionRead(sectionId);
+    });
+  }
+
+  protected checkAcceptanceSectionScroll(sectionId: string, event: Event): void {
+    const body = event.target as HTMLElement;
+    if (body.scrollTop + body.clientHeight >= body.scrollHeight - 4) this.markAcceptanceSectionRead(sectionId);
+  }
+
+  private markAcceptanceSectionRead(sectionId: string): void {
+    this.acceptanceSectionsOpened.update((items) => items.includes(sectionId) ? items : [...items, sectionId]);
+  }
+
   protected async acceptQuotation(event: Event): Promise<void> {
     event.preventDefault();
     const currentSession = this.session();
@@ -131,19 +151,26 @@ export class App implements OnInit, OnDestroy {
     this.submitting.set(true);
     this.error.set('');
     try {
-      await this.api.acceptQuotation({
+      const result = await this.api.acceptQuotation({
         name: this.acceptanceName().trim(),
         email: this.acceptanceEmail().trim(),
         agreed: true,
         confirmations: this.acceptanceConfirmations(),
       }, currentSession.accessToken);
       this.acceptanceComplete.set(true);
+      this.acceptanceNotice.set(result.notifications.customer === 'sent' ? 'A confirmation email has been sent to you.' : result.notifications.customer === 'local_preview' ? 'Email delivery is in local preview mode.' : 'Your acceptance was recorded, but the confirmation email could not be sent.');
       this.trip.update((trip) => trip ? {
         ...trip,
         quotation: { ...trip.quotation, canAccept: false },
         capabilities: { ...trip.capabilities, acceptQuotation: false },
       } : trip);
       await this.refreshTripAfterWrite();
+      if (result.paymentUrl) {
+        this.paymentPaidBefore = currentTrip.payments?.paid ?? 0;
+        this.paymentAwaitingReturn = true;
+        this.paymentOpenedAt = Date.now();
+        window.open(result.paymentUrl, '_blank', 'noopener,noreferrer');
+      }
     } catch (error) {
       this.error.set(this.apiError(error, 'We could not record your acceptance. Please try again or contact your travel agent.'));
     } finally {
@@ -363,6 +390,8 @@ export class App implements OnInit, OnDestroy {
     this.activeView.set('home');
     this.acceptanceComplete.set(false);
     this.acceptanceConfirmations.set([]);
+    this.acceptanceSectionsOpened.set([]);
+    this.acceptanceNotice.set('');
     this.customerMessage.set('');
     this.messageSent.set(false);
     this.paymentAwaitingReturn = false;
@@ -389,7 +418,7 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  protected async downloadDocument(kind: 'confirmation' | 'invoice'): Promise<void> {
+  protected async downloadDocument(kind: 'confirmation' | 'invoice' | 'acceptance'): Promise<void> {
     const session = this.session();
     const trip = this.trip();
     if (!session || !trip) return;

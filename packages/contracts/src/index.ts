@@ -127,6 +127,17 @@ export interface QuotationState {
   expiresAt: string | null;
   canAccept: boolean;
   requiredConfirmations: string[];
+  reviewSections: QuotationReviewSection[];
+}
+
+export type QuotationReviewSectionId = 'package' | 'names' | 'important' | 'protection' | 'terms';
+
+export interface QuotationReviewSection {
+  id: QuotationReviewSectionId;
+  title: string;
+  introduction: string;
+  items: string[];
+  links: Array<{ label: string; url: string }>;
 }
 
 export interface QuotationAcceptanceRequest {
@@ -139,6 +150,9 @@ export interface QuotationAcceptanceRequest {
 export interface QuotationAcceptanceResponse {
   accepted: true;
   acceptedAt: string;
+  receiptAvailable: true;
+  paymentUrl: string | null;
+  notifications: { customer: 'sent' | 'local_preview' | 'failed'; agent: 'sent' | 'local_preview' | 'failed' | 'not_configured' };
 }
 
 export type CustomerMessageTopic = 'itinerary' | 'payment' | 'documents' | 'accessibility' | 'other';
@@ -370,7 +384,7 @@ export interface TripDocument {
   url: string | null;
   offlineAvailable: boolean;
   status: 'ready' | 'pending' | 'unavailable';
-  downloadAction: 'confirmation' | 'invoice' | null;
+  downloadAction: 'confirmation' | 'invoice' | 'acceptance' | null;
 }
 
 export interface LinkExchangeRequest {

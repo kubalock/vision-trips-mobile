@@ -85,12 +85,25 @@ export class TripsService {
     const itinerary = allRelated.elements.map((record, index) => mapElement(record, tripId, index, graph, hideSupplierInfo)).filter((item) => item.status.toLowerCase() !== 'cancelled');
     const travellers = mapTravellers(allRelated.customers, allRelated.people, accessScope);
     const documents = mapDocuments(allRelated.elements, itinerary, tripId, stage, accessScope);
+    if (quotationAccepted && accessScope === 'primary_customer') {
+      documents.push({ id: `${tripId}:acceptance`, title: 'Quotation acceptance receipt', description: 'Evidence of your online acceptance', kind: 'confirmation', url: null, offlineAvailable: false, status: 'ready', downloadAction: 'acceptance' });
+    }
     const payments = accessScope === 'primary_customer'
       ? mapPayments(booking, allRelated.payments, stage, tripId)
       : undefined;
     const destinations = mapDestinations(allRelated.locations, tripId);
     const extras = mapExtras(allRelated.upsells, graph.suppliers, tripId, hideSupplierInfo);
     const communications = mapCommunications(allRelated.communications, tripId, accessScope);
+    const brandName = firstString(brandValue('name')) || 'Your travel company';
+    const protection = mapProtection(bookingValue, itinerary, brand, allRelated.members[0], graph.suppliers);
+    const summary = {
+      reference: firstString(bookingValue('reference')) || 'Your trip', name: firstString(bookingValue('name')) || 'Your trip',
+      departureDate: departure, returnDate: returns, heroImageUrl: firstAttachmentUrl(bookingValue('hero')), gallery: attachmentImages(bookingValue('gallery')),
+      durationDays: tripDuration(bookingValue('duration'), departure, returns), countries: strings(bookingValue('countries')).map(safeText).filter(Boolean),
+      holidayTypes: strings(bookingValue('holidayTypes')).map(safeText).filter(Boolean), travellerType: safeText(bookingValue('travellerType')) || null,
+      sector: safeText(bookingValue('sector')) || null, totalTravellers: Math.max(numberValue(bookingValue('totalTravellers')), travellers.length),
+      groupBooking: truthy(bookingValue('group')), giftVoucher: truthy(bookingValue('giftVoucher')),
+    };
 
     return {
       schemaVersion: 3,
@@ -105,7 +118,7 @@ export class TripsService {
         nextRefreshAfter: new Date(now.getTime() + 5 * 60_000).toISOString(),
       },
       brand: {
-        name: firstString(brandValue('name')) || 'Your travel company',
+        name: brandName,
         logoUrl: firstAttachmentUrl(brandValue('logo')),
         theme: themeTokens({
           tags,
@@ -117,22 +130,7 @@ export class TripsService {
         }),
         profile: mapBrandProfile(brandValue),
       },
-      summary: {
-        reference: firstString(bookingValue('reference')) || 'Your trip',
-        name: firstString(bookingValue('name')) || 'Your trip',
-        departureDate: departure,
-        returnDate: returns,
-        heroImageUrl: firstAttachmentUrl(bookingValue('hero')),
-        gallery: attachmentImages(bookingValue('gallery')),
-        durationDays: tripDuration(bookingValue('duration'), departure, returns),
-        countries: strings(bookingValue('countries')).map(safeText).filter(Boolean),
-        holidayTypes: strings(bookingValue('holidayTypes')).map(safeText).filter(Boolean),
-        travellerType: safeText(bookingValue('travellerType')) || null,
-        sector: safeText(bookingValue('sector')) || null,
-        totalTravellers: Math.max(numberValue(bookingValue('totalTravellers')), travellers.length),
-        groupBooking: truthy(bookingValue('group')),
-        giftVoucher: truthy(bookingValue('giftVoucher')),
-      },
+      summary,
       experience: {
         overview: safeText(bookingValue('overview')) || null,
         personalisedMessage: bookingValue('includeMessage') === undefined || truthy(bookingValue('includeMessage'))
@@ -141,7 +139,7 @@ export class TripsService {
         agentName: safeText(bookingValue('agent')) || null,
       },
       support: {
-        companyName: firstString(brandValue('name')) || 'Your travel company',
+        companyName: brandName,
         phone: safePhone(brandValue('phone')),
         email: safeEmail(brandValue('email')),
         websiteUrl: safeWebUrl(brandValue('website')),
@@ -149,7 +147,7 @@ export class TripsService {
         outOfHoursUrl: safeWebUrl(bookingValue('outOfHoursLink')) ?? safeWebUrl(brandValue('outOfHoursLink')),
         outOfHoursEmail: safeEmail(bookingValue('outOfHoursEmail')) ?? safeEmail(brandValue('outOfHoursEmail')),
       },
-      protection: mapProtection(bookingValue, itinerary, brand, allRelated.members[0], graph.suppliers),
+      protection,
       bookingStatus: {
         sourceStatus: status,
         cancellationDate: dateString(bookingValue('cancellationDate')),
@@ -168,7 +166,8 @@ export class TripsService {
         status: stage === 'quote' ? 'available' : stage === 'quote_expired' ? 'expired' : 'not_applicable',
         expiresAt: quoteExpiry,
         canAccept: accessScope === 'primary_customer' && stage === 'quote' && !quotationAccepted,
-        requiredConfirmations: stage === 'quote' ? ['package details', 'traveller names', 'important information', 'financial protection', 'terms and conditions'] : [],
+        requiredConfirmations: stage === 'quote' ? ['package', 'names', 'important', 'protection', 'terms'] : [],
+        reviewSections: stage === 'quote' ? mapQuotationReview(summary, travellers, itinerary, payments, protection, brandName) : [],
       },
       timeline: mapTimeline(itinerary, departure, now),
       destinations,
@@ -536,6 +535,53 @@ function mapPayments(booking: AirtableRecord, records: AirtableRecord[], stage: 
       ? { currency: alternativeType, amount: alternativeAmount }
       : null,
   };
+}
+
+function mapQuotationReview(
+  summary: TripSnapshot['summary'],
+  travellers: TravellerSummary[],
+  itinerary: ItineraryItem[],
+  payments: TripSnapshot['payments'],
+  protection: TripSnapshot['protection'],
+  brandName: string,
+): TripSnapshot['quotation']['reviewSections'] {
+  const money = (amount: number, currency: string) => new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(amount);
+  const terms = new Map<string, string>();
+  for (const item of itinerary) {
+    if (item.termsUrl) terms.set(`${item.typeLabel} terms`, item.termsUrl);
+    if (item.supplier?.termsUrl) terms.set(`${item.supplier.name} terms`, item.supplier.termsUrl);
+  }
+  const packageNotice = ['package', 'package_no_flight'].includes(protection.contractType)
+    ? `The combination of travel services is a package under the Package Travel and Linked Travel Arrangements Regulations 2018. ${protection.organiserName || brandName} is responsible for proper performance of the package.`
+    : `The travel services may be arranged under separate contracts. ${brandName} acts in the capacity described in your quotation and each provider remains responsible for its service.`;
+  return [
+    {
+      id: 'package', title: 'What you are booking', introduction: 'Check the dates, itinerary, total price and payment schedule before accepting.',
+      items: [
+        `${summary.name} · ${summary.departureDate || 'Dates to be confirmed'}${summary.returnDate ? ` to ${summary.returnDate}` : ''}`,
+        ...itinerary.map((item) => `${item.typeLabel}: ${item.title}${item.startDate ? ` · ${item.startDate}` : ''}`),
+        ...(payments ? [`Total price: ${money(payments.total, payments.currency)}`, ...payments.items.filter((item) => item.status === 'outstanding' || item.status === 'overdue').map((item) => `${item.label}: ${money(item.amount, item.currency)}${item.dueDate ? ` due ${item.dueDate}` : ''}`)] : []),
+      ], links: [],
+    },
+    {
+      id: 'names', title: 'Traveller names', introduction: 'Names must match the travel documents that will be used for the trip.',
+      items: travellers.length ? travellers.map((traveller) => `${traveller.name}${traveller.isLead ? ' · lead traveller' : ''}`) : ['Traveller names are shown on the quotation supplied by your travel agent.'], links: [],
+    },
+    {
+      id: 'important', title: 'Important information', introduction: 'Travel bookings for specific dates do not have a general 14-day cooling-off period.',
+      items: ['Cancellation charges apply as set out in the booking conditions and usually increase closer to departure.', 'Check passport, visa and health requirements for every traveller.', 'Comprehensive travel insurance is strongly recommended from the time of booking.', 'Tell your travel agent about assistance needs, dietary requirements or other special requests before accepting.'], links: [],
+    },
+    {
+      id: 'protection', title: 'Who you are booking with and financial protection', introduction: packageNotice,
+      items: [protection.summary, `Organiser: ${protection.organiserName || brandName}`, ...(protection.holderName ? [`Protection holder: ${protection.holderName}`] : []), ...(protection.atolNumber ? [`ATOL number: ${protection.atolNumber}`] : [])],
+      links: [{ label: 'Package Travel Regulations 2018', url: protection.contractType === 'package' || protection.contractType === 'package_no_flight' ? 'https://www.legislation.gov.uk/uksi/2018/634/schedule/1' : 'https://www.legislation.gov.uk/uksi/2018/634/schedule/2' }],
+    },
+    {
+      id: 'terms', title: 'Terms and conditions', introduction: 'Open the applicable booking conditions and make sure you understand them before accepting.',
+      items: terms.size ? ['The links below form part of your quotation and acceptance.'] : ['No separate online terms links were supplied. Contact your travel agent if you need a copy before accepting.'],
+      links: [...terms].map(([label, url]) => ({ label, url })),
+    },
+  ];
 }
 
 function mapDocuments(records: AirtableRecord[], itinerary: ItineraryItem[], tripId: string, stage: string, accessScope: AccessScope): TripDocument[] {
