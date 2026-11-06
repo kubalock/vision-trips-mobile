@@ -71,11 +71,27 @@ export interface TripSnapshot {
   timeline: TripTimeline;
   destinations: DestinationGuide[];
   extras: TripExtra[];
+  communications: TripCommunication[];
+  integrations: TripIntegrations;
   travellers: TravellerSummary[];
   itinerary: ItineraryItem[];
   payments?: PaymentSummary;
   documents: TripDocument[];
   capabilities: TripCapabilities;
+}
+
+export interface TripCommunication {
+  id: string;
+  type: string;
+  subject: string;
+  content: string | null;
+  sentAt: string | null;
+}
+
+export interface TripIntegrations {
+  liveFlightStatus: 'available' | 'not_configured' | 'not_applicable';
+  weather: 'available' | 'not_configured' | 'not_applicable';
+  destinationGuides: 'available' | 'not_available';
 }
 
 export interface TripExtra {
@@ -269,6 +285,7 @@ export interface TripDocument {
   url: string | null;
   offlineAvailable: boolean;
   status: 'ready' | 'pending' | 'unavailable';
+  downloadAction: 'confirmation' | 'invoice' | null;
 }
 
 export interface LinkExchangeRequest {

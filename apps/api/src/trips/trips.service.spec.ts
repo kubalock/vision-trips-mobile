@@ -21,6 +21,7 @@ describe('TripsService', () => {
           'Return Date': '2027-03-12',
           Destinations: ['recLOCATIONABCDEF'],
           Gallery: [{ url: 'https://files.example/trip-gallery.jpg', filename: 'Coastline' }],
+          'Customer Communication': ['recCOMMUNICATIONA'],
           'Trip Overview': '<p>A hand-picked Mediterranean journey.</p>',
           'Personalised Message': 'Welcome, Alex — I hope you love it.',
           'SinGS Agent Name': 'Jamie Agent',
@@ -74,6 +75,7 @@ describe('TripsService', () => {
         passengers: [{ id: 'recPAXABCDEFGHIJK', fields: { Passenger: 'Alex Traveller', 'Seat Number': '12A', 'Checked Baggage Allowance': '23kg' } }],
         locations: [{ id: 'recLOCATIONABCDEF', fields: { Name: 'Lisbon', Country: 'Portugal', 'Destination Overview': '<p>Hilltop views and tiled streets.</p>', 'Key Attractions/Experiences': ['Tram 28', 'Belém'], Latitude: 38.72, Longitude: -9.14, 'Featured Image': [{ url: 'https://files.example/lisbon.jpg' }] } }],
         upsells: [{ id: 'recUPSELLABCDEFGH', fields: { Name: 'Private city tour', Description: '<p>A half-day private guide.</p>', 'Featured Image': [{ url: 'https://files.example/tour.jpg' }], Supplier: ['recSUPPLIERABCDEF'] } }],
+        communications: [{ id: 'recCOMMUNICATIONA', fields: { Type: ['Email'], Subject: 'Your documents are ready', 'Email Template': '<p>Your travel documents are now available.</p>', Sent: true, Date: '2026-11-05T10:00:00Z' } }],
       },
     );
 
@@ -99,6 +101,8 @@ describe('TripsService', () => {
     expect(snapshot.destinations[0]).toMatchObject({ name: 'Lisbon', country: 'Portugal', overview: 'Hilltop views and tiled streets.', coordinates: { latitude: 38.72, longitude: -9.14 } });
     expect(snapshot.summary.gallery[0]).toMatchObject({ url: 'https://files.example/trip-gallery.jpg', alt: 'Coastline' });
     expect(snapshot.extras[0]).toMatchObject({ name: 'Private city tour', description: 'A half-day private guide.', supplierName: 'Trusted Air' });
+    expect(snapshot.communications[0]).toMatchObject({ type: 'Email', subject: 'Your documents are ready', content: 'Your travel documents are now available.' });
+    expect(snapshot.integrations.destinationGuides).toBe('available');
     expect(JSON.stringify(snapshot)).not.toContain('recABCDEFGHIJKLMN');
     expect(JSON.stringify(snapshot)).not.toContain('Internal Notes');
     expect(JSON.stringify(snapshot)).not.toContain('secret');

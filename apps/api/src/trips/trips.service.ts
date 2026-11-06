@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { AccessScope, CabinDetail, CruisePort, ItineraryItem, ItineraryKind, PassengerAllocation, PaymentItem, RoomDetail, TravellerSummary, TripDocument, TripSnapshot } from '@vision-trips/contracts';
 import { createHmac } from 'node:crypto';
 import { AirtableService, type AirtableRecord } from '../airtable/airtable.service.js';
-import { airlineFields, airportFields, bookingFields, brandFields, cabinFields, cruisePortFields, customerFields, elementFields, firstAttachmentUrl, firstString, locationFields, numberValue, passengerFields, paymentFields, personFields, pick, roomFields, shipFields, strings, supplierFields, truthy, upsellFields } from './field-map.js';
+import { airlineFields, airportFields, bookingFields, brandFields, cabinFields, communicationFields, cruisePortFields, customerFields, elementFields, firstAttachmentUrl, firstString, locationFields, numberValue, passengerFields, paymentFields, personFields, pick, roomFields, shipFields, strings, supplierFields, truthy, upsellFields } from './field-map.js';
 import { resolveStage } from './stage.js';
 import { themeTokens } from './theme.js';
 
@@ -13,13 +13,14 @@ export class TripsService {
   async snapshot(baseId: string, recordId: string, accessScope: AccessScope): Promise<TripSnapshot> {
     const booking = await this.airtable.record(baseId, 'Bookings', recordId);
     const brandId = strings(pick(booking.fields, bookingFields.brand))[0];
-    const [brand, elements, payments, people, customers, upsells] = await Promise.all([
+    const [brand, elements, payments, people, customers, upsells, communications] = await Promise.all([
       brandId ? this.airtable.record(baseId, 'Brands & Branches', brandId) : Promise.resolve(emptyRecord()),
       this.airtable.records(baseId, 'Bookings [Elements]', strings(pick(booking.fields, bookingFields.elements))),
       this.airtable.records(baseId, 'Bookings [Payments]', strings(pick(booking.fields, bookingFields.payments))),
       this.airtable.records(baseId, 'Customers [People]', strings(pick(booking.fields, bookingFields.people))),
       this.airtable.records(baseId, 'Customers', strings(pick(booking.fields, bookingFields.customers))),
       this.airtable.records(baseId, 'Bookings [Upsells]', strings(pick(booking.fields, bookingFields.upsells))),
+      this.airtable.records(baseId, 'Bookings [Customer Communication]', strings(pick(booking.fields, bookingFields.communications)).slice(-40)),
     ]);
     const ids = linkedRecordIds(elements);
     ids.suppliers.push(...upsells.flatMap((record) => recordIds(pick(record.fields, upsellFields.supplier))));
@@ -39,7 +40,7 @@ export class TripsService {
     const portLocationIds = cruisePorts.flatMap((record) => recordIds(pick(record.fields, cruisePortFields.port)));
     const portLocations = await this.airtable.records(baseId, 'CMS [Locations]', portLocationIds);
     return this.mapSnapshot(baseId, booking, brand, accessScope, {
-      elements, payments, people, customers, upsells, suppliers, airports, airlines, rooms, cabins, passengers, ships,
+      elements, payments, people, customers, upsells, communications, suppliers, airports, airlines, rooms, cabins, passengers, ships,
       cruisePorts, locations: [...locations, ...portLocations], operators,
     });
   }
@@ -86,6 +87,7 @@ export class TripsService {
       : undefined;
     const destinations = mapDestinations(allRelated.locations, tripId);
     const extras = mapExtras(allRelated.upsells, graph.suppliers, tripId, hideSupplierInfo);
+    const communications = mapCommunications(allRelated.communications, tripId, accessScope);
 
     return {
       schemaVersion: 2,
@@ -152,6 +154,12 @@ export class TripsService {
       timeline: mapTimeline(itinerary, departure, now),
       destinations,
       extras,
+      communications,
+      integrations: {
+        liveFlightStatus: itinerary.some((item) => item.kind === 'flight') ? (process.env.FLIGHT_API_KEY ? 'available' : 'not_configured') : 'not_applicable',
+        weather: destinations.some((destination) => destination.coordinates) ? (process.env.WEATHER_API_KEY ? 'available' : 'not_configured') : 'not_applicable',
+        destinationGuides: destinations.length ? 'available' : 'not_available',
+      },
       travellers,
       itinerary,
       ...(payments ? { payments } : {}),
@@ -221,6 +229,23 @@ function mapExtras(records: AirtableRecord[], suppliers: Map<string, AirtableRec
   });
 }
 
+function mapCommunications(records: AirtableRecord[], tripId: string, accessScope: AccessScope): TripSnapshot['communications'] {
+  if (accessScope !== 'primary_customer') return [];
+  return records.flatMap((record, index) => {
+    const sent = truthy(pick(record.fields, communicationFields.sent)) || /success|sent|complete/i.test(safeText(pick(record.fields, communicationFields.status)));
+    if (!sent || truthy(pick(record.fields, communicationFields.selfOnly))) return [];
+    const subject = safeText(pick(record.fields, communicationFields.subject));
+    if (!subject) return [];
+    return [{
+      id: publicChildId(tripId, record.id || String(index), 'com'),
+      type: safeText(pick(record.fields, communicationFields.type)) || 'Update',
+      subject,
+      content: safeText(pick(record.fields, communicationFields.content)) || null,
+      sentAt: dateTimeString(pick(record.fields, communicationFields.date)),
+    }];
+  }).sort((a, b) => (b.sentAt ?? '').localeCompare(a.sentAt ?? '')).slice(0, 20);
+}
+
 function mapTravellers(customers: AirtableRecord[], people: AirtableRecord[]): TravellerSummary[] {
   const rows: TravellerSummary[] = [];
   const lead = customers[0];
@@ -245,6 +270,7 @@ interface RelatedRecords {
   people: AirtableRecord[];
   customers: AirtableRecord[];
   upsells: AirtableRecord[];
+  communications: AirtableRecord[];
   suppliers: AirtableRecord[];
   airports: AirtableRecord[];
   airlines: AirtableRecord[];
@@ -257,10 +283,10 @@ interface RelatedRecords {
   operators: AirtableRecord[];
 }
 
-type RecordGraph = { [K in Exclude<keyof RelatedRecords, 'elements' | 'payments' | 'people' | 'customers' | 'upsells'>]: Map<string, AirtableRecord> };
+type RecordGraph = { [K in Exclude<keyof RelatedRecords, 'elements' | 'payments' | 'people' | 'customers' | 'upsells' | 'communications'>]: Map<string, AirtableRecord> };
 
 function emptyRelated(): RelatedRecords {
-  return { elements: [], payments: [], people: [], customers: [], upsells: [], suppliers: [], airports: [], airlines: [], rooms: [], cabins: [], passengers: [], ships: [], cruisePorts: [], locations: [], operators: [] };
+  return { elements: [], payments: [], people: [], customers: [], upsells: [], communications: [], suppliers: [], airports: [], airlines: [], rooms: [], cabins: [], passengers: [], ships: [], cruisePorts: [], locations: [], operators: [] };
 }
 
 function recordGraph(related: RelatedRecords): RecordGraph {
@@ -410,9 +436,9 @@ function mapPayments(booking: AirtableRecord, records: AirtableRecord[], stage: 
 
 function mapDocuments(records: AirtableRecord[], itinerary: ItineraryItem[], tripId: string, stage: string, accessScope: AccessScope): TripDocument[] {
   const isQuote = stage === 'quote' || stage === 'quote_expired';
-  const documents: TripDocument[] = [{ id: `${tripId}:confirmation`, title: isQuote ? 'Trip quotation' : 'Booking confirmation', description: 'Full itinerary and important information', kind: 'confirmation', url: null, offlineAvailable: false, status: 'pending' }];
+  const documents: TripDocument[] = [{ id: `${tripId}:confirmation`, title: isQuote ? 'Trip quotation' : 'Booking confirmation', description: 'Full itinerary and important information', kind: 'confirmation', url: null, offlineAvailable: false, status: 'ready', downloadAction: 'confirmation' }];
   if (accessScope === 'primary_customer' && !isQuote) {
-    documents.push({ id: `${tripId}:invoice`, title: 'Booking invoice', description: 'Your booking costs and payment history', kind: 'invoice', url: null, offlineAvailable: false, status: 'pending' });
+    documents.push({ id: `${tripId}:invoice`, title: 'Booking invoice', description: 'Your booking costs and payment history', kind: 'invoice', url: null, offlineAvailable: false, status: 'ready', downloadAction: 'invoice' });
   }
   records.forEach((record, index) => {
     const attachments = pick(record.fields, elementFields.docs);
@@ -420,7 +446,7 @@ function mapDocuments(records: AirtableRecord[], itinerary: ItineraryItem[], tri
     attachments.forEach((attachment, attachmentIndex) => {
       const file = attachment as { url?: unknown; filename?: unknown };
       if (typeof file.url !== 'string' || !file.url.startsWith('https://')) return;
-      documents.push({ id: publicChildId(tripId, `${record.id}:${attachmentIndex}`, 'doc'), title: safeText(file.filename) || 'Travel document', description: itinerary[index]?.title ?? 'Trip document', kind: 'supplier', url: file.url, offlineAvailable: false, status: 'ready' });
+      documents.push({ id: publicChildId(tripId, `${record.id}:${attachmentIndex}`, 'doc'), title: safeText(file.filename) || 'Travel document', description: itinerary[index]?.title ?? 'Trip document', kind: 'supplier', url: file.url, offlineAvailable: false, status: 'ready', downloadAction: null });
     });
   });
   return documents;

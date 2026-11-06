@@ -5,13 +5,14 @@ import { VisionApiService } from './core/api/vision-api.service';
 import { SavedTripsStore } from './core/storage/saved-trips.store';
 import { DocumentsSection } from './features/trip/documents-section';
 import { DestinationsSection } from './features/trip/destinations-section';
+import { CommunicationsSection } from './features/trip/communications-section';
 import { ItinerarySection } from './features/trip/itinerary-section';
 import { ExtrasSection } from './features/trip/extras-section';
 import { PaymentsSection } from './features/trip/payments-section';
 
 @Component({
   selector: 'app-root',
-  imports: [DestinationsSection, DocumentsSection, ExtrasSection, ItinerarySection, PaymentsSection],
+  imports: [CommunicationsSection, DestinationsSection, DocumentsSection, ExtrasSection, ItinerarySection, PaymentsSection],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -100,6 +101,28 @@ export class App {
     } catch (error) {
       this.error.set(this.apiError(error, 'We could not create the calendar file. Please try again.'));
     }
+  }
+
+  protected async downloadDocument(kind: 'confirmation' | 'invoice'): Promise<void> {
+    const session = this.session();
+    const trip = this.trip();
+    if (!session || !trip) return;
+    this.error.set('');
+    try {
+      const blob = await this.api.downloadDocument(kind, session.accessToken);
+      this.downloadBlob(blob, `${trip.summary.reference.replace(/[^A-Za-z0-9_-]+/g, '-')}-${kind}.html`);
+    } catch (error) {
+      this.error.set(this.apiError(error, 'We could not create that document. Please try again.'));
+    }
+  }
+
+  private downloadBlob(blob: Blob, filename: string): void {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
   }
 
   private apiError(error: unknown, fallback: string): string {

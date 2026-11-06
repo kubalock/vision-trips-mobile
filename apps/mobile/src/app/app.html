@@ -65,8 +65,9 @@
       <app-itinerary-section [items]="currentTrip.itinerary" />
       <app-destinations-section [destinations]="currentTrip.destinations" />
       <app-extras-section [extras]="currentTrip.extras" />
+      <app-communications-section [communications]="currentTrip.communications" />
       @if (currentTrip.payments; as payments) { <app-payments-section [payments]="payments" /> }
-      <app-documents-section [documents]="currentTrip.documents" />
+      <app-documents-section [documents]="currentTrip.documents" (download)="downloadDocument($event)" />
       <section class="mt-8 rounded-2xl bg-white p-6 ring-1 ring-slate-200" aria-labelledby="support-title">
         <h2 id="support-title" class="text-2xl font-semibold tracking-tight">Help and protection</h2>
         <p class="mt-3 text-sm leading-6 text-slate-600">{{ currentTrip.protection.summary }}</p>

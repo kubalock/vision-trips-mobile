@@ -1,4 +1,4 @@
-import { Controller, Get, Headers, StreamableFile } from '@nestjs/common';
+import { BadRequestException, Controller, ForbiddenException, Get, Headers, Param, StreamableFile } from '@nestjs/common';
 import { ApiBearerAuth, ApiProduces, ApiTags } from '@nestjs/swagger';
 import { SessionsService } from '../sessions/sessions.service.js';
 import { TripsService } from '../trips/trips.service.js';
@@ -24,6 +24,32 @@ export class TripActionsController {
       disposition: `attachment; filename="${safeFilename(snapshot.summary.reference)}-itinerary.ics"`,
     });
   }
+
+  @Get('documents/:kind.html')
+  @ApiBearerAuth()
+  @ApiProduces('text/html')
+  async document(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('kind') kind: string,
+  ): Promise<StreamableFile> {
+    if (kind !== 'confirmation' && kind !== 'invoice') throw new BadRequestException('Unknown document type.');
+    const principal = this.sessions.validateAccess(authorization);
+    if (kind === 'invoice' && principal.fellowTraveller) throw new ForbiddenException('Invoices are only available to the lead customer.');
+    const snapshot = await this.trips.snapshot(principal.baseId, principal.recordId, principal.fellowTraveller ? 'fellow_traveller' : 'primary_customer');
+    const html = buildDocument(snapshot, kind);
+    return new StreamableFile(Buffer.from(html), {
+      type: 'text/html; charset=utf-8',
+      disposition: `attachment; filename="${safeFilename(snapshot.summary.reference)}-${kind}.html"`,
+    });
+  }
+}
+
+export function buildDocument(snapshot: Awaited<ReturnType<TripsService['snapshot']>>, kind: 'confirmation' | 'invoice'): string {
+  const money = (amount: number, currency: string) => new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(amount);
+  const body = kind === 'invoice' && snapshot.payments
+    ? `<h2>Payment summary</h2><dl><dt>Total</dt><dd>${escapeHtml(money(snapshot.payments.total, snapshot.payments.currency))}</dd><dt>Paid</dt><dd>${escapeHtml(money(snapshot.payments.paid, snapshot.payments.currency))}</dd><dt>Balance</dt><dd>${escapeHtml(money(snapshot.payments.balance, snapshot.payments.currency))}</dd></dl>`
+    : `<h2>Itinerary</h2>${snapshot.itinerary.map((item) => `<section><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml([item.startDate, item.startTime, item.from && item.to ? `${item.from} to ${item.to}` : ''].filter(Boolean).join(' · '))}</p></section>`).join('')}`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escapeHtml(snapshot.summary.name)}</title><style>body{font:16px/1.5 system-ui,sans-serif;color:#172033;max-width:760px;margin:40px auto;padding:0 24px}header{border-bottom:2px solid #0f766e;padding-bottom:20px}h1{margin-bottom:4px}h2{margin-top:32px}section{break-inside:avoid;border-bottom:1px solid #ddd;padding:10px 0}dl{display:grid;grid-template-columns:1fr auto;gap:10px}dd{font-weight:700}@media print{body{margin:0}}</style></head><body><header><p>${escapeHtml(snapshot.brand.name)}</p><h1>${escapeHtml(kind === 'invoice' ? 'Booking invoice' : snapshot.stage === 'quote' ? 'Trip quotation' : 'Booking confirmation')}</h1><p>${escapeHtml(snapshot.summary.reference)} · ${escapeHtml(snapshot.summary.name)}</p></header>${body}<h2>Financial protection</h2><p>${escapeHtml(snapshot.protection.summary)}</p><p>Generated ${escapeHtml(snapshot.serverTime.slice(0, 10))}</p></body></html>`;
 }
 
 export function buildCalendar(snapshot: Awaited<ReturnType<TripsService['snapshot']>>): string {
@@ -62,6 +88,10 @@ function addDays(date: string, days: number): string {
 
 function escapeIcs(value: string): string {
   return value.replaceAll('\\', '\\\\').replaceAll('\n', '\\n').replaceAll(',', '\\,').replaceAll(';', '\\;');
+}
+
+function escapeHtml(value: string): string {
+  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
 }
 
 function safeFilename(value: string): string {

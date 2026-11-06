@@ -88,6 +88,12 @@ describe('AppController (e2e)', () => {
       .expect(401);
   });
 
+  it('/v1/trips/current/documents/confirmation.html requires an access session', async () => {
+    await request(app.getHttpServer())
+      .get('/v1/trips/current/documents/confirmation.html')
+      .expect(401);
+  });
+
   afterEach(async () => {
     await app.close();
   });

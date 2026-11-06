@@ -1,4 +1,4 @@
-import { buildCalendar } from './trip-actions.controller.js';
+import { buildCalendar, buildDocument } from './trip-actions.controller.js';
 
 describe('calendar export', () => {
   it('creates an iCalendar event without exposing Airtable ids', () => {
@@ -14,5 +14,16 @@ describe('calendar export', () => {
     expect(calendar).toContain('SUMMARY:London to Lisbon');
     expect(calendar).toContain('DTSTART:20270301T103000');
     expect(calendar).not.toContain('recABCDEFGHIJKLMN');
+  });
+});
+
+describe('generated documents', () => {
+  it('escapes customer content in printable confirmation HTML', () => {
+    const html = buildDocument({
+      summary: { name: '<script>alert(1)</script>', reference: 'VT-1' }, brand: { name: 'Example Travel' }, stage: 'confirmed',
+      itinerary: [], protection: { summary: 'See confirmation.' }, serverTime: '2026-11-06T10:00:00Z',
+    } as never, 'confirmation');
+    expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(html).not.toContain('<script>alert(1)</script>');
   });
 });
