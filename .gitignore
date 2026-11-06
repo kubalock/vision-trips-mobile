@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+.angular/
+.env
+.env.*
+!.env.example
+apps/mobile/android/
+apps/mobile/ios/
+*.log
+*.tsbuildinfo
+.DS_Store

@@ -1,0 +1,22 @@
+{
+  "name": "vision-trips-platform",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "start:api": "npm run start:dev --workspace @vision-trips/api",
+    "start:mobile": "npm run start --workspace @vision-trips/mobile"
+  },
+  "engines": {
+    "node": ">=22.22.2"
+  },
+  "overrides": {
+    "multer": "^2.5.0"
+  }
+}
