@@ -8,39 +8,62 @@
       </div>
     </div>
 
-    <div class="rounded-[2rem] bg-white p-7 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
-      <p class="mb-2 text-sm font-semibold uppercase tracking-widest text-teal-700">Open your trip</p>
-      <h1 class="text-3xl font-semibold tracking-tight">Where are you heading?</h1>
-      <p class="mt-3 text-base leading-7 text-slate-600">
-        Paste the itinerary link from your travel agent or enter your trip code.
-      </p>
+    @if (trip(); as currentTrip) {
+      <article class="overflow-hidden rounded-[2rem] bg-white shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
+        @if (currentTrip.summary.heroImageUrl) {
+          <img class="h-52 w-full object-cover" [src]="currentTrip.summary.heroImageUrl" alt="" />
+        }
+        <div class="p-7">
+          <p class="text-sm font-semibold uppercase tracking-widest text-teal-700">{{ currentTrip.stage }}</p>
+          <h1 class="mt-2 text-3xl font-semibold tracking-tight">{{ currentTrip.summary.name }}</h1>
+          <p class="mt-3 text-slate-600">{{ currentTrip.summary.reference }}</p>
+          <p class="mt-1 text-slate-600">
+            {{ currentTrip.summary.departureDate || 'Dates to be confirmed' }}
+            @if (currentTrip.summary.returnDate) { — {{ currentTrip.summary.returnDate }} }
+          </p>
+          <button type="button" class="mt-6 rounded-full border border-slate-300 px-5 py-3 font-semibold" (click)="trip.set(null)">
+            Open another trip
+          </button>
+        </div>
+      </article>
+    } @else {
+      <div class="rounded-[2rem] bg-white p-7 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
+        <p class="mb-2 text-sm font-semibold uppercase tracking-widest text-teal-700">Open your trip</p>
+        <h1 class="text-3xl font-semibold tracking-tight">Where are you heading?</h1>
+        <p class="mt-3 text-base leading-7 text-slate-600">
+          Paste the itinerary link from your travel agent or enter your trip code.
+        </p>
 
-      <form class="mt-7" (submit)="openTrip($event)">
-        <label for="trip-code" class="text-sm font-semibold">Itinerary link or code</label>
-        <input
-          id="trip-code"
-          name="trip-code"
-          type="text"
-          autocomplete="off"
-          [value]="linkOrCode()"
-          (input)="updateLink($event)"
-          placeholder="Paste link or enter code"
-          class="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-4 text-base outline-none transition focus:border-teal-700 focus:ring-4 focus:ring-teal-700/10"
-        />
-        <button
-          type="submit"
-          [disabled]="!canContinue()"
-          class="mt-4 w-full rounded-full bg-teal-700 px-5 py-4 font-semibold text-white transition enabled:hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Continue securely
-        </button>
-      </form>
+        <form class="mt-7" (submit)="openTrip($event)">
+          <label for="trip-code" class="text-sm font-semibold">Itinerary link or code</label>
+          <input
+            id="trip-code"
+            name="trip-code"
+            type="text"
+            autocomplete="off"
+            [value]="linkOrCode()"
+            (input)="updateLink($event)"
+            placeholder="Paste link or enter code"
+            class="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-4 text-base outline-none transition focus:border-teal-700 focus:ring-4 focus:ring-teal-700/10"
+          />
+          <button
+            type="submit"
+            [disabled]="!canContinue()"
+            class="mt-4 w-full rounded-full bg-teal-700 px-5 py-4 font-semibold text-white transition enabled:hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {{ submitting() ? 'Opening your trip…' : 'Continue securely' }}
+          </button>
+        </form>
 
-      <p class="mt-5 text-center text-xs leading-5 text-slate-500">
-        Your booking details are verified before they are saved to this device.
-      </p>
-    </div>
+        @if (error()) {
+          <p class="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">{{ error() }}</p>
+        }
 
-    <p class="mt-8 text-center text-sm text-slate-500">Saved trips will appear here after verification.</p>
+        <p class="mt-5 text-center text-xs leading-5 text-slate-500">
+          Your booking details are verified before they are saved to this device.
+        </p>
+      </div>
+      <p class="mt-8 text-center text-sm text-slate-500">Saved trips will appear here after verification.</p>
+    }
   </section>
 </main>

@@ -76,3 +76,17 @@ export interface LinkExchangeChallenge {
   methods: Array<'postcode' | 'surname' | 'surname_dob' | 'otp'>;
   expiresAt: string;
 }
+
+export interface AuthorizedLinkExchange {
+  status: 'authorized';
+  exchangeId: string;
+  expiresAt: string;
+  snapshot: TripSnapshot;
+}
+
+export interface VerificationRequiredLinkExchange {
+  status: 'verification_required';
+  challenge: LinkExchangeChallenge;
+}
+
+export type LinkExchangeResponse = AuthorizedLinkExchange | VerificationRequiredLinkExchange;
