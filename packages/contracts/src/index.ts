@@ -66,11 +66,42 @@ export interface TripSnapshot {
   support: TripSupport;
   protection: TripProtection;
   bookingStatus: BookingStatus;
+  quotation: QuotationState;
+  timeline: TripTimeline;
+  destinations: DestinationGuide[];
   travellers: TravellerSummary[];
   itinerary: ItineraryItem[];
   payments?: PaymentSummary;
   documents: TripDocument[];
   capabilities: TripCapabilities;
+}
+
+export interface QuotationState {
+  status: 'available' | 'expired' | 'not_applicable';
+  expiresAt: string | null;
+  canAccept: boolean;
+  requiredConfirmations: string[];
+}
+
+export interface TripTimeline {
+  daysUntilDeparture: number | null;
+  nextItemId: string | null;
+  nextItemTitle: string | null;
+  nextItemDate: string | null;
+  nextItemTime: string | null;
+}
+
+export interface DestinationGuide {
+  id: string;
+  name: string;
+  country: string | null;
+  overview: string | null;
+  attractions: string[];
+  practicalInformation: string | null;
+  culturalInformation: string | null;
+  travelAdviceUrl: string | null;
+  imageUrl: string | null;
+  coordinates: { latitude: number; longitude: number } | null;
 }
 
 export interface TripExperience {
@@ -209,6 +240,7 @@ export interface PaymentItem {
   dueDate: string | null;
   completedDate: string | null;
   canPay: boolean;
+  actionUrl: string | null;
 }
 
 export interface PaymentSummary {

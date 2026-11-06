@@ -24,4 +24,11 @@ describe('SessionsService', () => {
     service.revoke(session.refreshToken);
     expect(() => service.refresh(session.refreshToken)).toThrow('expired');
   });
+
+  it('validates issued access tokens and rejects fabricated ones', () => {
+    const service = new SessionsService();
+    const session = service.issue({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false });
+    expect(service.validateAccess(`Bearer ${session.accessToken}`)).toEqual({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false });
+    expect(() => service.validateAccess('Bearer vta_fabricated.session')).toThrow('expired');
+  });
 });

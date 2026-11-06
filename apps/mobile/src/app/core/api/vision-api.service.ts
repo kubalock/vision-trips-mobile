@@ -25,4 +25,11 @@ export class VisionApiService {
       this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges/${exchangeId}/verify/knowledge`, { postcode }),
     );
   }
+
+  downloadCalendar(accessToken: string): Promise<Blob> {
+    return firstValueFrom(this.http.get(`${this.baseUrl}/trips/current/calendar.ics`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      responseType: 'blob',
+    }));
+  }
 }

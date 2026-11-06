@@ -1,0 +1,54 @@
+import { BadGatewayException, ServiceUnavailableException } from '@nestjs/common';
+import { AirtableService } from './airtable.service.js';
+
+describe('AirtableService', () => {
+  beforeEach(() => {
+    process.env.AIRTABLE_TOKEN = 'test-token';
+    process.env.AIRTABLE_MAX_ATTEMPTS = '3';
+    process.env.AIRTABLE_MIN_REQUEST_INTERVAL_MS = '0';
+    process.env.AIRTABLE_RETRY_BASE_MS = '0';
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env.AIRTABLE_TOKEN;
+    delete process.env.AIRTABLE_MAX_ATTEMPTS;
+    delete process.env.AIRTABLE_MIN_REQUEST_INTERVAL_MS;
+    delete process.env.AIRTABLE_RETRY_BASE_MS;
+  });
+
+  it('retries a rate-limited request and returns the record', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('{"error":"RATE_LIMIT_REACHED"}', { status: 429, headers: { 'retry-after': '0' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'recABCDEFGHIJKLMN', fields: { Name: 'Trip' } }), { status: 200 }));
+
+    const record = await new AirtableService().record('appABCDEFGHIJKLMN', 'Bookings', 'recABCDEFGHIJKLMN');
+
+    expect(record.fields.Name).toBe('Trip');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports persistent rate limiting clearly', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      new Response('{"error":"RATE_LIMIT_REACHED"}', { status: 429, headers: { 'retry-after': '0' } }),
+    );
+
+    await expect(new AirtableService().record('appABCDEFGHIJKLMN', 'Bookings', 'recABCDEFGHIJKLMN'))
+      .rejects.toThrow('Airtable is rate limiting requests');
+  });
+
+  it('reports a schema mismatch for Airtable 422 responses', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{"error":"INVALID_REQUEST"}', { status: 422 }));
+
+    await expect(new AirtableService().record('appABCDEFGHIJKLMN', 'Bookings', 'recABCDEFGHIJKLMN'))
+      .rejects.toBeInstanceOf(BadGatewayException);
+  });
+
+  it('retries transient server failures before reporting unavailability', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response('upstream failure', { status: 503 }));
+
+    await expect(new AirtableService().record('appABCDEFGHIJKLMN', 'Bookings', 'recABCDEFGHIJKLMN'))
+      .rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+});

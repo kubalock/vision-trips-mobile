@@ -82,6 +82,12 @@ describe('AppController (e2e)', () => {
     }
   });
 
+  it('/v1/trips/current/calendar.ics requires an access session', async () => {
+    await request(app.getHttpServer())
+      .get('/v1/trips/current/calendar.ics')
+      .expect(401);
+  });
+
   afterEach(async () => {
     await app.close();
   });

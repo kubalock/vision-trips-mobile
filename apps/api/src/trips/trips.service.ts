@@ -21,6 +21,7 @@ export class TripsService {
       this.airtable.records(baseId, 'Customers', strings(pick(booking.fields, bookingFields.customers))),
     ]);
     const ids = linkedRecordIds(elements);
+    ids.locations.push(...recordIds(pick(booking.fields, bookingFields.destinations)));
     const [suppliers, airports, airlines, rooms, cabins, passengers, ships, cruisePorts, locations, operators] = await Promise.all([
       this.airtable.records(baseId, 'Suppliers', ids.suppliers),
       this.airtable.records(baseId, 'CMS [Airports]', ids.airports),
@@ -81,6 +82,7 @@ export class TripsService {
     const payments = accessScope === 'primary_customer'
       ? mapPayments(booking, allRelated.payments, stage, tripId)
       : undefined;
+    const destinations = mapDestinations(allRelated.locations, tripId);
 
     return {
       schemaVersion: 2,
@@ -137,6 +139,14 @@ export class TripsService {
         supplierTicketsReceived: truthy(bookingValue('supplierTickets')),
         supplierConfirmationsReceived: truthy(bookingValue('supplierConfirmations')),
       },
+      quotation: {
+        status: stage === 'quote' ? 'available' : stage === 'quote_expired' ? 'expired' : 'not_applicable',
+        expiresAt: quoteExpiry,
+        canAccept: accessScope === 'primary_customer' && stage === 'quote',
+        requiredConfirmations: stage === 'quote' ? ['package details', 'traveller names', 'important information', 'financial protection', 'terms and conditions'] : [],
+      },
+      timeline: mapTimeline(itinerary, departure, now),
+      destinations,
       travellers,
       itinerary,
       ...(payments ? { payments } : {}),
@@ -149,6 +159,46 @@ export class TripsService {
       },
     };
   }
+}
+
+function mapTimeline(itinerary: ItineraryItem[], departure: string | null, now: Date): TripSnapshot['timeline'] {
+  const today = now.toISOString().slice(0, 10);
+  const currentTime = now.toTimeString().slice(0, 5);
+  const next = [...itinerary]
+    .filter((item) => item.startDate && (item.startDate > today || (item.startDate === today && (!item.startTime || item.startTime >= currentTime))))
+    .sort((a, b) => `${a.startDate}${a.startTime ?? ''}`.localeCompare(`${b.startDate}${b.startTime ?? ''}`))[0];
+  const daysUntilDeparture = departure ? Math.ceil((Date.parse(`${departure}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000) : null;
+  return {
+    daysUntilDeparture,
+    nextItemId: next?.id ?? null,
+    nextItemTitle: next?.title ?? null,
+    nextItemDate: next?.startDate ?? null,
+    nextItemTime: next?.startTime ?? null,
+  };
+}
+
+function mapDestinations(records: AirtableRecord[], tripId: string): TripSnapshot['destinations'] {
+  const seen = new Set<string>();
+  return records.flatMap((record) => {
+    if (seen.has(record.id)) return [];
+    seen.add(record.id);
+    const name = recordText(record, locationFields.name);
+    if (!name) return [];
+    const latitude = optionalNumber(pick(record.fields, locationFields.latitude));
+    const longitude = optionalNumber(pick(record.fields, locationFields.longitude));
+    return [{
+      id: publicChildId(tripId, record.id, 'dst'),
+      name,
+      country: nullableRecordText(record, locationFields.country),
+      overview: nullableRecordText(record, locationFields.overview),
+      attractions: strings(pick(record.fields, locationFields.attractions)).map(safeText).filter(Boolean).slice(0, 12),
+      practicalInformation: nullableRecordText(record, locationFields.practical),
+      culturalInformation: nullableRecordText(record, locationFields.culture),
+      travelAdviceUrl: safeWebUrl(pick(record.fields, locationFields.travelAdvice)),
+      imageUrl: firstAttachmentUrl(pick(record.fields, locationFields.image)),
+      coordinates: latitude !== null && longitude !== null ? { latitude, longitude } : null,
+    }];
+  }).slice(0, 12);
 }
 
 function mapTravellers(customers: AirtableRecord[], people: AirtableRecord[]): TravellerSummary[] {
@@ -323,13 +373,15 @@ function mapPayments(booking: AirtableRecord, records: AirtableRecord[], stage: 
     const paid = /complete|paid|settled/i.test(rawStatus);
     const local = /^\s*resort\s+payment\s*$/i.test(type);
     const refund = /refund/i.test(type) || amount < 0;
+    const paymentUrl = safeUrl(value('link'));
     const status: PaymentItem['status'] = refund ? 'refund' : local ? 'local' : paid ? 'paid' : dueDate && dueDate < now ? 'overdue' : 'outstanding';
     return {
       id: publicChildId(tripId, record.id || String(index), 'pay'),
       label: safeText(value('customerType')) || (paid ? 'Payment received' : 'Payment due'),
       amount: Math.abs(amount), currency: safeCurrency(value('currency')) || currency, status, dueDate,
       completedDate: dateString(value('completed')),
-      canPay: !paid && !local && !refund && amount > 0 && Boolean(safeText(value('link'))) && (stage !== 'quote' || truthy(value('showOnQuote'))),
+      canPay: !paid && !local && !refund && amount > 0 && Boolean(paymentUrl) && (stage !== 'quote' || truthy(value('showOnQuote'))),
+      actionUrl: !paid && !local && !refund && amount > 0 && (stage !== 'quote' || truthy(value('showOnQuote'))) ? paymentUrl : null,
     };
   }).sort((a, b) => (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999'));
   return { currency, total: numberValue(pick(booking.fields, bookingFields.total)), paid: numberValue(pick(booking.fields, bookingFields.paid)), balance: numberValue(pick(booking.fields, bookingFields.balance)), items };
@@ -441,6 +493,13 @@ function safeText(value: unknown): string {
 function safeCurrency(value: unknown): string {
   const currency = safeText(value).toUpperCase();
   return ['GBP', 'EUR', 'USD'].includes(currency) ? currency : 'GBP';
+}
+
+function optionalNumber(value: unknown): number | null {
+  const candidate = Array.isArray(value) ? value[0] : value;
+  if (candidate === undefined || candidate === null || candidate === '') return null;
+  const parsed = typeof candidate === 'number' ? candidate : Number(candidate);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function timeString(value: unknown): string | null {

@@ -4,6 +4,7 @@ export const bookingFields = {
   status: ['Status'],
   tags: ['Tags'],
   holidayTypes: ['Holiday Type(s)'],
+  destinations: ['Destinations'],
   sector: ['Sector'],
   departure: ['Departure Date', 'Departure Date (All)', 'Start Date', 'Departing'],
   return: ['Return Date', 'Return Date (All)', 'End Date', 'Returning'],
@@ -71,7 +72,11 @@ export const cabinFields = { name: ['Cabin Name', 'Name'], grade: ['Cabin Grade'
 export const passengerFields = { name: ['Passenger', 'Passenger Name'], pnr: ['PNR'], class: ['Flight Class'], seat: ['Seat Number'], cabinBag: ['Cabin Baggage Allowance'], checkedBag: ['Checked Baggage Allowance'], extras: ['Extras'], meal: ['Meal Request'], ssr: ['Special Requests'] } as const;
 export const shipFields = { name: ['Name'], cover: ['Cover Image', 'cover_image'], profile: ['Profile Image', 'profile_image'] } as const;
 export const operatorFields = { name: ['Name', 'Operator'], logo: ['Logo', 'logo', 'Profile Image', 'profile_image'] } as const;
-export const locationFields = { name: ['Name', 'Resort', 'Area', 'Country'] } as const;
+export const locationFields = {
+  name: ['Name', 'Resort', 'Area', 'Country'], country: ['Country'], overview: ['Destination Overview', 'Summary (HTML)'],
+  attractions: ['Key Attractions/Experiences'], practical: ['Practical Information'], culture: ['Cultural & Local Insights'],
+  travelAdvice: ['FCDO Travel Advice'], image: ['Featured Image'], latitude: ['Latitude'], longitude: ['Longitude'],
+} as const;
 export const cruisePortFields = { day: ['Day'], port: ['Port'], description: ['Port (SinGS)', 'Overview'], arrive: ['Arrive'], depart: ['Depart'] } as const;
 
 export const paymentFields = {

@@ -1,15 +1,16 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
-import type { LinkExchangeChallenge, LinkExchangeResponse, TripSnapshot } from '@vision-trips/contracts';
+import type { LinkExchangeChallenge, LinkExchangeResponse, MobileSession, TripSnapshot } from '@vision-trips/contracts';
 import { VisionApiService } from './core/api/vision-api.service';
 import { SavedTripsStore } from './core/storage/saved-trips.store';
 import { DocumentsSection } from './features/trip/documents-section';
+import { DestinationsSection } from './features/trip/destinations-section';
 import { ItinerarySection } from './features/trip/itinerary-section';
 import { PaymentsSection } from './features/trip/payments-section';
 
 @Component({
   selector: 'app-root',
-  imports: [DocumentsSection, ItinerarySection, PaymentsSection],
+  imports: [DestinationsSection, DocumentsSection, ItinerarySection, PaymentsSection],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -24,6 +25,7 @@ export class App {
   protected readonly challenge = signal<LinkExchangeChallenge | null>(null);
   protected readonly postcode = signal('');
   protected readonly storedSecurely = signal(false);
+  private readonly session = signal<MobileSession | null>(null);
   protected readonly canContinue = computed(() => /^app[A-Za-z0-9]{14}$/.test(this.baseId().trim()) && /^rec[A-Za-z0-9]{14}$/.test(this.recordId().trim()) && !this.submitting());
 
   protected updateBaseId(event: Event): void {
@@ -76,8 +78,27 @@ export class App {
 
   private async acceptAuthorized(response: Extract<LinkExchangeResponse, { status: 'authorized' }>): Promise<void> {
     this.trip.set(response.snapshot);
+    this.session.set(response.session);
     this.challenge.set(null);
     this.storedSecurely.set(await this.savedTrips.save(response.snapshot, response.session));
+  }
+
+  protected async downloadCalendar(): Promise<void> {
+    const session = this.session();
+    const trip = this.trip();
+    if (!session || !trip) return;
+    this.error.set('');
+    try {
+      const blob = await this.api.downloadCalendar(session.accessToken);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `${trip.summary.reference.replace(/[^A-Za-z0-9_-]+/g, '-')}-itinerary.ics`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      this.error.set(this.apiError(error, 'We could not create the calendar file. Please try again.'));
+    }
   }
 
   private apiError(error: unknown, fallback: string): string {

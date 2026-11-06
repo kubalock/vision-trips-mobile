@@ -19,6 +19,7 @@ describe('TripsService', () => {
           Tags: ['Ocean Cruise'],
           'Departure Date': '2027-03-01',
           'Return Date': '2027-03-12',
+          Destinations: ['recLOCATIONABCDEF'],
           'Trip Overview': '<p>A hand-picked Mediterranean journey.</p>',
           'Personalised Message': 'Welcome, Alex — I hope you love it.',
           'SinGS Agent Name': 'Jamie Agent',
@@ -70,6 +71,7 @@ describe('TripsService', () => {
         suppliers: [{ id: 'recSUPPLIERABCDEF', fields: { Name: 'Trusted Air', 'Legal Notices URL': 'https://example.com/terms' } }],
         airlines: [{ id: 'recAIRLINEABCDEFG', fields: { Airline: 'British Airways' } }],
         passengers: [{ id: 'recPAXABCDEFGHIJK', fields: { Passenger: 'Alex Traveller', 'Seat Number': '12A', 'Checked Baggage Allowance': '23kg' } }],
+        locations: [{ id: 'recLOCATIONABCDEF', fields: { Name: 'Lisbon', Country: 'Portugal', 'Destination Overview': '<p>Hilltop views and tiled streets.</p>', 'Key Attractions/Experiences': ['Tram 28', 'Belém'], Latitude: 38.72, Longitude: -9.14, 'Featured Image': [{ url: 'https://files.example/lisbon.jpg' }] } }],
       },
     );
 
@@ -90,6 +92,9 @@ describe('TripsService', () => {
     expect(snapshot.support).toMatchObject({ phone: '020 7946 0123', email: 'help@example.com', emergencyPhone: '07700 900123' });
     expect(snapshot.protection).toMatchObject({ scheme: 'atol', atolNumber: '1234' });
     expect(snapshot.bookingStatus.supplierConfirmationsReceived).toBe(true);
+    expect(snapshot.quotation.status).toBe('not_applicable');
+    expect(snapshot.timeline).toMatchObject({ nextItemTitle: 'London Heathrow to Lisbon', nextItemDate: '2027-03-01' });
+    expect(snapshot.destinations[0]).toMatchObject({ name: 'Lisbon', country: 'Portugal', overview: 'Hilltop views and tiled streets.', coordinates: { latitude: 38.72, longitude: -9.14 } });
     expect(JSON.stringify(snapshot)).not.toContain('recABCDEFGHIJKLMN');
     expect(JSON.stringify(snapshot)).not.toContain('Internal Notes');
     expect(JSON.stringify(snapshot)).not.toContain('secret');
