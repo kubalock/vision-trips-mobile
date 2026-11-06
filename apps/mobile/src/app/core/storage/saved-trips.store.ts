@@ -11,6 +11,19 @@ export interface SavedTrip {
 
 @Injectable({ providedIn: 'root' })
 export class SavedTripsStore {
+  async deviceTrust(): Promise<string | null> {
+    if (Capacitor.isNativePlatform()) {
+      const value = await SecureStorage.get('device:trust');
+      return typeof value === 'string' ? value : null;
+    }
+    return localStorage.getItem('vision-trips:device-trust');
+  }
+
+  async saveDeviceTrust(token: string): Promise<void> {
+    if (Capacitor.isNativePlatform()) await SecureStorage.set('device:trust', token);
+    else localStorage.setItem('vision-trips:device-trust', token);
+  }
+
   async save(snapshot: TripSnapshot, session: MobileSession): Promise<boolean> {
     if (!Capacitor.isNativePlatform()) return false;
     const key = `trip:${snapshot.tripId}`;

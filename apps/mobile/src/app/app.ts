@@ -32,6 +32,10 @@ export class App implements OnInit, OnDestroy {
   protected readonly trip = signal<TripSnapshot | null>(null);
   protected readonly challenge = signal<LinkExchangeChallenge | null>(null);
   protected readonly postcode = signal('');
+  protected readonly otpCode = signal('');
+  protected readonly verificationMethod = signal<'postcode' | 'otp'>('otp');
+  protected readonly rememberDevice = signal(true);
+  protected readonly resendSeconds = signal(0);
   protected readonly storedSecurely = signal(false);
   protected readonly activeView = signal<AppView>('home');
   protected readonly acceptanceName = signal('');
@@ -56,6 +60,7 @@ export class App implements OnInit, OnDestroy {
   private paymentIdAwaiting: string | null = null;
   private resumeListener: PluginListenerHandle | null = null;
   private networkListener: PluginListenerHandle | null = null;
+  private resendTimer: ReturnType<typeof setInterval> | null = null;
   protected readonly canContinue = computed(() => /^app[A-Za-z0-9]{14}$/.test(this.baseId().trim()) && /^rec[A-Za-z0-9]{14}$/.test(this.recordId().trim()) && !this.submitting());
 
   ngOnInit(): void {
@@ -73,6 +78,7 @@ export class App implements OnInit, OnDestroy {
     document.body.classList.remove('vt');
     void this.resumeListener?.remove();
     void this.networkListener?.remove();
+    if (this.resendTimer) clearInterval(this.resendTimer);
   }
 
   @HostListener('window:focus')
@@ -99,7 +105,7 @@ export class App implements OnInit, OnDestroy {
       if (response.status === 'authorized') {
         await this.acceptAuthorized(response);
       } else {
-        this.challenge.set(response.challenge);
+        this.setChallenge(response.challenge);
       }
     } catch (error) {
       this.error.set(this.apiError(error, 'We could not open that trip. Check the Airtable IDs and API configuration, then try again.'));
@@ -110,6 +116,13 @@ export class App implements OnInit, OnDestroy {
 
   protected updatePostcode(event: Event): void {
     this.postcode.set((event.target as HTMLInputElement).value);
+  }
+
+  protected updateOtpCode(event: Event): void { this.otpCode.set((event.target as HTMLInputElement).value.replace(/\D/g, '').slice(0, 6)); }
+  protected updateRememberDevice(event: Event): void { this.rememberDevice.set((event.target as HTMLInputElement).checked); }
+  protected chooseVerificationMethod(method: 'postcode' | 'otp'): void {
+    this.verificationMethod.set(method); this.error.set('');
+    if (method === 'otp' && !this.challenge()?.resendAvailableAt) void this.sendOtp();
   }
 
   protected updateAcceptanceName(event: Event): void {
@@ -261,9 +274,9 @@ export class App implements OnInit, OnDestroy {
     this.submitting.set(true);
     this.error.set('');
     try {
-      const response = await this.api.exchangeLink(match[1]);
+      const response = await this.api.exchangeLink(match[1], await this.savedTrips.deviceTrust());
       if (response.status === 'authorized') await this.acceptAuthorized(response);
-      else this.challenge.set(response.challenge);
+      else this.setChallenge(response.challenge);
     } catch (error) {
       this.error.set(this.apiError(error, 'This shared trip link is invalid or has expired.'));
     } finally {
@@ -362,7 +375,7 @@ export class App implements OnInit, OnDestroy {
     this.submitting.set(true);
     this.error.set('');
     try {
-      const response = await this.api.verifyPostcode(challenge.exchangeId, this.postcode().trim());
+      const response = await this.api.verifyPostcode(challenge.exchangeId, this.postcode().trim(), this.rememberDevice());
       if (response.status === 'authorized') await this.acceptAuthorized(response);
     } catch {
       this.error.set('That postcode did not match the booking. Please check it and try again.');
@@ -371,12 +384,43 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
+  protected async sendOtp(): Promise<void> {
+    const challenge = this.challenge();
+    if (!challenge || this.resendSeconds() > 0 || this.submitting()) return;
+    this.submitting.set(true); this.error.set('');
+    try { this.setChallenge(await this.api.sendOtp(challenge.exchangeId)); }
+    catch (error) { this.error.set(this.apiError(error, 'We could not send a code. Please wait and try again.')); }
+    finally { this.submitting.set(false); }
+  }
+
+  protected async verifyOtp(event: Event): Promise<void> {
+    event.preventDefault(); const challenge = this.challenge();
+    if (!challenge || this.otpCode().length !== 6) return;
+    this.submitting.set(true); this.error.set('');
+    try { const response = await this.api.verifyOtp(challenge.exchangeId, this.otpCode(), this.rememberDevice()); if (response.status === 'authorized') await this.acceptAuthorized(response); }
+    catch (error) { this.error.set(this.apiError(error, 'That code was not accepted. Check it and try again.')); }
+    finally { this.submitting.set(false); }
+  }
+
+  private setChallenge(challenge: LinkExchangeChallenge): void {
+    this.challenge.set(challenge);
+    this.verificationMethod.set(challenge.methods.includes('otp') && !challenge.methods.includes('postcode') ? 'otp' : 'postcode');
+    this.startResendCountdown(challenge.resendAvailableAt);
+  }
+
+  private startResendCountdown(availableAt: string | null): void {
+    if (this.resendTimer) clearInterval(this.resendTimer);
+    const update = () => this.resendSeconds.set(availableAt ? Math.max(0, Math.ceil((new Date(availableAt).getTime() - Date.now()) / 1000)) : 0);
+    update(); this.resendTimer = setInterval(update, 1000);
+  }
+
   private async acceptAuthorized(response: Extract<LinkExchangeResponse, { status: 'authorized' }>): Promise<void> {
     this.trip.set(response.snapshot);
     this.session.set(response.session);
     this.challenge.set(null);
     this.activeView.set('home');
     this.storedSecurely.set(await this.savedTrips.save(response.snapshot, response.session));
+    if (response.trustedDeviceToken) await this.savedTrips.saveDeviceTrust(response.trustedDeviceToken);
   }
 
   protected selectView(view: AppView): void {

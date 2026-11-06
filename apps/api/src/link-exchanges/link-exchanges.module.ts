@@ -5,10 +5,12 @@ import { TripsService } from '../trips/trips.service.js';
 import { SessionsModule } from '../sessions/sessions.module.js';
 import { LinkExchangesController } from './link-exchanges.controller.js';
 import { LinkExchangesService } from './link-exchanges.service.js';
+import { DeviceTrustService } from '../security/device-trust.service.js';
+import { OtpDeliveryService } from './otp-delivery.service.js';
 
 @Module({
   imports: [SessionsModule],
   controllers: [LinkExchangesController],
-  providers: [LinkExchangesService, LinkTokenService, TripsService, AirtableService],
+  providers: [LinkExchangesService, LinkTokenService, DeviceTrustService, OtpDeliveryService, TripsService, AirtableService],
 })
 export class LinkExchangesModule {}

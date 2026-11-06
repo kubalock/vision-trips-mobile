@@ -8,9 +8,9 @@ export class VisionApiService {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = 'http://localhost:3000/v1';
 
-  exchangeLink(linkOrCode: string): Promise<LinkExchangeResponse> {
+  exchangeLink(linkOrCode: string, deviceTrustToken?: string | null): Promise<LinkExchangeResponse> {
     return firstValueFrom(
-      this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges`, { linkOrCode }),
+      this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges`, { linkOrCode, deviceTrustToken }),
     );
   }
 
@@ -20,10 +20,18 @@ export class VisionApiService {
     );
   }
 
-  verifyPostcode(exchangeId: string, postcode: string): Promise<LinkExchangeResponse> {
+  verifyPostcode(exchangeId: string, postcode: string, rememberDevice: boolean): Promise<LinkExchangeResponse> {
     return firstValueFrom(
-      this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges/${exchangeId}/verify/knowledge`, { postcode }),
+      this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges/${exchangeId}/verify/knowledge`, { postcode, rememberDevice }),
     );
+  }
+
+  sendOtp(exchangeId: string): Promise<import('@vision-trips/contracts').LinkExchangeChallenge> {
+    return firstValueFrom(this.http.post<import('@vision-trips/contracts').LinkExchangeChallenge>(`${this.baseUrl}/link-exchanges/${exchangeId}/otp/send`, {}));
+  }
+
+  verifyOtp(exchangeId: string, code: string, rememberDevice: boolean): Promise<LinkExchangeResponse> {
+    return firstValueFrom(this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges/${exchangeId}/verify/otp`, { code, rememberDevice }));
   }
 
   downloadCalendar(accessToken: string): Promise<Blob> {

@@ -11,8 +11,8 @@ export class LinkExchangesController {
   @Post()
   @ApiBody({ schema: { example: { linkOrCode: 'https://example.test/trip/{signed-token}/' } } })
   @ApiCreatedResponse({ description: 'An authorized trip snapshot or a verification challenge.' })
-  create(@Body() body: { linkOrCode?: unknown }): Promise<LinkExchangeResponse> {
-    return this.exchanges.create(body?.linkOrCode);
+  create(@Body() body: { linkOrCode?: unknown; deviceTrustToken?: unknown }): Promise<LinkExchangeResponse> {
+    return this.exchanges.create(body?.linkOrCode, body?.deviceTrustToken);
   }
 
   @Post('local')
@@ -25,8 +25,16 @@ export class LinkExchangesController {
   @Post(':exchangeId/verify/knowledge')
   verifyPostcode(
     @Param('exchangeId') exchangeId: string,
-    @Body() body: { postcode?: unknown },
+    @Body() body: { postcode?: unknown; rememberDevice?: unknown },
   ): Promise<LinkExchangeResponse> {
-    return this.exchanges.verifyPostcode(exchangeId, body?.postcode);
+    return this.exchanges.verifyPostcode(exchangeId, body?.postcode, body?.rememberDevice);
+  }
+
+  @Post(':exchangeId/otp/send')
+  sendOtp(@Param('exchangeId') exchangeId: string) { return this.exchanges.sendOtp(exchangeId); }
+
+  @Post(':exchangeId/verify/otp')
+  verifyOtp(@Param('exchangeId') exchangeId: string, @Body() body: { code?: unknown; rememberDevice?: unknown }): Promise<LinkExchangeResponse> {
+    return this.exchanges.verifyOtp(exchangeId, body?.code, body?.rememberDevice);
   }
 }

@@ -389,6 +389,7 @@ export interface TripDocument {
 
 export interface LinkExchangeRequest {
   linkOrCode: string;
+  deviceTrustToken?: string;
 }
 
 export interface LocalTripExchangeRequest {
@@ -402,6 +403,9 @@ export interface LinkExchangeChallenge {
   tripHint: string;
   methods: Array<'postcode' | 'surname' | 'surname_dob' | 'otp'>;
   expiresAt: string;
+  destinationHint: string | null;
+  resendAvailableAt: string | null;
+  remainingSends: number;
 }
 
 export interface AuthorizedLinkExchange {
@@ -410,6 +414,7 @@ export interface AuthorizedLinkExchange {
   expiresAt: string;
   snapshot: TripSnapshot;
   session: MobileSession;
+  trustedDeviceToken?: string;
 }
 
 export interface VerificationRequiredLinkExchange {
