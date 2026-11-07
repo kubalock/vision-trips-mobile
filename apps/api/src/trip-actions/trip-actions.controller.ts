@@ -1,4 +1,4 @@
-import { BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, Headers, Logger, Param, Post, Req, StreamableFile } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, Headers, Logger, NotFoundException, Param, Post, Req, StreamableFile } from '@nestjs/common';
 import { ApiBearerAuth, ApiProduces, ApiTags } from '@nestjs/swagger';
 import type { CustomerMessageRequest, CustomerMessageResponse, CustomerMessageTopic, FellowTravellerLinkResponse, PaymentLinkResponse, QuotationAcceptanceRequest, QuotationAcceptanceResponse } from '@vision-trips/contracts';
 import type { Request } from 'express';
@@ -7,6 +7,7 @@ import { SessionsService } from '../sessions/sessions.service.js';
 import { TripsService } from '../trips/trips.service.js';
 import { LinkTokenService } from '../security/link-token.service.js';
 import { AcceptanceNotificationsService } from './acceptance-notifications.service.js';
+import { PdfDocumentService } from './pdf-document.service.js';
 
 @ApiTags('trip actions')
 @Controller('trips/current')
@@ -19,6 +20,7 @@ export class TripActionsController {
     private readonly airtable: AirtableService,
     private readonly linkTokens: LinkTokenService,
     private readonly notifications: AcceptanceNotificationsService,
+    private readonly pdf: PdfDocumentService,
   ) {}
 
   @Get()
@@ -171,6 +173,36 @@ export class TripActionsController {
       type: 'text/html; charset=utf-8',
       disposition: `attachment; filename="${safeFilename(snapshot.summary.reference)}-${kind}.html"`,
     });
+  }
+
+  @Get('documents/:action.pdf')
+  @ApiBearerAuth()
+  @ApiProduces('application/pdf')
+  async pdfDocument(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('action') action: string,
+  ): Promise<StreamableFile> {
+    const principal = this.sessions.validateAccess(authorization);
+    const snapshot = await this.trips.snapshot(principal.baseId, principal.recordId, principal.fellowTraveller ? 'fellow_traveller' : 'primary_customer');
+    const walletDocument = snapshot.documents.find((item) => item.downloadAction === action);
+    if (!walletDocument || walletDocument.status !== 'ready') throw new NotFoundException('This document is not available.');
+    if (action.startsWith('supplier:')) {
+      if (!walletDocument.url?.startsWith('https://')) throw new NotFoundException('This supplier document is not available.');
+      const response = await fetch(walletDocument.url, { signal: AbortSignal.timeout(15_000) });
+      const contentLength = Number(response.headers.get('content-length') || 0);
+      if (!response.ok || contentLength > 20_000_000) throw new BadGatewayException('The supplier document could not be downloaded.');
+      const body = Buffer.from(await response.arrayBuffer());
+      if (body.length > 20_000_000) throw new BadGatewayException('The supplier document is too large.');
+      return new StreamableFile(body, { type: response.headers.get('content-type') || walletDocument.mimeType, disposition: `attachment; filename="${safeFilename(walletDocument.title)}"` });
+    }
+    let evidence: AcceptanceEvidence | null = null;
+    if (action === 'acceptance') {
+      const booking = await this.airtable.record(principal.baseId, process.env.AIRTABLE_BOOKINGS_TABLE?.trim() || 'Bookings', principal.recordId);
+      evidence = parseAcceptanceEvidence(booking.fields[process.env.AIRTABLE_ACCEPTANCE_EVIDENCE_FIELD?.trim() || 'Quotation Acceptance Evidence']);
+      if (!evidence) throw new ConflictException('No quotation acceptance receipt is available.');
+    }
+    const body = await this.pdf.create(snapshot, action, evidence);
+    return new StreamableFile(body, { type: 'application/pdf', disposition: `attachment; filename="${safeFilename(walletDocument.title)}.pdf"` });
   }
 }
 

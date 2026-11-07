@@ -4,9 +4,10 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import { Network } from '@capacitor/network';
 import { Share } from '@capacitor/share';
-import type { CustomerMessageTopic, LinkExchangeChallenge, LinkExchangeResponse, MobileSession, TripSnapshot } from '@vision-trips/contracts';
+import type { CustomerMessageTopic, LinkExchangeChallenge, LinkExchangeResponse, MobileSession, TripDocument, TripSnapshot } from '@vision-trips/contracts';
 import { VisionApiService } from './core/api/vision-api.service';
 import { SavedTripsStore } from './core/storage/saved-trips.store';
+import { DocumentWalletStore, type WalletStatus } from './core/storage/document-wallet.store';
 import { DocumentsSection } from './features/trip/documents-section';
 import { DestinationsSection } from './features/trip/destinations-section';
 import { CommunicationsSection } from './features/trip/communications-section';
@@ -25,6 +26,7 @@ type AppView = 'home' | 'itinerary' | 'payments' | 'documents' | 'help';
 export class App implements OnInit, OnDestroy {
   private readonly api = inject(VisionApiService);
   private readonly savedTrips = inject(SavedTripsStore);
+  private readonly documentWallet = inject(DocumentWalletStore);
   protected readonly baseId = signal('');
   protected readonly recordId = signal('');
   protected readonly submitting = signal(false);
@@ -53,6 +55,8 @@ export class App implements OnInit, OnDestroy {
   protected readonly refreshing = signal(false);
   protected readonly sharing = signal(false);
   protected readonly shareResult = signal('');
+  protected readonly documentStatuses = signal<Record<string, WalletStatus>>({});
+  protected readonly downloadingDocumentId = signal<string | null>(null);
   private readonly session = signal<MobileSession | null>(null);
   private paymentAwaitingReturn = false;
   private paymentOpenedAt = 0;
@@ -295,6 +299,7 @@ export class App implements OnInit, OnDestroy {
       const paidNow = snapshot.payments?.paid ?? 0;
       const itemNow = snapshot.payments?.items.find((item) => item.id === this.paymentIdAwaiting);
       this.trip.set(snapshot);
+      await this.refreshDocumentStatuses(snapshot);
       this.storedSecurely.set(await this.savedTrips.save(snapshot, currentSession));
       this.paymentReturnState.set(paidNow > this.paymentPaidBefore || itemNow?.status === 'paid' ? 'updated' : 'unchanged');
     } catch {
@@ -310,6 +315,7 @@ export class App implements OnInit, OnDestroy {
     try {
       const snapshot = await this.api.refreshTrip(currentSession.accessToken);
       this.trip.set(snapshot);
+      await this.refreshDocumentStatuses(snapshot);
       this.storedSecurely.set(await this.savedTrips.save(snapshot, currentSession));
     } catch {
       // The write already succeeded. Keep the optimistic state and refresh next time the trip opens.
@@ -338,6 +344,7 @@ export class App implements OnInit, OnDestroy {
         snapshot = await this.api.refreshTrip(activeSession.accessToken);
       }
       this.trip.set(snapshot);
+      await this.refreshDocumentStatuses(snapshot);
       this.storedSecurely.set(await this.savedTrips.save(snapshot, activeSession));
     } catch (error) {
       this.markFreshness(this.online() ? 'stale' : 'offline');
@@ -359,7 +366,9 @@ export class App implements OnInit, OnDestroy {
     const saved = (await this.savedTrips.all()).sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0];
     if (!saved || this.trip()) return;
     this.session.set(saved.session);
-    this.trip.set({ ...saved.snapshot, freshness: { ...saved.snapshot.freshness, status: status.connected && !isSnapshotStale(saved.snapshot) ? 'fresh' : status.connected ? 'stale' : 'offline' } });
+    const offlineSnapshot = { ...saved.snapshot, freshness: { ...saved.snapshot.freshness, status: status.connected && !isSnapshotStale(saved.snapshot) ? 'fresh' as const : status.connected ? 'stale' as const : 'offline' as const } };
+    this.trip.set(offlineSnapshot);
+    await this.refreshDocumentStatuses(offlineSnapshot);
     this.storedSecurely.set(true);
     if (status.connected) await this.refreshCurrentTrip(false);
   }
@@ -416,6 +425,7 @@ export class App implements OnInit, OnDestroy {
 
   private async acceptAuthorized(response: Extract<LinkExchangeResponse, { status: 'authorized' }>): Promise<void> {
     this.trip.set(response.snapshot);
+    await this.refreshDocumentStatuses(response.snapshot);
     this.session.set(response.session);
     this.challenge.set(null);
     this.activeView.set('home');
@@ -442,6 +452,7 @@ export class App implements OnInit, OnDestroy {
     this.paymentReturnState.set('idle');
     this.openingPaymentId.set(null);
     this.shareResult.set('');
+    this.documentStatuses.set({});
   }
 
   protected async downloadCalendar(): Promise<void> {
@@ -462,17 +473,37 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  protected async downloadDocument(kind: 'confirmation' | 'invoice' | 'acceptance'): Promise<void> {
+  protected async downloadDocument(value: TripDocument | string): Promise<void> {
     const session = this.session();
     const trip = this.trip();
     if (!session || !trip) return;
+    const document = typeof value === 'string' ? trip.documents.find((item) => item.downloadAction === value) : value;
+    if (!document?.downloadAction) return;
     this.error.set('');
+    this.downloadingDocumentId.set(document.id);
     try {
-      const blob = await this.api.downloadDocument(kind, session.accessToken);
-      this.downloadBlob(blob, `${trip.summary.reference.replace(/[^A-Za-z0-9_-]+/g, '-')}-${kind}.html`);
+      if (this.documentStatuses()[document.id] === 'saved') {
+        const uri = await this.documentWallet.uri(trip.tripId, document.id);
+        if (uri) { await Share.share({ title: document.title, files: [uri], dialogTitle: 'Open or share document' }); return; }
+      }
+      if (!this.online()) throw new Error('offline');
+      const blob = await this.api.downloadDocument(document.downloadAction, session.accessToken);
+      if (await this.documentWallet.save(trip.tripId, document, blob)) {
+        await this.refreshDocumentStatuses(trip);
+        const uri = await this.documentWallet.uri(trip.tripId, document.id);
+        if (uri) await Share.share({ title: document.title, files: [uri], dialogTitle: 'Document saved offline' });
+      } else {
+        this.downloadBlob(blob, `${trip.summary.reference.replace(/[^A-Za-z0-9_-]+/g, '-')}-${document.title.replace(/[^A-Za-z0-9_-]+/g, '-')}${fileExtension(blob.type)}`);
+      }
     } catch (error) {
-      this.error.set(this.apiError(error, 'We could not create that document. Please try again.'));
+      this.error.set(this.online() ? this.apiError(error, 'We could not create that document. Please try again.') : 'This document has not been saved for offline use yet. Connect to download it.');
+    } finally {
+      this.downloadingDocumentId.set(null);
     }
+  }
+
+  private async refreshDocumentStatuses(snapshot: TripSnapshot): Promise<void> {
+    this.documentStatuses.set(await this.documentWallet.statuses(snapshot.tripId, snapshot.documents));
   }
 
   private downloadBlob(blob: Blob, filename: string): void {
@@ -497,3 +528,5 @@ export class App implements OnInit, OnDestroy {
 function isSnapshotStale(snapshot: TripSnapshot): boolean {
   return !snapshot.freshness.nextRefreshAfter || Date.parse(snapshot.freshness.nextRefreshAfter) <= Date.now();
 }
+
+function fileExtension(mimeType: string): string { return mimeType.includes('pdf') ? '.pdf' : mimeType.includes('png') ? '.png' : mimeType.includes('jpeg') ? '.jpg' : '.bin'; }

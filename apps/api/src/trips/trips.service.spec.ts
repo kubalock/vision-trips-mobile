@@ -113,6 +113,8 @@ describe('TripsService', () => {
     expect(snapshot.travellers[0]).toMatchObject({ name: 'Alex Traveller', isLead: true });
     expect(snapshot.payments?.items[0]).toMatchObject({ amount: 1000, status: 'paid' });
     expect(snapshot.documents.find((document) => document.kind === 'supplier')).toMatchObject({ title: 'Flight ticket.pdf', status: 'ready' });
+    expect(snapshot.documents.find((document) => document.kind === 'receipt')).toMatchObject({ title: 'Payment receipt · Deposit Payment', mimeType: 'application/pdf' });
+    expect(snapshot.documents.find((document) => document.kind === 'atol')).toMatchObject({ title: 'ATOL Certificate', downloadAction: 'atol' });
     expect(snapshot.schemaVersion).toBe(3);
     expect(snapshot.experience).toMatchObject({ overview: 'A hand-picked Mediterranean journey.', agentName: 'Jamie Agent' });
     expect(snapshot.support).toMatchObject({ phone: '020 7946 0123', email: 'help@example.com', emergencyPhone: '07700 900123' });

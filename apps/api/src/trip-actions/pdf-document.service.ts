@@ -1,0 +1,85 @@
+import { Injectable } from '@nestjs/common';
+import type { TripSnapshot } from '@vision-trips/contracts';
+import PDFDocument from 'pdfkit';
+
+@Injectable()
+export class PdfDocumentService {
+  create(snapshot: TripSnapshot, action: string, acceptance?: { acceptedAt: string; name: string; email: string; confirmations: string[] } | null): Promise<Buffer> {
+    return render((pdf) => {
+      header(pdf, snapshot, title(action));
+      if (action === 'confirmation') confirmation(pdf, snapshot);
+      else if (action === 'invoice') invoice(pdf, snapshot);
+      else if (action === 'atol') atol(pdf, snapshot);
+      else if (action === 'acceptance' && acceptance) acceptanceReceipt(pdf, snapshot, acceptance);
+      else if (action.startsWith('receipt:')) paymentReceipt(pdf, snapshot, action.slice(8));
+      footer(pdf, snapshot);
+    });
+  }
+}
+
+function render(write: (pdf: PDFKit.PDFDocument) => void): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    const pdf = new PDFDocument({ size: 'A4', margin: 54, info: { Creator: 'Vision Trips', Producer: 'Vision Trips' } });
+    pdf.on('data', (chunk: Buffer) => chunks.push(chunk));
+    pdf.on('end', () => resolve(Buffer.concat(chunks)));
+    pdf.on('error', reject);
+    write(pdf); pdf.end();
+  });
+}
+
+function header(pdf: PDFKit.PDFDocument, snapshot: TripSnapshot, heading: string): void {
+  pdf.fillColor('#0f766e').fontSize(11).text(snapshot.brand.name.toUpperCase(), { characterSpacing: 1.2 });
+  pdf.moveDown(0.5).fillColor('#172033').fontSize(25).text(heading);
+  pdf.fontSize(10).fillColor('#64748b').text(`${snapshot.summary.reference} · ${snapshot.summary.name}`);
+  pdf.moveDown().strokeColor('#0f766e').lineWidth(2).moveTo(54, pdf.y).lineTo(541, pdf.y).stroke().moveDown();
+}
+
+function confirmation(pdf: PDFKit.PDFDocument, snapshot: TripSnapshot): void {
+  paragraph(pdf, snapshot.experience.overview || 'Your booking details and travel arrangements.');
+  section(pdf, 'Travel dates'); paragraph(pdf, `${snapshot.summary.departureDate ?? 'To be confirmed'} to ${snapshot.summary.returnDate ?? 'To be confirmed'}`);
+  section(pdf, 'Travellers'); paragraph(pdf, snapshot.travellers.map((person) => person.name).join(', ') || 'See booking record');
+  section(pdf, 'Itinerary');
+  for (const item of snapshot.itinerary) paragraph(pdf, `${item.startDate ?? ''} ${item.startTime ?? ''}  ${item.title}${item.reference ? ` · Ref ${item.reference}` : ''}`.trim(), true);
+  section(pdf, 'Financial protection'); paragraph(pdf, snapshot.protection.summary);
+}
+
+function invoice(pdf: PDFKit.PDFDocument, snapshot: TripSnapshot): void {
+  const payments = snapshot.payments;
+  if (!payments) return paragraph(pdf, 'Payment details are not available for this access level.');
+  section(pdf, 'Payment summary');
+  row(pdf, 'Booking total', money(payments.total, payments.currency)); row(pdf, 'Paid', money(payments.paid, payments.currency)); row(pdf, 'Balance', money(payments.balance, payments.currency));
+  section(pdf, 'Payment schedule');
+  for (const item of payments.items) row(pdf, `${item.label}${item.dueDate ? ` · due ${item.dueDate}` : ''}`, `${money(item.amount, item.currency)} · ${item.status}`);
+}
+
+function paymentReceipt(pdf: PDFKit.PDFDocument, snapshot: TripSnapshot, paymentId: string): void {
+  const payment = snapshot.payments?.items.find((item) => item.id === paymentId && item.status === 'paid');
+  if (!payment) return paragraph(pdf, 'Payment receipt unavailable.');
+  section(pdf, 'Payment received'); row(pdf, 'Payment', payment.label); row(pdf, 'Amount', money(payment.amount, payment.currency)); row(pdf, 'Received', payment.completedDate ?? 'Recorded on booking'); row(pdf, 'Status', 'Paid');
+  pdf.moveDown().fontSize(10).fillColor('#475569').text('This receipt confirms payment received towards your booking. Please keep it for your records.');
+}
+
+function atol(pdf: PDFKit.PDFDocument, snapshot: TripSnapshot): void {
+  section(pdf, 'Your protection');
+  paragraph(pdf, 'This confirms that your money is protected by the ATOL scheme if your travel company collapses. This certificate applies to the people and arrangements shown on this booking.');
+  row(pdf, 'Unique reference number', snapshot.summary.reference); row(pdf, 'Date of issue', snapshot.serverTime.slice(0, 10)); row(pdf, 'ATOL holder', snapshot.protection.holderName ?? snapshot.protection.organiserName ?? snapshot.brand.name); row(pdf, 'ATOL number', snapshot.protection.atolNumber ?? 'See organiser');
+  row(pdf, 'Certificate issuer', snapshot.brand.name); row(pdf, 'Protected passengers', snapshot.travellers.map((person) => person.name).join(', ') || 'Passengers named on booking');
+  if (snapshot.payments) row(pdf, 'Protected booking cost', money(snapshot.payments.total, snapshot.payments.currency));
+  section(pdf, 'Protected arrangements');
+  for (const item of snapshot.itinerary.filter((entry) => entry.packageIncluded)) paragraph(pdf, `${item.typeLabel}: ${item.title}${item.startDate ? ` · ${item.startDate}` : ''}`, true);
+  pdf.moveDown().fontSize(9).fillColor('#475569').text('Your protection is subject to the terms of the ATOL scheme. The scheme is run by the Civil Aviation Authority and paid for by the Air Travel Trust. Full information is available at www.atol.org.uk.');
+}
+
+function acceptanceReceipt(pdf: PDFKit.PDFDocument, snapshot: TripSnapshot, evidence: { acceptedAt: string; name: string; email: string; confirmations: string[] }): void {
+  section(pdf, 'Acceptance evidence'); row(pdf, 'Accepted by', `${evidence.name} · ${evidence.email}`); row(pdf, 'Accepted at', evidence.acceptedAt); row(pdf, 'Quotation version', snapshot.version);
+  section(pdf, 'Reviewed sections');
+  for (const item of snapshot.quotation.reviewSections.filter((entry) => evidence.confirmations.includes(entry.id))) paragraph(pdf, item.title, true);
+}
+
+function section(pdf: PDFKit.PDFDocument, value: string): void { pdf.moveDown().fillColor('#172033').font('Helvetica-Bold').fontSize(14).text(value).font('Helvetica'); pdf.moveDown(0.35); }
+function paragraph(pdf: PDFKit.PDFDocument, value: string, compact = false): void { pdf.fillColor('#334155').fontSize(10).text(value, { lineGap: 3 }); pdf.moveDown(compact ? 0.35 : 0.7); }
+function row(pdf: PDFKit.PDFDocument, label: string, value: string): void { const y = pdf.y; pdf.font('Helvetica').fillColor('#64748b').fontSize(10).text(label, 54, y, { width: 235 }); pdf.font('Helvetica-Bold').fillColor('#172033').text(value, 290, y, { width: 251, align: 'right' }).font('Helvetica'); pdf.moveDown(0.8); }
+function footer(pdf: PDFKit.PDFDocument, snapshot: TripSnapshot): void { pdf.moveDown(2).fontSize(8).fillColor('#94a3b8').text(`Generated ${snapshot.serverTime} · ${snapshot.brand.name}`); }
+function money(amount: number, currency: string): string { return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(amount); }
+function title(action: string): string { if (action === 'atol') return 'ATOL Certificate'; if (action === 'invoice') return 'Booking invoice'; if (action === 'acceptance') return 'Quotation acceptance receipt'; if (action.startsWith('receipt:')) return 'Payment receipt'; return 'Booking confirmation'; }

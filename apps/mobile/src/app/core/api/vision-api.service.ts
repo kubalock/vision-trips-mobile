@@ -41,8 +41,8 @@ export class VisionApiService {
     }));
   }
 
-  downloadDocument(kind: 'confirmation' | 'invoice' | 'acceptance', accessToken: string): Promise<Blob> {
-    return firstValueFrom(this.http.get(`${this.baseUrl}/trips/current/documents/${kind}.html`, {
+  downloadDocument(action: string, accessToken: string): Promise<Blob> {
+    return firstValueFrom(this.http.get(`${this.baseUrl}/trips/current/documents/${encodeURIComponent(action)}.pdf`, {
       headers: { Authorization: `Bearer ${accessToken}` },
       responseType: 'blob',
     }));

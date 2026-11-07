@@ -380,11 +380,14 @@ export interface TripDocument {
   id: string;
   title: string;
   description: string;
-  kind: 'confirmation' | 'invoice' | 'receipt' | 'supplier';
+  kind: 'confirmation' | 'invoice' | 'receipt' | 'atol' | 'supplier';
   url: string | null;
   offlineAvailable: boolean;
   status: 'ready' | 'pending' | 'unavailable';
-  downloadAction: 'confirmation' | 'invoice' | 'acceptance' | null;
+  downloadAction: string | null;
+  version: string;
+  updatedAt: string;
+  mimeType: string;
 }
 
 export interface LinkExchangeRequest {

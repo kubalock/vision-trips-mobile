@@ -5,10 +5,11 @@ import { TripsService } from '../trips/trips.service.js';
 import { LinkTokenService } from '../security/link-token.service.js';
 import { TripActionsController } from './trip-actions.controller.js';
 import { AcceptanceNotificationsService } from './acceptance-notifications.service.js';
+import { PdfDocumentService } from './pdf-document.service.js';
 
 @Module({
   imports: [SessionsModule],
   controllers: [TripActionsController],
-  providers: [TripsService, AirtableService, LinkTokenService, AcceptanceNotificationsService],
+  providers: [TripsService, AirtableService, LinkTokenService, AcceptanceNotificationsService, PdfDocumentService],
 })
 export class TripActionsModule {}

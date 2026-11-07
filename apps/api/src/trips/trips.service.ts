@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { AccessScope, CabinDetail, CruisePort, ItineraryItem, ItineraryKind, PassengerAllocation, PaymentItem, RoomDetail, TravellerSummary, TripDocument, TripSnapshot } from '@vision-trips/contracts';
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { AirtableService, type AirtableRecord } from '../airtable/airtable.service.js';
 import { airlineFields, airportFields, bookingFields, brandFields, cabinFields, communicationFields, cruisePortFields, customerFields, elementFields, firstAttachmentUrl, firstString, locationFields, memberFields, numberValue, passengerFields, paymentFields, personFields, pick, roomFields, shipFields, strings, supplierFields, truthy, upsellFields } from './field-map.js';
 import { resolveStage } from './stage.js';
@@ -84,9 +84,9 @@ export class TripsService {
     const graph = recordGraph(allRelated);
     const itinerary = allRelated.elements.map((record, index) => mapElement(record, tripId, index, graph, hideSupplierInfo)).filter((item) => item.status.toLowerCase() !== 'cancelled');
     const travellers = mapTravellers(allRelated.customers, allRelated.people, accessScope);
-    const documents = mapDocuments(allRelated.elements, itinerary, tripId, stage, accessScope);
+    const documents = mapDocuments(allRelated.elements, itinerary, tripId, stage, accessScope, version);
     if (quotationAccepted && accessScope === 'primary_customer') {
-      documents.push({ id: `${tripId}:acceptance`, title: 'Quotation acceptance receipt', description: 'Evidence of your online acceptance', kind: 'confirmation', url: null, offlineAvailable: false, status: 'ready', downloadAction: 'acceptance' });
+      documents.push(document(`${tripId}:acceptance`, 'Quotation acceptance receipt', 'Evidence of your online acceptance', 'confirmation', 'acceptance', version));
     }
     const payments = accessScope === 'primary_customer'
       ? mapPayments(booking, allRelated.payments, stage, tripId)
@@ -96,6 +96,14 @@ export class TripsService {
     const communications = mapCommunications(allRelated.communications, tripId, accessScope);
     const brandName = firstString(brandValue('name')) || 'Your travel company';
     const protection = mapProtection(bookingValue, itinerary, brand, allRelated.members[0], graph.suppliers);
+    if (accessScope === 'primary_customer') {
+      for (const payment of payments?.items.filter((item) => item.status === 'paid') ?? []) {
+        documents.push(document(`${tripId}:receipt:${payment.id}`, `Payment receipt · ${payment.label}`, `${payment.completedDate ?? 'Payment received'} · ${formatMoney(payment.amount, payment.currency)}`, 'receipt', `receipt:${payment.id}`, `${version}:${payment.completedDate ?? payment.id}`));
+      }
+      if (protection.scheme === 'atol' && ((payments?.paid ?? 0) > 0 || !['quote', 'quote_expired'].includes(stage))) {
+        documents.push(document(`${tripId}:atol`, 'ATOL Certificate', `Financial protection · ATOL ${protection.atolNumber ?? ''}`.trim(), 'atol', 'atol', version));
+      }
+    }
     const summary = {
       reference: firstString(bookingValue('reference')) || 'Your trip', name: firstString(bookingValue('name')) || 'Your trip',
       departureDate: departure, returnDate: returns, heroImageUrl: firstAttachmentUrl(bookingValue('hero')), gallery: attachmentImages(bookingValue('gallery')),
@@ -584,11 +592,11 @@ function mapQuotationReview(
   ];
 }
 
-function mapDocuments(records: AirtableRecord[], itinerary: ItineraryItem[], tripId: string, stage: string, accessScope: AccessScope): TripDocument[] {
+function mapDocuments(records: AirtableRecord[], itinerary: ItineraryItem[], tripId: string, stage: string, accessScope: AccessScope, version: string): TripDocument[] {
   const isQuote = stage === 'quote' || stage === 'quote_expired';
-  const documents: TripDocument[] = [{ id: `${tripId}:confirmation`, title: isQuote ? 'Trip quotation' : 'Booking confirmation', description: 'Full itinerary and important information', kind: 'confirmation', url: null, offlineAvailable: false, status: 'ready', downloadAction: 'confirmation' }];
+  const documents: TripDocument[] = [document(`${tripId}:confirmation`, isQuote ? 'Trip quotation' : 'Booking confirmation', 'Full itinerary and important information', 'confirmation', 'confirmation', version)];
   if (accessScope === 'primary_customer' && !isQuote) {
-    documents.push({ id: `${tripId}:invoice`, title: 'Booking invoice', description: 'Your booking costs and payment history', kind: 'invoice', url: null, offlineAvailable: false, status: 'ready', downloadAction: 'invoice' });
+    documents.push(document(`${tripId}:invoice`, 'Booking invoice', 'Your booking costs and payment history', 'invoice', 'invoice', version));
   }
   records.forEach((record, index) => {
     const attachments = pick(record.fields, elementFields.docs);
@@ -596,11 +604,18 @@ function mapDocuments(records: AirtableRecord[], itinerary: ItineraryItem[], tri
     attachments.forEach((attachment, attachmentIndex) => {
       const file = attachment as { url?: unknown; filename?: unknown };
       if (typeof file.url !== 'string' || !file.url.startsWith('https://')) return;
-      documents.push({ id: publicChildId(tripId, `${record.id}:${attachmentIndex}`, 'doc'), title: safeText(file.filename) || 'Travel document', description: itinerary[index]?.title ?? 'Trip document', kind: 'supplier', url: file.url, offlineAvailable: false, status: 'ready', downloadAction: null });
+      const id = publicChildId(tripId, `${record.id}:${attachmentIndex}`, 'doc');
+      documents.push({ ...document(id, safeText(file.filename) || 'Travel document', itinerary[index]?.title ?? 'Trip document', 'supplier', `supplier:${id}`, `${version}:${file.url}`), url: file.url, mimeType: safeText((attachment as { type?: unknown }).type) || 'application/octet-stream' });
     });
   });
   return documents;
 }
+
+function document(id: string, title: string, description: string, kind: TripDocument['kind'], action: string, version: string): TripDocument {
+  return { id, title, description, kind, url: null, offlineAvailable: true, status: 'ready', downloadAction: action, version: createHash('sha256').update(version).digest('base64url').slice(0, 16), updatedAt: /^\d{4}-/.test(version) ? version.slice(0, 24) : new Date().toISOString(), mimeType: 'application/pdf' };
+}
+
+function formatMoney(amount: number, currency: string): string { return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(amount); }
 
 function publicTripId(baseId: string, recordId: string): string {
   const secret = process.env.VISION_LINK_SECRET;
