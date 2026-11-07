@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { AccessScope, CabinDetail, CruisePort, ItineraryItem, ItineraryKind, PassengerAllocation, PaymentItem, RoomDetail, TravellerSummary, TripDocument, TripSnapshot } from '@vision-trips/contracts';
 import { createHash, createHmac } from 'node:crypto';
 import { AirtableService, type AirtableRecord } from '../airtable/airtable.service.js';
-import { airlineFields, airportFields, bookingFields, brandFields, cabinFields, communicationFields, cruisePortFields, customerFields, elementFields, firstAttachmentUrl, firstString, locationFields, memberFields, numberValue, passengerFields, paymentFields, personFields, pick, roomFields, shipFields, strings, supplierFields, truthy, upsellFields } from './field-map.js';
+import { airlineFields, airportFields, bookingFields, brandFields, brandTemplateFields, cabinFields, communicationFields, cruisePortFields, customerFields, elementFields, firstAttachmentUrl, firstString, locationFields, memberFields, numberValue, passengerFields, paymentFields, personFields, pick, roomFields, shipFields, strings, supplierFields, truthy, upsellFields } from './field-map.js';
 import { resolveStage } from './stage.js';
 import { themeTokens } from './theme.js';
 
@@ -27,7 +27,7 @@ export class TripsService {
     ids.suppliers.push(...recordIds(pick(booking.fields, bookingFields.leadSupplier)));
     ids.suppliers.push(...upsells.flatMap((record) => recordIds(pick(record.fields, upsellFields.supplier))));
     ids.locations.push(...recordIds(pick(booking.fields, bookingFields.destinations)));
-    const [suppliers, airports, airlines, rooms, cabins, passengers, ships, cruisePorts, locations, operators] = await Promise.all([
+    const [suppliers, airports, airlines, rooms, cabins, passengers, ships, cruisePorts, locations, operators, brandTemplates] = await Promise.all([
       this.airtable.records(baseId, 'Suppliers', ids.suppliers),
       this.airtable.records(baseId, 'CMS [Airports]', ids.airports),
       this.airtable.records(baseId, 'CMS [Airlines]', ids.airlines),
@@ -38,12 +38,13 @@ export class TripsService {
       this.airtable.records(baseId, 'Bookings [Cruise Itinerary]', ids.cruisePorts),
       this.airtable.records(baseId, 'CMS [Locations]', ids.locations),
       this.airtable.records(baseId, 'CMS [Cruise Operators]', ids.operators),
+      this.airtable.records(baseId, process.env.AIRTABLE_BRAND_TEMPLATES_TABLE?.trim() || 'Brands & Branches [Templates]', strings(pick(brand.fields, brandFields.templates))),
     ]);
     const portLocationIds = cruisePorts.flatMap((record) => recordIds(pick(record.fields, cruisePortFields.port)));
     const portLocations = await this.airtable.records(baseId, 'CMS [Locations]', portLocationIds);
     return this.mapSnapshot(baseId, booking, brand, accessScope, {
       elements, payments, people, customers, upsells, communications, members, suppliers, airports, airlines, rooms, cabins, passengers, ships,
-      cruisePorts, locations: [...locations, ...portLocations], operators,
+      cruisePorts, locations: [...locations, ...portLocations], operators, brandTemplates,
     });
   }
 
@@ -100,6 +101,9 @@ export class TripsService {
     const brandName = firstString(brandValue('name')) || 'Your travel company';
     const protection = mapProtection(bookingValue, itinerary, brand, allRelated.members[0], graph.suppliers);
     if (accessScope === 'primary_customer') {
+      if (!['quote', 'quote_expired'].includes(stage)) documents.push(document(`${tripId}:front-file`, 'Booking front file', 'Printable booking overview, travellers, itinerary and payments', 'front_file', 'front-file', version));
+      if (protection.guaranteeAvailable) documents.push(document(`${tripId}:guarantee`, 'Safe Seat Plan guarantee', 'Travel Trust Association financial guarantee certificate', 'guarantee', 'guarantee', version));
+      for (const template of mapLetterTemplates(allRelated.brandTemplates, tripId)) documents.push(document(`${tripId}:letter:${template.id}`, template.name, template.subject || 'Personal letter from your travel expert', 'letter', `letter:${template.id}`, `${version}:${template.id}:${template.body}`));
       for (const payment of payments?.items.filter((item) => item.status === 'paid') ?? []) {
         documents.push(document(`${tripId}:receipt:${payment.id}`, `Payment receipt · ${payment.label}`, `${payment.completedDate ?? 'Payment received'} · ${formatMoney(payment.amount, payment.currency)}`, 'receipt', `receipt:${payment.id}`, `${version}:${payment.completedDate ?? payment.id}`));
       }
@@ -146,7 +150,7 @@ export class TripsService {
           displayFont: firstString(brandValue('fontDisplay')),
           bodyFont: firstString(brandValue('fontBody')),
         }),
-        profile: mapBrandProfile(brandValue),
+        profile: mapBrandProfile(brandValue, allRelated.brandTemplates, tripId),
       },
       summary: visibleSummary,
       experience: {
@@ -287,7 +291,7 @@ function mapTimeline(itinerary: ItineraryItem[], departure: string | null, now: 
   };
 }
 
-function mapBrandProfile(brandValue: (key: keyof typeof brandFields) => unknown): TripSnapshot['brand']['profile'] {
+function mapBrandProfile(brandValue: (key: keyof typeof brandFields) => unknown, brandTemplates: AirtableRecord[], tripId: string): TripSnapshot['brand']['profile'] {
   const socialLinks = ([['instagram', 'instagram'], ['facebook', 'facebook'], ['linkedin', 'linkedin'], ['x', 'x']] as const)
     .flatMap(([network, key]) => { const url = safeWebUrl(brandValue(key)); return url ? [{ network, url }] : []; });
   const reviewLinks = ([['trustpilot', 'trustpilot'], ['google', 'googleReviews']] as const)
@@ -318,7 +322,32 @@ function mapBrandProfile(brandValue: (key: keyof typeof brandFields) => unknown)
     reassurance,
     footerImages: attachmentImages(brandValue('footerImages')).map((image) => image.url),
     footerText: safeText(brandValue('footerContent')) || null,
+    letterTemplates: mapLetterTemplates(brandTemplates, tripId),
   };
+}
+
+function mapLetterTemplates(records: AirtableRecord[], tripId: string): TripSnapshot['brand']['profile']['letterTemplates'] {
+  return records.flatMap((record) => {
+    const type = safeText(pick(record.fields, brandTemplateFields.type));
+    const body = letterText(pick(record.fields, brandTemplateFields.letter));
+    if (!body || (type && type.toLowerCase() !== 'letter')) return [];
+    return [{
+      id: publicChildId(tripId, record.id, 'ltr'),
+      name: safeText(pick(record.fields, brandTemplateFields.name)) || 'Letter',
+      subject: safeText(pick(record.fields, brandTemplateFields.subject)) || null,
+      body,
+    }];
+  }).slice(0, 30);
+}
+
+function letterText(value: unknown): string {
+  return firstString(value)
+    .replace(/<\s*br\s*\/?\s*>/gi, '\n')
+    .replace(/<\/(?:p|div|li|h[1-6])\s*>/gi, '\n\n')
+    .replace(/<\s*li(?:\s[^>]*)?>/gi, '• ')
+    .replace(/<[^>]*>/g, '')
+    .replaceAll('&nbsp;', ' ').replaceAll('&amp;', '&').replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&quot;', '"').replaceAll('&#39;', "'")
+    .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, 12_000);
 }
 
 function mapDestinations(records: AirtableRecord[], tripId: string): TripSnapshot['destinations'] {
@@ -414,12 +443,13 @@ interface RelatedRecords {
   cruisePorts: AirtableRecord[];
   locations: AirtableRecord[];
   operators: AirtableRecord[];
+  brandTemplates: AirtableRecord[];
 }
 
-type RecordGraph = { [K in Exclude<keyof RelatedRecords, 'elements' | 'payments' | 'people' | 'customers' | 'upsells' | 'communications' | 'members'>]: Map<string, AirtableRecord> };
+type RecordGraph = { [K in Exclude<keyof RelatedRecords, 'elements' | 'payments' | 'people' | 'customers' | 'upsells' | 'communications' | 'members' | 'brandTemplates'>]: Map<string, AirtableRecord> };
 
 function emptyRelated(): RelatedRecords {
-  return { elements: [], payments: [], people: [], customers: [], upsells: [], communications: [], members: [], suppliers: [], airports: [], airlines: [], rooms: [], cabins: [], passengers: [], ships: [], cruisePorts: [], locations: [], operators: [] };
+  return { elements: [], payments: [], people: [], customers: [], upsells: [], communications: [], members: [], suppliers: [], airports: [], airlines: [], rooms: [], cabins: [], passengers: [], ships: [], cruisePorts: [], locations: [], operators: [], brandTemplates: [] };
 }
 
 function recordGraph(related: RelatedRecords): RecordGraph {
@@ -576,7 +606,7 @@ function mapProtection(
     : scheme === 'non_air_package' ? 'This is a package without a flight; check your booking confirmation for its financial protection.'
     : scheme === 'not_applicable' ? 'ATOL protection does not apply to this booking.'
     : 'See your booking confirmation for the financial protection that applies to this trip.';
-  return { scheme, atolNumber: holderNumber, licensing, summary, mode, contractType, holderName: holderName || null, organiserName: (mode.startsWith('agent_') ? leadSupplierName : memberName) || null, hasFlight };
+  return { scheme, atolNumber: holderNumber, licensing, summary, mode, contractType, holderName: holderName || null, organiserName: (mode.startsWith('agent_') ? leadSupplierName : memberName) || null, hasFlight, guaranteeAvailable: proposition.includes('tta') || proposition.includes('travel trust') };
 }
 
 function resolveProtectionMode(selection: string, hasFlight: boolean, isGlobal: boolean): string {

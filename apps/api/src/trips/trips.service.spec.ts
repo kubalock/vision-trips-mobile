@@ -63,6 +63,7 @@ describe('TripsService', () => {
           'Image #1': [{ url: 'https://files.example/inspiration.jpg' }],
           'Template | Reason to Book #1': 'Independent expertise',
           'Template | Reason to Book #1 Extended': 'Advice built around you.',
+          Proposition: 'TTA',
           'Mint | API Key': 'secret',
         },
       },
@@ -103,6 +104,7 @@ describe('TripsService', () => {
         locations: [{ id: 'recLOCATIONABCDEF', fields: { Name: 'Lisbon', Country: 'Portugal', 'Destination Overview': '<p>Hilltop views and tiled streets.</p>', 'Key Attractions/Experiences': ['Tram 28', 'Belém'], Latitude: 38.72, Longitude: -9.14, 'Featured Image': [{ url: 'https://files.example/lisbon.jpg' }] } }],
         upsells: [{ id: 'recUPSELLABCDEFGH', fields: { Name: 'Private city tour', Description: '<p>A half-day private guide.</p>', 'Featured Image': [{ url: 'https://files.example/tour.jpg' }], Supplier: ['recSUPPLIERABCDEF'] } }],
         communications: [{ id: 'recCOMMUNICATIONA', fields: { Type: ['Email'], Subject: 'Your documents are ready', 'Email Template': '<p>Your travel documents are now available.</p>', Sent: true, Date: '2026-11-05T10:00:00Z' } }],
+        brandTemplates: [{ id: 'recTEMPLATEAAAAAA', fields: { 'Template Name': 'Welcome letter', 'Template Type': 'Letter', Subject: 'Welcome aboard', Letter: 'Hello {{first_name}},\n\nYour trip is {{trip_name}}.' } }],
       },
     );
 
@@ -120,6 +122,10 @@ describe('TripsService', () => {
     expect(snapshot.documents.find((document) => document.kind === 'supplier')).toMatchObject({ title: 'Flight ticket.pdf', status: 'ready' });
     expect(snapshot.documents.find((document) => document.kind === 'receipt')).toMatchObject({ title: 'Payment receipt · Deposit Payment', mimeType: 'application/pdf' });
     expect(snapshot.documents.find((document) => document.kind === 'atol')).toMatchObject({ title: 'ATOL Certificate', downloadAction: 'atol' });
+    expect(snapshot.documents.find((document) => document.kind === 'front_file')).toMatchObject({ title: 'Booking front file', downloadAction: 'front-file' });
+    expect(snapshot.documents.find((document) => document.kind === 'guarantee')).toMatchObject({ title: 'Safe Seat Plan guarantee', downloadAction: 'guarantee' });
+    expect(snapshot.documents.find((document) => document.kind === 'letter')).toMatchObject({ title: 'Welcome letter' });
+    expect(snapshot.brand.profile.letterTemplates[0]).toMatchObject({ name: 'Welcome letter', subject: 'Welcome aboard', body: 'Hello {{first_name}},\n\nYour trip is {{trip_name}}.' });
     expect(snapshot.schemaVersion).toBe(3);
     expect(snapshot.experience).toMatchObject({ overview: 'A hand-picked Mediterranean journey.', agentName: 'Jamie Agent' });
     expect(snapshot.support).toMatchObject({ phone: '020 7946 0123', email: 'help@example.com', emergencyPhone: '07700 900123' });

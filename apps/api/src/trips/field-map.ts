@@ -62,6 +62,7 @@ export const brandFields = {
   image6: ['Image #6'], image7: ['Image #7'], image8: ['Image #8'], image9: ['Image #9'], image10: ['Image #10'],
   reason1: ['Template | Reason to Book #1'], reason1Text: ['Template | Reason to Book #1 Extended'], reason2: ['Template | Reason to Book #2'], reason2Text: ['Template | Reason to Book #2 Extended'],
   reason3: ['Template | Reason to Book #3'], reason3Text: ['Template | Reason to Book #3 Extended'], reason4: ['Template | Reason to Book #4'], reason4Text: ['Template | Reason to Book #4 Extended'],
+  templates: ['Brands & Branches [Templates]', 'Templates'],
   mintApiKey: ['Mint | API Key'], mintBusinessUnit: ['Mint | Business Unit'], mintAllowCustom: ['Mint | Allow Custom Payments'], mintMethods: ['Mint | Custom Payment Methods'], mintWebhook: ['Webhook URL'],
 } as const;
 
@@ -104,6 +105,7 @@ export const locationFields = {
 export const cruisePortFields = { day: ['Day'], port: ['Port'], description: ['Port (SinGS)', 'Overview'], arrive: ['Arrive'], depart: ['Depart'] } as const;
 export const upsellFields = { name: ['Name', 'Title'], description: ['Further Information', 'Description'], image: ['Upsell Featured Image', 'Featured Image', 'Image'], supplier: ['Supplier'] } as const;
 export const communicationFields = { type: ['Type'], subject: ['Custom Subject', 'Subject', 'Name'], content: ['Custom Content', 'Email Template'], date: ['Sent At', 'Scheduled For', 'Date'], sent: ['Sent'], status: ['Status'], selfOnly: ['Send To Self Only'] } as const;
+export const brandTemplateFields = { name: ['Template Name', 'Name'], type: ['Template Type', 'Type'], letter: ['Letter'], subject: ['Subject'] } as const;
 
 export const paymentFields = {
   amount: ['Amount'], currency: ['Mint: Currency', 'Currency'], type: ['Payment Type'], customerType: ['Customer Payment Type'],

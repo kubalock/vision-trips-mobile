@@ -106,6 +106,7 @@ export interface BrandProfile {
   reassurance: Array<{ title: string; text: string }>;
   footerImages: string[];
   footerText: string | null;
+  letterTemplates: Array<{ id: string; name: string; subject: string | null; body: string }>;
 }
 
 export interface TripCommunication {
@@ -334,6 +335,7 @@ export interface TripProtection {
   holderName: string | null;
   organiserName: string | null;
   hasFlight: boolean;
+  guaranteeAvailable: boolean;
 }
 
 export interface BookingStatus {
@@ -491,7 +493,7 @@ export interface TripDocument {
   id: string;
   title: string;
   description: string;
-  kind: 'confirmation' | 'invoice' | 'receipt' | 'atol' | 'supplier';
+  kind: 'confirmation' | 'invoice' | 'receipt' | 'atol' | 'front_file' | 'guarantee' | 'letter' | 'supplier';
   url: string | null;
   offlineAvailable: boolean;
   status: 'ready' | 'pending' | 'unavailable';
