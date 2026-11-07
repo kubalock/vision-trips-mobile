@@ -58,6 +58,11 @@ describe('TripsService', () => {
           'Customer | Email Address': 'help@example.com',
           'Customer | Website': 'example.com',
           'Customer | Emergency Telephone': '07700 900123',
+          'Google Maps Link': 'https://maps.google.com/?q=Example+Travel',
+          'Team Photo': [{ url: 'https://files.example/team.jpg' }],
+          'Image #1': [{ url: 'https://files.example/inspiration.jpg' }],
+          'Template | Reason to Book #1': 'Independent expertise',
+          'Template | Reason to Book #1 Extended': 'Advice built around you.',
           'Mint | API Key': 'secret',
         },
       },
@@ -118,12 +123,16 @@ describe('TripsService', () => {
     expect(snapshot.schemaVersion).toBe(3);
     expect(snapshot.experience).toMatchObject({ overview: 'A hand-picked Mediterranean journey.', agentName: 'Jamie Agent' });
     expect(snapshot.support).toMatchObject({ phone: '020 7946 0123', email: 'help@example.com', emergencyPhone: '07700 900123' });
+    expect(snapshot.support.whatsappUrl).toBeNull();
+    expect(snapshot.brand.profile).toMatchObject({ teamPhotoUrl: 'https://files.example/team.jpg', mapUrl: 'https://maps.google.com/?q=Example+Travel', whyBook: [{ title: 'Independent expertise', text: 'Advice built around you.' }] });
+    expect(snapshot.brand.profile.gallery?.[0]).toMatchObject({ url: 'https://files.example/inspiration.jpg' });
     expect(snapshot.protection).toMatchObject({ scheme: 'atol', atolNumber: '1234' });
     expect(snapshot.bookingStatus.supplierConfirmationsReceived).toBe(true);
     expect(snapshot.bookingStatus.tasks.travelDocuments).toBe(true);
     expect(snapshot.quotation.status).toBe('not_applicable');
     expect(snapshot.timeline).toMatchObject({ nextItemTitle: 'London Heathrow to Lisbon', nextItemDate: '2027-03-01' });
     expect(snapshot.destinations[0]).toMatchObject({ name: 'Lisbon', country: 'Portugal', overview: 'Hilltop views and tiled streets.', coordinates: { latitude: 38.72, longitude: -9.14 } });
+    expect(snapshot.destinations[0]?.directionsUrl).toContain('38.72%2C-9.14');
     expect(snapshot.summary.gallery[0]).toMatchObject({ url: 'https://files.example/trip-gallery.jpg', alt: 'Coastline' });
     expect(snapshot.extras[0]).toMatchObject({ name: 'Private city tour', description: 'A half-day private guide.', supplierName: 'Trusted Air' });
     expect(snapshot.communications[0]).toMatchObject({ type: 'Email', subject: 'Your documents are ready', content: 'Your travel documents are now available.' });

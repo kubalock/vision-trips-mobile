@@ -165,6 +165,7 @@ export class TripsService {
         emergencyPhone: safePhone(bookingValue('emergencyPhone')) ?? safePhone(brandValue('emergencyPhone')),
         outOfHoursUrl: safeWebUrl(bookingValue('outOfHoursLink')) ?? safeWebUrl(brandValue('outOfHoursLink')),
         outOfHoursEmail: safeEmail(bookingValue('outOfHoursEmail')) ?? safeEmail(brandValue('outOfHoursEmail')),
+        whatsappUrl: whatsappUrl(safePhone(brandValue('phone'))),
       },
       protection,
       bookingStatus: {
@@ -293,6 +294,14 @@ function mapBrandProfile(brandValue: (key: keyof typeof brandFields) => unknown)
     .flatMap(([provider, key]) => { const url = safeWebUrl(brandValue(key)); return url ? [{ provider, url }] : []; });
   const physical = safeText(brandValue('physicalAddress'));
   const address = physical || [safeText(brandValue('address1')), safeText(brandValue('address2')), safeText(brandValue('town')), safeText(brandValue('postcode')), safeText(brandValue('country'))].filter(Boolean).join(', ');
+  const whyBook = ([['reason1', 'reason1Text'], ['reason2', 'reason2Text'], ['reason3', 'reason3Text'], ['reason4', 'reason4Text']] as const).flatMap(([titleKey, textKey]) => { const title = safeText(brandValue(titleKey)); return title ? [{ title, text: safeText(brandValue(textKey)) || null }] : []; });
+  const gallery = (['image1', 'image2', 'image3', 'image4', 'image5', 'image6', 'image7', 'image8', 'image9', 'image10'] as const).flatMap((key) => { const url = firstAttachmentUrl(brandValue(key)); return url ? [{ url, alt: safeText(brandValue('name')) || 'Travel inspiration' }] : []; });
+  const reassurance = [
+    { title: 'Your own travel expert', text: safeText(brandValue('name')) || 'Personal support before, during and after travel' },
+    { title: 'Built around you', text: 'Tailored, not off the shelf' },
+    { title: 'Financially protected', text: 'Protection as set out in your booking documents' },
+    ...(safePhone(brandValue('emergencyPhone')) ? [{ title: 'With you while away', text: 'Out-of-hours support when you need it' }] : []),
+  ];
   return {
     slogan: safeText(brandValue('slogan')) || null,
     about: safeText(brandValue('about')) || null,
@@ -302,6 +311,13 @@ function mapBrandProfile(brandValue: (key: keyof typeof brandFields) => unknown)
     reviewLinks,
     privacyUrl: safeWebUrl(brandValue('privacy')),
     complaintsUrl: safeWebUrl(brandValue('complaints')),
+    whyBook,
+    teamPhotoUrl: firstAttachmentUrl(brandValue('teamPhoto')),
+    gallery,
+    mapUrl: safeWebUrl(brandValue('mapsLink')),
+    reassurance,
+    footerImages: attachmentImages(brandValue('footerImages')).map((image) => image.url),
+    footerText: safeText(brandValue('footerContent')) || null,
   };
 }
 
@@ -325,6 +341,7 @@ function mapDestinations(records: AirtableRecord[], tripId: string): TripSnapsho
       travelAdviceUrl: safeWebUrl(pick(record.fields, locationFields.travelAdvice)),
       imageUrl: firstAttachmentUrl(pick(record.fields, locationFields.image)),
       coordinates: latitude !== null && longitude !== null ? { latitude, longitude } : null,
+      directionsUrl: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(latitude !== null && longitude !== null ? `${latitude},${longitude}` : name)}`,
     }];
   }).slice(0, 12);
 }
@@ -760,6 +777,13 @@ function safeEmail(value: unknown): string | null {
 function safePhone(value: unknown): string | null {
   const phone = safeText(value).replace(/[^0-9+() .-]/g, '').slice(0, 40);
   return /\d{5}/.test(phone.replace(/\D/g, '')) ? phone : null;
+}
+
+function whatsappUrl(phone: string | null): string | null {
+  if (!phone) return null;
+  const compact = phone.replace(/\D/g, '');
+  if (!/^(?:44|0)7\d{8,10}$/.test(compact)) return null;
+  return `https://wa.me/${compact.startsWith('0') ? `44${compact.slice(1)}` : compact}`;
 }
 
 function emergencyContact(nameValue: unknown, phoneValue: unknown): { name: string; phone: string } | null {

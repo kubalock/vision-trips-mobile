@@ -1,8 +1,10 @@
 import { Component, input } from '@angular/core';
 import type { ItineraryItem } from '@vision-trips/contracts';
+import { PhotoGallery } from '../../shared/photo-gallery';
 
 @Component({
   selector: 'app-itinerary-section',
+  imports: [PhotoGallery],
   template: `
     <section class="vt-section" aria-labelledby="itinerary-title">
       <h2 id="itinerary-title" class="vt-h2">Your itinerary</h2>
@@ -16,7 +18,7 @@ import type { ItineraryItem } from '@vision-trips/contracts';
               <ol class="vt-day__items">
                 @for (item of group.items; track item.id) {
                   <li class="vt-el">
-                    @if (item.images[0]; as image) { <img class="h-40 w-full object-cover" [src]="image.url" [alt]="image.alt" loading="lazy" /> }
+                    @if (item.images.length) { <app-photo-gallery [photos]="item.images" [limit]="4" /> }
                     <div class="vt-el__row">
                       <div class="vt-el__main">
                         <div><p class="vt-el__kind">{{ item.typeLabel }}</p><h4 class="vt-el__title">{{ item.title }}</h4></div>

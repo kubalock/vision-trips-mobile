@@ -99,6 +99,13 @@ export interface BrandProfile {
   reviewLinks: Array<{ provider: 'trustpilot' | 'google'; url: string }>;
   privacyUrl: string | null;
   complaintsUrl: string | null;
+  whyBook: Array<{ title: string; text: string | null }>;
+  teamPhotoUrl: string | null;
+  gallery: ItineraryImage[];
+  mapUrl: string | null;
+  reassurance: Array<{ title: string; text: string }>;
+  footerImages: string[];
+  footerText: string | null;
 }
 
 export interface TripCommunication {
@@ -296,6 +303,7 @@ export interface DestinationGuide {
   travelAdviceUrl: string | null;
   imageUrl: string | null;
   coordinates: { latitude: number; longitude: number } | null;
+  directionsUrl?: string;
 }
 
 export interface TripExperience {
@@ -313,6 +321,7 @@ export interface TripSupport {
   emergencyPhone: string | null;
   outOfHoursUrl: string | null;
   outOfHoursEmail: string | null;
+  whatsappUrl?: string | null;
 }
 
 export interface TripProtection {

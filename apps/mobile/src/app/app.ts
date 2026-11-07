@@ -20,13 +20,14 @@ import { ExternalContentSection } from './features/trip/external-content-section
 import { StageExperienceSection } from './features/trip/stage-experience-section';
 import { BookingJourneySection } from './features/trip/booking-journey-section';
 import { CustomerAccountSection } from './features/account/customer-account-section';
+import { BrandSupportSection } from './features/trip/brand-support-section';
 
 type AppView = 'home' | 'itinerary' | 'payments' | 'documents' | 'help' | 'account';
 type TripRefreshState = 'idle' | 'refreshing' | 'fresh' | 'stale' | 'offline' | 'error';
 
 @Component({
   selector: 'app-root',
-  imports: [BookingJourneySection, CommunicationsSection, CustomerAccountSection, DestinationsSection, DocumentsSection, ExtrasSection, ExternalContentSection, ItinerarySection, PaymentsSection, StageExperienceSection],
+  imports: [BookingJourneySection, BrandSupportSection, CommunicationsSection, CustomerAccountSection, DestinationsSection, DocumentsSection, ExtrasSection, ExternalContentSection, ItinerarySection, PaymentsSection, StageExperienceSection],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })

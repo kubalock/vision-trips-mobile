@@ -57,6 +57,11 @@ export const brandFields = {
   instagram: ['Social Media: Instagram'], facebook: ['Social Media: Facebook'], linkedin: ['Social Media: LinkedIn'], x: ['Social Media: X/Twitter'], trustpilot: ['Trustpilot Reviews URL'], googleReviews: ['Google Reviews URL'], privacy: ['Privacy Policy'], complaints: ['Complaints'],
   phone: ['Customer | Telephone', 'Telephone', 'Phone'], email: ['Customer | Email Address', 'Email'], website: ['Customer | Website', 'Website'],
   emergencyPhone: ['Customer | Emergency Telephone'], outOfHoursLink: ['Out of Hours Link'], outOfHoursEmail: ['Out of Hours Email'],
+  mapsLink: ['Google Maps Link'], teamPhoto: ['Team Photo'], footerImages: ['Footer'], footerContent: ['Footer Content'],
+  image1: ['Image #1'], image2: ['Image #2'], image3: ['Image #3'], image4: ['Image #4'], image5: ['Image #5'],
+  image6: ['Image #6'], image7: ['Image #7'], image8: ['Image #8'], image9: ['Image #9'], image10: ['Image #10'],
+  reason1: ['Template | Reason to Book #1'], reason1Text: ['Template | Reason to Book #1 Extended'], reason2: ['Template | Reason to Book #2'], reason2Text: ['Template | Reason to Book #2 Extended'],
+  reason3: ['Template | Reason to Book #3'], reason3Text: ['Template | Reason to Book #3 Extended'], reason4: ['Template | Reason to Book #4'], reason4Text: ['Template | Reason to Book #4 Extended'],
   mintApiKey: ['Mint | API Key'], mintBusinessUnit: ['Mint | Business Unit'], mintAllowCustom: ['Mint | Allow Custom Payments'], mintMethods: ['Mint | Custom Payment Methods'], mintWebhook: ['Webhook URL'],
 } as const;
 
