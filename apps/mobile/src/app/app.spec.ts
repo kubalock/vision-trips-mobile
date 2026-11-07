@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { App } from './app';
+import { VisionApiService } from './core/api/vision-api.service';
 
 describe('App', () => {
   beforeEach(async () => {
@@ -55,5 +56,30 @@ describe('App', () => {
     await app.refreshCurrentTrip();
 
     expect(app.trip().freshness.status).toBe('offline');
+  });
+
+  it('shares one token rotation between concurrent refreshes', async () => {
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance as unknown as {
+      refreshSession: (session: { accessToken: string; refreshToken: string }) => Promise<unknown>;
+    };
+    const api = TestBed.inject(VisionApiService);
+    const refreshed = {
+      accessToken: 'new-access',
+      accessExpiresAt: '2026-11-07T22:15:00Z',
+      refreshToken: 'new-refresh',
+      refreshExpiresAt: '2026-12-07T22:00:00Z',
+    };
+    const refresh = vi.spyOn(api, 'refreshSession').mockResolvedValue(refreshed);
+    const expired = { accessToken: 'old-access', refreshToken: 'old-refresh' };
+
+    const [first, second] = await Promise.all([
+      app.refreshSession(expired),
+      app.refreshSession(expired),
+    ]);
+
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(first).toBe(refreshed);
+    expect(second).toBe(refreshed);
   });
 });

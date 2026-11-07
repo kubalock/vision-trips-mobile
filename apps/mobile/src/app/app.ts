@@ -95,6 +95,7 @@ export class App implements OnInit, OnDestroy {
   private networkListener: PluginListenerHandle | null = null;
   private resendTimer: ReturnType<typeof setInterval> | null = null;
   private externalContentTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly sessionRefreshes = new Map<string, Promise<MobileSession>>();
   protected readonly canContinue = computed(() => /^app[A-Za-z0-9]{14}$/.test(this.baseId().trim()) && /^rec[A-Za-z0-9]{14}$/.test(this.recordId().trim()) && !this.submitting());
 
   ngOnInit(): void {
@@ -398,14 +399,13 @@ export class App implements OnInit, OnDestroy {
     if (tripId) this.setTripRefreshState(tripId, 'refreshing');
     if (showError) this.error.set('');
     try {
-      let activeSession = currentSession;
+      let activeSession = await this.sessionForRequest(currentSession);
       let snapshot: TripSnapshot;
       try {
         snapshot = await this.api.refreshTrip(activeSession.accessToken);
       } catch (error) {
         if (!(error instanceof HttpErrorResponse) || error.status !== 401) throw error;
-        activeSession = await this.api.refreshSession(activeSession.refreshToken);
-        this.session.set(activeSession);
+        activeSession = await this.refreshSession(activeSession);
         snapshot = await this.api.refreshTrip(activeSession.accessToken);
       }
       const previous = this.trip();
@@ -520,7 +520,7 @@ export class App implements OnInit, OnDestroy {
   protected async saveCustomerPreferences(preferences: CustomerPreferences): Promise<void> {
     const currentSession = this.session(); if (!currentSession || this.accountSaving()) return;
     this.accountSaving.set(true); this.accountNotice.set('');
-    try { const result = await this.api.updateCustomerPreferences(preferences, currentSession.accessToken); this.customerAccount.update((account) => account ? { ...account, preferences: result.preferences } : account); this.accountNotice.set(`Saved across ${result.updatedRecords} customer ${result.updatedRecords === 1 ? 'record' : 'records'}.`); }
+    try { const result = await this.withSession(currentSession, (accessToken) => this.api.updateCustomerPreferences(preferences, accessToken)); this.customerAccount.update((account) => account ? { ...account, preferences: result.preferences } : account); this.accountNotice.set(`Saved across ${result.updatedRecords} customer ${result.updatedRecords === 1 ? 'record' : 'records'}.`); }
     catch (error) { this.error.set(this.apiError(error, 'We could not save your preferences. Please try again.')); }
     finally { this.accountSaving.set(false); }
   }
@@ -528,7 +528,7 @@ export class App implements OnInit, OnDestroy {
   protected async openCustomerAccountTrip(accountTripId: string): Promise<void> {
     const currentSession = this.session(); if (!currentSession || this.openingAccountTripId()) return;
     this.openingAccountTripId.set(accountTripId);
-    try { const response = await this.api.openCustomerAccountTrip(accountTripId, currentSession.accessToken); await this.acceptAuthorized({ status: 'authorized', exchangeId: 'account', expiresAt: response.session.refreshExpiresAt, snapshot: response.snapshot, session: response.session }); }
+    try { const response = await this.withSession(currentSession, (accessToken) => this.api.openCustomerAccountTrip(accountTripId, accessToken)); await this.acceptAuthorized({ status: 'authorized', exchangeId: 'account', expiresAt: response.session.refreshExpiresAt, snapshot: response.snapshot, session: response.session }); }
     catch (error) { this.error.set(this.apiError(error, 'We could not open that trip. Please refresh your account.')); }
     finally { this.openingAccountTripId.set(null); }
   }
@@ -545,7 +545,7 @@ export class App implements OnInit, OnDestroy {
   private async loadCustomerAccount(): Promise<void> {
     const currentSession = this.session(); if (!currentSession || this.accountLoading() || this.trip()?.accessScope !== 'primary_customer') return;
     this.accountLoading.set(true); this.accountNotice.set(''); this.error.set('');
-    try { this.customerAccount.set(await this.api.customerAccount(currentSession.accessToken)); }
+    try { this.customerAccount.set(await this.withSession(currentSession, (accessToken) => this.api.customerAccount(accessToken))); }
     catch (error) { this.customerAccount.set(null); this.error.set(this.apiError(error, 'We could not load your customer account.')); }
     finally { this.accountLoading.set(false); }
   }
@@ -562,7 +562,7 @@ export class App implements OnInit, OnDestroy {
     const currentSession = this.session(); if (!currentSession || this.openingRelatedId()) return;
     this.openingRelatedId.set(comparisonId); this.error.set('');
     try {
-      const response = await this.api.openRelatedQuotation(comparisonId, currentSession.accessToken);
+      const response = await this.withSession(currentSession, (accessToken) => this.api.openRelatedQuotation(comparisonId, accessToken));
       await this.acceptAuthorized({ status: 'authorized', exchangeId: 'related', expiresAt: response.session.refreshExpiresAt, snapshot: response.snapshot, session: response.session });
     } catch (error) { this.error.set(this.apiError(error, 'We could not open that quotation. Refresh and try again.')); }
     finally { this.openingRelatedId.set(null); }
@@ -570,7 +570,7 @@ export class App implements OnInit, OnDestroy {
 
   private async loadRelatedQuotations(): Promise<void> {
     const currentSession = this.session(); if (!currentSession || !this.online() || this.trip()?.accessScope !== 'primary_customer') { this.relatedQuotations.set([]); return; }
-    try { this.relatedQuotations.set((await this.api.relatedQuotations(currentSession.accessToken)).quotations); } catch { this.relatedQuotations.set([]); }
+    try { this.relatedQuotations.set((await this.withSession(currentSession, (accessToken) => this.api.relatedQuotations(accessToken))).quotations); } catch { this.relatedQuotations.set([]); }
   }
 
   protected openAnotherTrip(): void {
@@ -601,13 +601,13 @@ export class App implements OnInit, OnDestroy {
     if (this.tripRefreshStates()[tripId] === 'refreshing') return;
     this.setTripRefreshState(tripId, 'refreshing');
     try {
-      let session = saved.session;
+      let session = await this.sessionForRequest(saved.session);
       let snapshot: TripSnapshot;
       try {
         snapshot = await this.api.refreshTrip(session.accessToken);
       } catch (error) {
         if (!(error instanceof HttpErrorResponse) || error.status !== 401) throw error;
-        session = await this.api.refreshSession(session.refreshToken);
+        session = await this.refreshSession(session);
         snapshot = await this.api.refreshTrip(session.accessToken);
       }
       await this.savedTrips.save(snapshot, session);
@@ -742,13 +742,12 @@ export class App implements OnInit, OnDestroy {
     this.externalContentLoading.set(showLoading && !this.externalContent());
     this.externalContentFailed.set(false);
     try {
-      let session = currentSession;
+      let session = await this.sessionForRequest(currentSession);
       let content: ExternalTripContent;
       try { content = await this.api.externalContent(session.accessToken); }
       catch (error) {
         if (!(error instanceof HttpErrorResponse) || error.status !== 401) throw error;
-        session = await this.api.refreshSession(session.refreshToken);
-        this.session.set(session);
+        session = await this.refreshSession(session);
         content = await this.api.externalContent(session.accessToken);
       }
       this.externalContent.set(content);
@@ -759,6 +758,42 @@ export class App implements OnInit, OnDestroy {
       this.externalContentFailed.set(true);
       this.externalContentTimer = setTimeout(() => { if (this.trip() && this.online()) void this.loadExternalContent(false); }, 60_000);
     } finally { this.externalContentLoading.set(false); }
+  }
+
+  private sessionForRequest(session: MobileSession): Promise<MobileSession> {
+    const accessExpiresAt = Date.parse(session.accessExpiresAt);
+    const accessIsExpired = !Number.isFinite(accessExpiresAt) || accessExpiresAt <= Date.now() + 30_000;
+    return accessIsExpired ? this.refreshSession(session) : Promise.resolve(session);
+  }
+
+  private async withSession<T>(session: MobileSession, request: (accessToken: string) => Promise<T>): Promise<T> {
+    let activeSession = await this.sessionForRequest(session);
+    try {
+      return await request(activeSession.accessToken);
+    } catch (error) {
+      if (!(error instanceof HttpErrorResponse) || error.status !== 401) throw error;
+      activeSession = await this.refreshSession(activeSession);
+      return request(activeSession.accessToken);
+    }
+  }
+
+  private refreshSession(expiredSession: MobileSession): Promise<MobileSession> {
+    const refreshToken = expiredSession.refreshToken;
+    const pending = this.sessionRefreshes.get(refreshToken);
+    if (pending) return pending;
+
+    const request = this.api.refreshSession(refreshToken).then(async (session) => {
+      if (this.session()?.refreshToken === refreshToken) {
+        this.session.set(session);
+        const snapshot = this.trip();
+        if (snapshot) this.storedSecurely.set(await this.savedTrips.save(snapshot, session));
+      }
+      return session;
+    }).finally(() => {
+      this.sessionRefreshes.delete(refreshToken);
+    });
+    this.sessionRefreshes.set(refreshToken, request);
+    return request;
   }
 
   protected async downloadCalendar(): Promise<void> {
