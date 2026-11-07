@@ -27,3 +27,9 @@ Mint credentials and the Airtable automation webhook remain in the Airtable `Bra
 ## External content
 
 External content is requested through the API, so flight, Places, Widgety and AI credentials never enter the mobile bundle. The Google Maps embed key is included only in restricted iframe URLs and should be locked to the app's allowed origins. Configure providers in `apps/api/.env`; Open-Meteo weather works without a key. Missing providers, rejected property matches and upstream failures are omitted without affecting the Airtable itinerary. Live flights refresh every three minutes, weather is cached for 30 minutes, Places and Widgety use longer positive and negative caches, and AI copy is generated asynchronously and quality-checked before display.
+
+## Customer email automations
+
+Set `RESEND_API_KEY`, `VISION_EMAIL_FROM`, `VISION_AUTOMATION_KEY` and `VISION_TRIP_LINK_BASE_URL` in `apps/api/.env`. Airtable automations can then call `POST /v1/notifications/customer` with the `X-Vision-Key` header and JSON containing `baseId`, `recordId`, `template` and an optional stable `idempotencyKey`. Supported templates are `balance_reminder`, `documents_issued`, `payment_received`, `welcome_home`, `quote_reminder` and `custom`. Custom messages also accept `subject`, `heading` and plain-text `body`.
+
+The API always resolves the recipient from the booking, so this endpoint cannot be used as an arbitrary email relay. Successful deliveries are deduplicated in the durable SQLite store and recorded as comments on the Airtable booking. If email delivery succeeds but the Airtable comment fails, retrying the same request records the missing comment without resending the email.

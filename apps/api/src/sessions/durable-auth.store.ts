@@ -43,6 +43,9 @@ export class DurableAuthStore implements OnModuleDestroy {
         exchange_id TEXT PRIMARY KEY, payload TEXT NOT NULL, expires_at INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS verification_challenges_expiry ON verification_challenges(expires_at);
+      CREATE TABLE IF NOT EXISTS notification_deliveries (
+        delivery_key TEXT PRIMARY KEY, status TEXT NOT NULL, delivered_at INTEGER
+      );
     `);
   }
 
@@ -85,6 +88,17 @@ export class DurableAuthStore implements OnModuleDestroy {
   deleteChallenge(exchangeId: string): void {
     this.database.prepare('DELETE FROM verification_challenges WHERE exchange_id = ?').run(exchangeId);
   }
+
+  beginNotificationDelivery(key: string): 'new' | 'pending' | 'delivered_unaudited' | 'complete' {
+    const existing = this.database.prepare('SELECT status FROM notification_deliveries WHERE delivery_key = ?').get(key) as { status: 'pending' | 'delivered_unaudited' | 'complete' } | undefined;
+    if (existing) return existing.status;
+    this.database.prepare("INSERT INTO notification_deliveries (delivery_key, status) VALUES (?, 'pending')").run(key);
+    return 'new';
+  }
+
+  markNotificationDelivered(key: string): void { this.database.prepare("UPDATE notification_deliveries SET status = 'delivered_unaudited', delivered_at = ? WHERE delivery_key = ?").run(Date.now(), key); }
+  completeNotificationDelivery(key: string): void { this.database.prepare("UPDATE notification_deliveries SET status = 'complete' WHERE delivery_key = ?").run(key); }
+  releaseNotificationDelivery(key: string): void { this.database.prepare("DELETE FROM notification_deliveries WHERE delivery_key = ? AND status = 'pending'").run(key); }
 
   onModuleDestroy(): void { this.database.close(); }
 
