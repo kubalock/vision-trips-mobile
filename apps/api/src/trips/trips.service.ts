@@ -88,8 +88,9 @@ export class TripsService {
     if (quotationAccepted && accessScope === 'primary_customer') {
       documents.push(document(`${tripId}:acceptance`, 'Quotation acceptance receipt', 'Evidence of your online acceptance', 'confirmation', 'acceptance', version));
     }
+    const mintReady = Boolean(firstString(brandValue('mintApiKey')) && firstString(brandValue('mintBusinessUnit')) && firstString(bookingValue('mintBookingId')).startsWith('BK.'));
     const payments = accessScope === 'primary_customer'
-      ? mapPayments(booking, allRelated.payments, stage, tripId)
+      ? mapPayments(booking, allRelated.payments, stage, tripId, mintReady, truthy(brandValue('mintAllowCustom')))
       : undefined;
     const destinations = mapDestinations(allRelated.locations, tripId);
     const extras = mapExtras(allRelated.upsells, graph.suppliers, tripId, hideSupplierInfo);
@@ -504,7 +505,7 @@ function resolveProtectionMode(selection: string, hasFlight: boolean, isGlobal: 
   return hasFlight ? 'agent_single_contract' : 'not_applicable';
 }
 
-function mapPayments(booking: AirtableRecord, records: AirtableRecord[], stage: string, tripId: string) {
+function mapPayments(booking: AirtableRecord, records: AirtableRecord[], stage: string, tripId: string, mintReady: boolean, allowCustom: boolean) {
   const currency = safeCurrency(pick(booking.fields, bookingFields.currency));
   const now = new Date().toISOString().slice(0, 10);
   const items: PaymentItem[] = records.map((record, index) => {
@@ -523,7 +524,7 @@ function mapPayments(booking: AirtableRecord, records: AirtableRecord[], stage: 
       label: safeText(value('customerType')) || (paid ? 'Payment received' : 'Payment due'),
       amount: Math.abs(amount), currency: safeCurrency(value('currency')) || currency, status, dueDate,
       completedDate: dateString(value('completed')),
-      canPay: !paid && !local && !refund && amount > 0 && Boolean(paymentUrl) && (stage !== 'quote' || truthy(value('showOnQuote'))),
+      canPay: !paid && !local && !refund && amount > 0 && (Boolean(paymentUrl) || mintReady) && (stage !== 'quote' || truthy(value('showOnQuote'))),
       actionUrl: !paid && !local && !refund && amount > 0 && (stage !== 'quote' || truthy(value('showOnQuote'))) ? paymentUrl : null,
     };
   }).sort((a, b) => (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999'));
@@ -542,6 +543,7 @@ function mapPayments(booking: AirtableRecord, records: AirtableRecord[], stage: 
     alternativeCurrency: truthy(pick(booking.fields, bookingFields.alternativeCurrency)) && ['USD', 'EUR'].includes(alternativeType) && alternativeAmount !== null
       ? { currency: alternativeType, amount: alternativeAmount }
       : null,
+    customPayments: { enabled: mintReady && allowCustom && !['quote_expired', 'closed', 'cancelled', 'past'].includes(stage) && numberValue(pick(booking.fields, bookingFields.balance)) > 0, minimum: 0.01, maximum: Math.min(100_000, Math.max(0, numberValue(pick(booking.fields, bookingFields.balance)))) },
   };
 }
 

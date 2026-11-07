@@ -8,6 +8,7 @@ import { TripsService } from '../trips/trips.service.js';
 import { LinkTokenService } from '../security/link-token.service.js';
 import { AcceptanceNotificationsService } from './acceptance-notifications.service.js';
 import { PdfDocumentService } from './pdf-document.service.js';
+import { MintPaymentsService } from './mint-payments.service.js';
 
 @ApiTags('trip actions')
 @Controller('trips/current')
@@ -21,6 +22,7 @@ export class TripActionsController {
     private readonly linkTokens: LinkTokenService,
     private readonly notifications: AcceptanceNotificationsService,
     private readonly pdf: PdfDocumentService,
+    private readonly mintPayments: MintPaymentsService,
   ) {}
 
   @Get()
@@ -48,6 +50,14 @@ export class TripActionsController {
     };
   }
 
+  @Post('payments/custom/link')
+  @ApiBearerAuth()
+  async customPaymentLink(@Headers('authorization') authorization: string | undefined, @Body() body: { amount?: unknown }): Promise<PaymentLinkResponse> {
+    const principal = this.sessions.validateAccess(authorization);
+    if (principal.fellowTraveller) throw new ForbiddenException('Payments are only available to the lead customer.');
+    return this.mintPayments.link(principal.baseId, principal.recordId, 'custom', body?.amount);
+  }
+
   @Post('payments/:paymentId/link')
   @ApiBearerAuth()
   async paymentLink(
@@ -56,10 +66,7 @@ export class TripActionsController {
   ): Promise<PaymentLinkResponse> {
     const principal = this.sessions.validateAccess(authorization);
     if (principal.fellowTraveller) throw new ForbiddenException('Payments are only available to the lead customer.');
-    const snapshot = await this.trips.snapshot(principal.baseId, principal.recordId, 'primary_customer');
-    const payment = snapshot.payments?.items.find((item) => item.id === paymentId);
-    if (!payment || !payment.canPay || !payment.actionUrl) throw new ConflictException('This payment is no longer available. Refresh the trip and try again.');
-    return { paymentId: payment.id, url: payment.actionUrl, amount: payment.amount, currency: payment.currency };
+    return this.mintPayments.link(principal.baseId, principal.recordId, paymentId);
   }
 
   @Post('messages')
@@ -126,9 +133,8 @@ export class TripActionsController {
       this.logger.warn(`Acceptance was saved but its Airtable comment failed: ${error instanceof Error ? error.message : 'unknown error'}`);
     }
     const notifications = await this.notifications.send(snapshot, { name, email }, acceptedAt);
-    const deposit = snapshot.payments?.items.find((payment) => payment.canPay && payment.actionUrl && /deposit/i.test(payment.label))
-      ?? snapshot.payments?.items.find((payment) => payment.canPay && payment.actionUrl);
-    return { accepted: true, acceptedAt, receiptAvailable: true, paymentUrl: deposit?.actionUrl ?? null, notifications };
+    const paymentUrl = await this.mintPayments.depositLink(principal.baseId, principal.recordId).catch(() => null);
+    return { accepted: true, acceptedAt, receiptAvailable: true, paymentUrl, notifications };
   }
 
   @Get('calendar.ics')

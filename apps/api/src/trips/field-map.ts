@@ -27,6 +27,7 @@ export const bookingFields = {
   customerPostcode: ['Customers | Postcode'],
   customerEmail: ['Customers | Email'],
   enable2fa: ['Enable 2FA'],
+  mintBookingId: ['Mint | Booking ID (BK…)', 'Mint | Booking ID'],
   elements: ['Bookings [Elements]'],
   payments: ['Bookings [Payments]'],
   people: ['Customers [People]'],
@@ -55,6 +56,7 @@ export const brandFields = {
   instagram: ['Social Media: Instagram'], facebook: ['Social Media: Facebook'], linkedin: ['Social Media: LinkedIn'], x: ['Social Media: X/Twitter'], trustpilot: ['Trustpilot Reviews URL'], googleReviews: ['Google Reviews URL'], privacy: ['Privacy Policy'], complaints: ['Complaints'],
   phone: ['Customer | Telephone', 'Telephone', 'Phone'], email: ['Customer | Email Address', 'Email'], website: ['Customer | Website', 'Website'],
   emergencyPhone: ['Customer | Emergency Telephone'], outOfHoursLink: ['Out of Hours Link'], outOfHoursEmail: ['Out of Hours Email'],
+  mintApiKey: ['Mint | API Key'], mintBusinessUnit: ['Mint | Business Unit'], mintAllowCustom: ['Mint | Allow Custom Payments'], mintMethods: ['Mint | Custom Payment Methods'], mintWebhook: ['Webhook URL'],
 } as const;
 
 export const elementFields = {
@@ -101,6 +103,7 @@ export const paymentFields = {
   amount: ['Amount'], currency: ['Mint: Currency', 'Currency'], type: ['Payment Type'], customerType: ['Customer Payment Type'],
   status: ['Status'], due: ['Date Due', 'Payment Due'], completed: ['Payment Complete', 'Date Complete', 'Receipt Date'],
   link: ['Payment Link URL', 'Payment Link', 'Payment URL'], showOnQuote: ["Show 'Pay Now' on Quotation", 'Show Pay Now on Quotation'],
+  method: ['Payment Method', 'Method'], reference: ['paymentReference', 'Receipt Number', 'Payment Reference'],
 } as const;
 
 export const personFields = {

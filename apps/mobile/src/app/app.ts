@@ -248,6 +248,18 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
+  protected async openCustomPayment(amount: number): Promise<void> {
+    const currentSession = this.session(); const payments = this.trip()?.payments;
+    if (!currentSession || !payments?.customPayments.enabled || this.openingPaymentId() || !this.online()) return;
+    this.openingPaymentId.set('custom'); this.paymentReturnState.set('idle'); this.error.set('');
+    try {
+      const link = await this.api.customPaymentLink(amount, currentSession.accessToken);
+      this.paymentPaidBefore = payments.paid; this.paymentIdAwaiting = null; this.paymentAwaitingReturn = true; this.paymentOpenedAt = Date.now();
+      window.open(link.url, '_blank', 'noopener,noreferrer');
+    } catch (error) { this.error.set(this.apiError(error, 'We could not create that payment link. Check the amount and try again.')); this.paymentReturnState.set('error'); }
+    finally { this.openingPaymentId.set(null); }
+  }
+
   protected async shareWithTraveller(): Promise<void> {
     const currentSession = this.session();
     const currentTrip = this.trip();
@@ -295,13 +307,22 @@ export class App implements OnInit, OnDestroy {
     this.paymentAwaitingReturn = false;
     this.paymentReturnState.set('checking');
     try {
-      const snapshot = await this.api.refreshTrip(currentSession.accessToken);
-      const paidNow = snapshot.payments?.paid ?? 0;
-      const itemNow = snapshot.payments?.items.find((item) => item.id === this.paymentIdAwaiting);
-      this.trip.set(snapshot);
-      await this.refreshDocumentStatuses(snapshot);
-      this.storedSecurely.set(await this.savedTrips.save(snapshot, currentSession));
-      this.paymentReturnState.set(paidNow > this.paymentPaidBefore || itemNow?.status === 'paid' ? 'updated' : 'unchanged');
+      let latest: TripSnapshot | null = null;
+      let reconciled = false;
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        if (attempt > 0) await delay(2_000);
+        latest = await this.api.refreshTrip(currentSession.accessToken);
+        const paidNow = latest.payments?.paid ?? 0;
+        const itemNow = latest.payments?.items.find((item) => item.id === this.paymentIdAwaiting);
+        reconciled = paidNow > this.paymentPaidBefore || itemNow?.status === 'paid';
+        if (reconciled) break;
+      }
+      if (latest) {
+        this.trip.set(latest);
+        await this.refreshDocumentStatuses(latest);
+        this.storedSecurely.set(await this.savedTrips.save(latest, currentSession));
+      }
+      this.paymentReturnState.set(reconciled ? 'updated' : 'unchanged');
     } catch {
       this.paymentReturnState.set('error');
     } finally {
@@ -530,3 +551,4 @@ function isSnapshotStale(snapshot: TripSnapshot): boolean {
 }
 
 function fileExtension(mimeType: string): string { return mimeType.includes('pdf') ? '.pdf' : mimeType.includes('png') ? '.png' : mimeType.includes('jpeg') ? '.jpg' : '.bin'; }
+function delay(milliseconds: number): Promise<void> { return new Promise((resolve) => setTimeout(resolve, milliseconds)); }

@@ -374,7 +374,10 @@ export interface PaymentSummary {
   nextDueDate: string | null;
   balanceDueDate: string | null;
   alternativeCurrency: { currency: string; amount: number } | null;
+  customPayments: { enabled: boolean; minimum: number; maximum: number };
 }
+
+export interface CustomPaymentLinkRequest { amount: number }
 
 export interface TripDocument {
   id: string;

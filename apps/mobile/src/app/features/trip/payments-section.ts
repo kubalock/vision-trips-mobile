@@ -1,5 +1,5 @@
 import { CurrencyPipe } from '@angular/common';
-import { Component, computed, input, output } from '@angular/core';
+import { Component, computed, input, output, signal } from '@angular/core';
 import type { PaymentSummary } from '@vision-trips/contracts';
 
 @Component({
@@ -21,6 +21,13 @@ import type { PaymentSummary } from '@vision-trips/contracts';
           </li>
         }
       </ul>
+      @if (payments().customPayments.enabled) {
+        <form class="mt-5 rounded-2xl bg-white p-5 ring-1 ring-slate-200" (submit)="submitCustom($event)">
+          <h3 class="font-semibold">Pay another amount</h3><p class="mt-1 text-sm text-slate-600">Choose any amount up to your current balance.</p>
+          <label for="custom-payment" class="mt-4 block text-sm font-semibold">Amount</label><div class="mt-2 flex items-center gap-2"><span class="text-lg font-semibold">{{ payments().currency === 'GBP' ? '£' : payments().currency }}</span><input id="custom-payment" type="number" inputmode="decimal" step="0.01" min="0.01" [max]="payments().customPayments.maximum" [value]="customAmount()" (input)="updateCustom($event)" class="min-w-0 flex-1 rounded-xl border border-slate-300 px-4 py-3"><button type="submit" class="vt-btn vt-btn--primary vt-btn--sm" [disabled]="actionsDisabled() || openingPaymentId() !== null || !validCustom()">{{ openingPaymentId() === 'custom' ? 'Opening…' : 'Pay' }}</button></div>
+          <p class="mt-2 text-xs text-slate-500">Maximum {{ payments().customPayments.maximum | currency: payments().currency }}</p>
+        </form>
+      }
     </section>
   `,
 })
@@ -29,5 +36,10 @@ export class PaymentsSection {
   readonly openingPaymentId = input<string | null>(null);
   readonly actionsDisabled = input(false);
   readonly pay = output<string>();
+  readonly payCustom = output<number>();
+  protected readonly customAmount = signal('');
+  protected readonly validCustom = computed(() => { const amount = Number(this.customAmount()); return Number.isFinite(amount) && amount >= 0.01 && amount <= this.payments().customPayments.maximum; });
   readonly paidPercent = computed(() => this.payments().total > 0 ? Math.min(100, Math.round(this.payments().paid / this.payments().total * 100)) : 0);
+  protected updateCustom(event: Event): void { this.customAmount.set((event.target as HTMLInputElement).value); }
+  protected submitCustom(event: Event): void { event.preventDefault(); if (this.validCustom()) this.payCustom.emit(Number(this.customAmount())); }
 }

@@ -72,6 +72,10 @@ export class VisionApiService {
     }));
   }
 
+  customPaymentLink(amount: number, accessToken: string): Promise<PaymentLinkResponse> {
+    return firstValueFrom(this.http.post<PaymentLinkResponse>(`${this.baseUrl}/trips/current/payments/custom/link`, { amount }, { headers: { Authorization: `Bearer ${accessToken}` } }));
+  }
+
   refreshSession(refreshToken: string): Promise<MobileSession> {
     return firstValueFrom(this.http.post<MobileSession>(`${this.baseUrl}/sessions/refresh`, { refreshToken }));
   }

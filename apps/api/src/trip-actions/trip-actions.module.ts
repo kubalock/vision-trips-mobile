@@ -6,10 +6,11 @@ import { LinkTokenService } from '../security/link-token.service.js';
 import { TripActionsController } from './trip-actions.controller.js';
 import { AcceptanceNotificationsService } from './acceptance-notifications.service.js';
 import { PdfDocumentService } from './pdf-document.service.js';
+import { MintPaymentsService } from './mint-payments.service.js';
 
 @Module({
   imports: [SessionsModule],
   controllers: [TripActionsController],
-  providers: [TripsService, AirtableService, LinkTokenService, AcceptanceNotificationsService, PdfDocumentService],
+  providers: [TripsService, AirtableService, LinkTokenService, AcceptanceNotificationsService, PdfDocumentService, MintPaymentsService],
 })
 export class TripActionsModule {}

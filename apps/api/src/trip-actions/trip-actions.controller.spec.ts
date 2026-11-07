@@ -49,7 +49,7 @@ describe('quotation acceptance', () => {
       stage: 'quote', version: 'v1', summary: { reference: 'VT-1' }, support: { email: null }, payments: { items: [] }, quotation: { canAccept: true, requiredConfirmations: ['package', 'terms'] },
     }) };
     const airtable = { updateRecord: vi.fn().mockResolvedValue({}), addComment: vi.fn().mockResolvedValue(undefined) };
-    const controller = new TripActionsController(sessions as never, trips as never, airtable as never, {} as never, { send: vi.fn().mockResolvedValue({ customer: "local_preview", agent: "not_configured" }) } as never, { create: vi.fn() } as never);
+    const controller = new TripActionsController(sessions as never, trips as never, airtable as never, {} as never, { send: vi.fn().mockResolvedValue({ customer: "local_preview", agent: "not_configured" }) } as never, { create: vi.fn() } as never, { link: vi.fn(), depositLink: vi.fn().mockResolvedValue(null) } as never);
 
     const result = await controller.acceptQuotation('Bearer token', {
       name: 'Alex Traveller', email: 'alex@example.com', agreed: true,
@@ -71,7 +71,7 @@ describe('quotation acceptance', () => {
     const sessions = { validateAccess: vi.fn().mockReturnValue({ fellowTraveller: true }) };
     const trips = { snapshot: vi.fn() };
     const airtable = { updateRecord: vi.fn(), addComment: vi.fn() };
-    const controller = new TripActionsController(sessions as never, trips as never, airtable as never, {} as never, { send: vi.fn().mockResolvedValue({ customer: "local_preview", agent: "not_configured" }) } as never, { create: vi.fn() } as never);
+    const controller = new TripActionsController(sessions as never, trips as never, airtable as never, {} as never, { send: vi.fn().mockResolvedValue({ customer: "local_preview", agent: "not_configured" }) } as never, { create: vi.fn() } as never, { link: vi.fn(), depositLink: vi.fn().mockResolvedValue(null) } as never);
 
     await expect(controller.acceptQuotation('Bearer token', {}, {} as never)).rejects.toBeInstanceOf(ForbiddenException);
     expect(trips.snapshot).not.toHaveBeenCalled();
@@ -83,7 +83,7 @@ describe('customer messages', () => {
   it('adds a labelled booking comment for a fellow traveller', async () => {
     const sessions = { validateAccess: vi.fn().mockReturnValue({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: true }) };
     const airtable = { addComment: vi.fn().mockResolvedValue(undefined) };
-    const controller = new TripActionsController(sessions as never, {} as never, airtable as never, {} as never, { send: vi.fn().mockResolvedValue({ customer: "local_preview", agent: "not_configured" }) } as never, { create: vi.fn() } as never);
+    const controller = new TripActionsController(sessions as never, {} as never, airtable as never, {} as never, { send: vi.fn().mockResolvedValue({ customer: "local_preview", agent: "not_configured" }) } as never, { create: vi.fn() } as never, { link: vi.fn(), depositLink: vi.fn().mockResolvedValue(null) } as never);
 
     const result = await controller.sendMessage('Bearer token', { topic: 'documents', message: 'Please resend my travel documents.' });
 
@@ -97,7 +97,7 @@ describe('customer messages', () => {
   it('rejects short messages without writing a comment', async () => {
     const sessions = { validateAccess: vi.fn().mockReturnValue({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false }) };
     const airtable = { addComment: vi.fn() };
-    const controller = new TripActionsController(sessions as never, {} as never, airtable as never, {} as never, { send: vi.fn().mockResolvedValue({ customer: "local_preview", agent: "not_configured" }) } as never, { create: vi.fn() } as never);
+    const controller = new TripActionsController(sessions as never, {} as never, airtable as never, {} as never, { send: vi.fn().mockResolvedValue({ customer: "local_preview", agent: "not_configured" }) } as never, { create: vi.fn() } as never, { link: vi.fn(), depositLink: vi.fn().mockResolvedValue(null) } as never);
 
     await expect(controller.sendMessage('Bearer token', { topic: 'other', message: 'Hi' })).rejects.toThrow('between 10 and 800');
     expect(airtable.addComment).not.toHaveBeenCalled();
@@ -108,7 +108,8 @@ describe('snapshot refresh', () => {
   it('reloads the trip using the session access scope', async () => {
     const sessions = { validateAccess: vi.fn().mockReturnValue({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: true }) };
     const trips = { snapshot: vi.fn().mockResolvedValue({ tripId: 'trp_public' }) };
-    const controller = new TripActionsController(sessions as never, trips as never, {} as never, {} as never, { send: vi.fn().mockResolvedValue({ customer: "local_preview", agent: "not_configured" }) } as never, { create: vi.fn() } as never);
+    const mint = { link: vi.fn().mockResolvedValue({ paymentId: 'pay_public', url: 'https://pay.example/secure', amount: 250, currency: 'GBP' }), depositLink: vi.fn() };
+    const controller = new TripActionsController(sessions as never, trips as never, {} as never, {} as never, { send: vi.fn().mockResolvedValue({ customer: "local_preview", agent: "not_configured" }) } as never, { create: vi.fn() } as never, mint as never);
 
     await expect(controller.snapshot('Bearer token')).resolves.toEqual({ tripId: 'trp_public' });
     expect(trips.snapshot).toHaveBeenCalledWith('appABCDEFGHIJKLMN', 'recABCDEFGHIJKLMN', 'fellow_traveller');
@@ -121,18 +122,19 @@ describe('payment links', () => {
     const trips = { snapshot: vi.fn().mockResolvedValue({ payments: { items: [{
       id: 'pay_public', amount: 250, currency: 'GBP', canPay: true, actionUrl: 'https://pay.example/secure',
     }] } }) };
-    const controller = new TripActionsController(sessions as never, trips as never, {} as never, {} as never, { send: vi.fn().mockResolvedValue({ customer: "local_preview", agent: "not_configured" }) } as never, { create: vi.fn() } as never);
+    const mint = { link: vi.fn().mockResolvedValue({ paymentId: 'pay_public', url: 'https://pay.example/secure', amount: 250, currency: 'GBP' }), depositLink: vi.fn() };
+    const controller = new TripActionsController(sessions as never, trips as never, {} as never, {} as never, { send: vi.fn().mockResolvedValue({ customer: "local_preview", agent: "not_configured" }) } as never, { create: vi.fn() } as never, mint as never);
 
     await expect(controller.paymentLink('Bearer token', 'pay_public')).resolves.toEqual({
       paymentId: 'pay_public', url: 'https://pay.example/secure', amount: 250, currency: 'GBP',
     });
-    expect(trips.snapshot).toHaveBeenCalledWith('appABCDEFGHIJKLMN', 'recABCDEFGHIJKLMN', 'primary_customer');
+    expect(mint.link).toHaveBeenCalledWith('appABCDEFGHIJKLMN', 'recABCDEFGHIJKLMN', 'pay_public');
   });
 
   it('blocks payment links for fellow travellers', async () => {
     const sessions = { validateAccess: vi.fn().mockReturnValue({ fellowTraveller: true }) };
     const trips = { snapshot: vi.fn() };
-    const controller = new TripActionsController(sessions as never, trips as never, {} as never, {} as never, { send: vi.fn().mockResolvedValue({ customer: "local_preview", agent: "not_configured" }) } as never, { create: vi.fn() } as never);
+    const controller = new TripActionsController(sessions as never, trips as never, {} as never, {} as never, { send: vi.fn().mockResolvedValue({ customer: "local_preview", agent: "not_configured" }) } as never, { create: vi.fn() } as never, { link: vi.fn().mockRejectedValue(new Error('This payment is no longer available.')), depositLink: vi.fn() } as never);
 
     await expect(controller.paymentLink('Bearer token', 'pay_public')).rejects.toBeInstanceOf(ForbiddenException);
     expect(trips.snapshot).not.toHaveBeenCalled();
@@ -141,7 +143,7 @@ describe('payment links', () => {
   it('rejects stale or already-paid payment actions', async () => {
     const sessions = { validateAccess: vi.fn().mockReturnValue({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false }) };
     const trips = { snapshot: vi.fn().mockResolvedValue({ payments: { items: [{ id: 'pay_public', canPay: false, actionUrl: null }] } }) };
-    const controller = new TripActionsController(sessions as never, trips as never, {} as never, {} as never, { send: vi.fn().mockResolvedValue({ customer: "local_preview", agent: "not_configured" }) } as never, { create: vi.fn() } as never);
+    const controller = new TripActionsController(sessions as never, trips as never, {} as never, {} as never, { send: vi.fn().mockResolvedValue({ customer: "local_preview", agent: "not_configured" }) } as never, { create: vi.fn() } as never, { link: vi.fn().mockRejectedValue(new Error('This payment is no longer available.')), depositLink: vi.fn() } as never);
 
     await expect(controller.paymentLink('Bearer token', 'pay_public')).rejects.toThrow('no longer available');
   });
@@ -152,7 +154,7 @@ describe('fellow-traveller sharing', () => {
     const sessions = { validateAccess: vi.fn().mockReturnValue({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false }) };
     const trips = { snapshot: vi.fn().mockResolvedValue({ capabilities: { shareWithTraveller: true } }) };
     const tokens = { mintFellowTravellerLink: vi.fn().mockReturnValue('https://trips.example/trip/signed') };
-    const controller = new TripActionsController(sessions as never, trips as never, {} as never, tokens as never, { send: vi.fn().mockResolvedValue({ customer: "local_preview", agent: "not_configured" }) } as never, { create: vi.fn() } as never);
+    const controller = new TripActionsController(sessions as never, trips as never, {} as never, tokens as never, { send: vi.fn().mockResolvedValue({ customer: "local_preview", agent: "not_configured" }) } as never, { create: vi.fn() } as never, { link: vi.fn(), depositLink: vi.fn().mockResolvedValue(null) } as never);
 
     const result = await controller.fellowTravellerLink('Bearer token');
 
@@ -164,7 +166,7 @@ describe('fellow-traveller sharing', () => {
     const sessions = { validateAccess: vi.fn().mockReturnValue({ fellowTraveller: true }) };
     const trips = { snapshot: vi.fn() };
     const tokens = { mintFellowTravellerLink: vi.fn() };
-    const controller = new TripActionsController(sessions as never, trips as never, {} as never, tokens as never, { send: vi.fn().mockResolvedValue({ customer: "local_preview", agent: "not_configured" }) } as never, { create: vi.fn() } as never);
+    const controller = new TripActionsController(sessions as never, trips as never, {} as never, tokens as never, { send: vi.fn().mockResolvedValue({ customer: "local_preview", agent: "not_configured" }) } as never, { create: vi.fn() } as never, { link: vi.fn(), depositLink: vi.fn().mockResolvedValue(null) } as never);
 
     await expect(controller.fellowTravellerLink('Bearer token')).rejects.toBeInstanceOf(ForbiddenException);
     expect(tokens.mintFellowTravellerLink).not.toHaveBeenCalled();
