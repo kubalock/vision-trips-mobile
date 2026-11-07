@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import type { CustomerMessageRequest, CustomerMessageResponse, FellowTravellerLinkResponse, LinkExchangeResponse, MobileSession, PaymentLinkResponse, QuotationAcceptanceRequest, QuotationAcceptanceResponse, TripSnapshot } from '@vision-trips/contracts';
+import type { CustomerMessageRequest, CustomerMessageResponse, ExternalTripContent, FellowTravellerLinkResponse, LinkExchangeResponse, MobileSession, PaymentLinkResponse, QuotationAcceptanceRequest, QuotationAcceptanceResponse, TripSnapshot } from '@vision-trips/contracts';
 import { firstValueFrom } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
@@ -64,6 +64,10 @@ export class VisionApiService {
     return firstValueFrom(this.http.get<TripSnapshot>(`${this.baseUrl}/trips/current`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     }));
+  }
+
+  externalContent(accessToken: string): Promise<ExternalTripContent> {
+    return firstValueFrom(this.http.get<ExternalTripContent>(`${this.baseUrl}/trips/current/external-content`, { headers: { Authorization: `Bearer ${accessToken}` } }));
   }
 
   paymentLink(paymentId: string, accessToken: string): Promise<PaymentLinkResponse> {

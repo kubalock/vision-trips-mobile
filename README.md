@@ -23,3 +23,7 @@ Authentication sessions and pending verification challenges are stored in SQLite
 ## Mint payments
 
 Mint credentials and the Airtable automation webhook remain in the Airtable `Brands & Branches` record (`Mint | API Key`, `Mint | Business Unit`, `Webhook URL`, allowed methods and custom-payment setting). The booking must contain a `Mint | Booking ID` beginning with `BK.`. Every generated Mint link includes that brand's HTTPS webhook URL. Mint posts successful payment data directly to Airtable; the mobile app then refreshes the Airtable-backed snapshot until the completed payment and receipt appear.
+
+## External content
+
+External content is requested through the API, so flight, Places, Widgety and AI credentials never enter the mobile bundle. The Google Maps embed key is included only in restricted iframe URLs and should be locked to the app's allowed origins. Configure providers in `apps/api/.env`; Open-Meteo weather works without a key. Missing providers, rejected property matches and upstream failures are omitted without affecting the Airtable itinerary. Live flights refresh every three minutes, weather is cached for 30 minutes, Places and Widgety use longer positive and negative caches, and AI copy is generated asynchronously and quality-checked before display.

@@ -4,7 +4,7 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import { Network } from '@capacitor/network';
 import { Share } from '@capacitor/share';
-import type { CustomerMessageTopic, LinkExchangeChallenge, LinkExchangeResponse, MobileSession, TripDocument, TripSnapshot } from '@vision-trips/contracts';
+import type { CustomerMessageTopic, ExternalTripContent, LinkExchangeChallenge, LinkExchangeResponse, MobileSession, TripDocument, TripSnapshot } from '@vision-trips/contracts';
 import { VisionApiService } from './core/api/vision-api.service';
 import { SavedTripsStore, type SavedTrip } from './core/storage/saved-trips.store';
 import { groupSavedTrips } from './core/storage/trip-library';
@@ -16,13 +16,14 @@ import { CommunicationsSection } from './features/trip/communications-section';
 import { ItinerarySection } from './features/trip/itinerary-section';
 import { ExtrasSection } from './features/trip/extras-section';
 import { PaymentsSection } from './features/trip/payments-section';
+import { ExternalContentSection } from './features/trip/external-content-section';
 
 type AppView = 'home' | 'itinerary' | 'payments' | 'documents' | 'help';
 type TripRefreshState = 'idle' | 'refreshing' | 'fresh' | 'stale' | 'offline' | 'error';
 
 @Component({
   selector: 'app-root',
-  imports: [CommunicationsSection, DestinationsSection, DocumentsSection, ExtrasSection, ItinerarySection, PaymentsSection],
+  imports: [CommunicationsSection, DestinationsSection, DocumentsSection, ExtrasSection, ExternalContentSection, ItinerarySection, PaymentsSection],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -70,6 +71,10 @@ export class App implements OnInit, OnDestroy {
   protected readonly showNotifications = signal(false);
   protected readonly deviceNotificationsEnabled = signal(false);
   protected readonly unreadNotifications = computed(() => this.notifications().filter((notification) => !notification.readAt).length);
+  protected readonly externalContent = signal<ExternalTripContent | null>(null);
+  protected readonly externalContentLoading = signal(false);
+  protected readonly externalContentFailed = signal(false);
+  protected readonly displayedDestinations = computed(() => this.externalContent()?.destinations ?? this.trip()?.destinations ?? []);
   private readonly session = signal<MobileSession | null>(null);
   private paymentAwaitingReturn = false;
   private paymentOpenedAt = 0;
@@ -78,6 +83,7 @@ export class App implements OnInit, OnDestroy {
   private resumeListener: PluginListenerHandle | null = null;
   private networkListener: PluginListenerHandle | null = null;
   private resendTimer: ReturnType<typeof setInterval> | null = null;
+  private externalContentTimer: ReturnType<typeof setTimeout> | null = null;
   protected readonly canContinue = computed(() => /^app[A-Za-z0-9]{14}$/.test(this.baseId().trim()) && /^rec[A-Za-z0-9]{14}$/.test(this.recordId().trim()) && !this.submitting());
 
   ngOnInit(): void {
@@ -97,6 +103,7 @@ export class App implements OnInit, OnDestroy {
     void this.resumeListener?.remove();
     void this.networkListener?.remove();
     if (this.resendTimer) clearInterval(this.resendTimer);
+    if (this.externalContentTimer) clearTimeout(this.externalContentTimer);
   }
 
   @HostListener('window:focus')
@@ -337,6 +344,7 @@ export class App implements OnInit, OnDestroy {
         const previous = this.trip();
         this.trip.set(latest);
         await this.syncCustomerNotifications(previous, latest);
+        void this.loadExternalContent(false);
         await this.refreshDocumentStatuses(latest);
         this.storedSecurely.set(await this.savedTrips.save(latest, currentSession));
         await this.reloadSavedTrips();
@@ -357,6 +365,7 @@ export class App implements OnInit, OnDestroy {
       const previous = this.trip();
       this.trip.set(snapshot);
       await this.syncCustomerNotifications(previous, snapshot);
+      void this.loadExternalContent(false);
       await this.refreshDocumentStatuses(snapshot);
       this.storedSecurely.set(await this.savedTrips.save(snapshot, currentSession));
       await this.reloadSavedTrips();
@@ -391,6 +400,7 @@ export class App implements OnInit, OnDestroy {
       const previous = this.trip();
       this.trip.set(snapshot);
       await this.syncCustomerNotifications(previous, snapshot);
+      void this.loadExternalContent(false);
       await this.refreshDocumentStatuses(snapshot);
       this.storedSecurely.set(await this.savedTrips.save(snapshot, activeSession));
       await this.reloadSavedTrips();
@@ -480,6 +490,7 @@ export class App implements OnInit, OnDestroy {
     await this.syncCustomerNotifications(null, response.snapshot);
     await this.refreshDocumentStatuses(response.snapshot);
     this.session.set(response.session);
+    void this.loadExternalContent();
     this.challenge.set(null);
     this.showTripLibrary.set(false);
     this.activeView.set('home');
@@ -538,6 +549,7 @@ export class App implements OnInit, OnDestroy {
         this.session.set(session);
         this.trip.set(snapshot);
         this.loadCustomerNotifications(tripId);
+        void this.loadExternalContent(false);
         await this.refreshDocumentStatuses(snapshot);
       }
     } catch {
@@ -585,6 +597,10 @@ export class App implements OnInit, OnDestroy {
     this.openingPaymentId.set(null);
     this.shareResult.set('');
     this.documentStatuses.set({});
+    this.externalContent.set(null);
+    this.externalContentLoading.set(false);
+    this.externalContentFailed.set(false);
+    if (this.externalContentTimer) clearTimeout(this.externalContentTimer);
     this.notifications.set([]);
     this.showNotifications.set(false);
   }
@@ -595,6 +611,7 @@ export class App implements OnInit, OnDestroy {
     const snapshot = { ...saved.snapshot, freshness: { ...saved.snapshot.freshness, status } };
     this.trip.set(snapshot);
     await this.syncCustomerNotifications(null, snapshot);
+    if (refresh) void this.loadExternalContent();
     this.activeView.set('home');
     this.storedSecurely.set(true);
     await this.refreshDocumentStatuses(snapshot);
@@ -641,6 +658,32 @@ export class App implements OnInit, OnDestroy {
 
   private loadCustomerNotifications(tripId: string): void {
     this.notifications.set(this.customerNotifications.list(tripId));
+  }
+
+  protected async loadExternalContent(showLoading = true): Promise<void> {
+    const currentSession = this.session();
+    if (!currentSession || !this.online() || this.externalContentLoading()) return;
+    if (this.externalContentTimer) clearTimeout(this.externalContentTimer);
+    this.externalContentLoading.set(showLoading && !this.externalContent());
+    this.externalContentFailed.set(false);
+    try {
+      let session = currentSession;
+      let content: ExternalTripContent;
+      try { content = await this.api.externalContent(session.accessToken); }
+      catch (error) {
+        if (!(error instanceof HttpErrorResponse) || error.status !== 401) throw error;
+        session = await this.api.refreshSession(session.refreshToken);
+        this.session.set(session);
+        content = await this.api.externalContent(session.accessToken);
+      }
+      this.externalContent.set(content);
+      const pending = content.providers.ai.state === 'pending';
+      const delayMs = pending ? 5_000 : Math.max(60, content.refreshAfterSeconds) * 1_000;
+      this.externalContentTimer = setTimeout(() => { if (this.trip() && this.online()) void this.loadExternalContent(false); }, delayMs);
+    } catch {
+      this.externalContentFailed.set(true);
+      this.externalContentTimer = setTimeout(() => { if (this.trip() && this.online()) void this.loadExternalContent(false); }, 60_000);
+    } finally { this.externalContentLoading.set(false); }
   }
 
   protected async downloadCalendar(): Promise<void> {

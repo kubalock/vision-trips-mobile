@@ -114,6 +114,39 @@ export interface TripIntegrations {
   destinationGuides: 'available' | 'not_available';
 }
 
+export type ExternalProviderState = 'ready' | 'pending' | 'not_configured' | 'not_applicable' | 'unavailable';
+export interface ExternalProviderStatus { state: ExternalProviderState; source: string; message: string | null }
+export interface LiveFlightStatus {
+  itineraryItemId: string; flightNumber: string; route: string; carrier: string | null; airlineLogoUrl: string | null;
+  status: 'unknown' | 'on_time' | 'delayed' | 'checkin' | 'go_to_gate' | 'boarding' | 'gate_closed' | 'departed' | 'en_route' | 'approaching' | 'arrived' | 'cancelled' | 'diverted';
+  statusLabel: string; departure: { scheduled: string | null; actual: string | null; terminal: string | null; gate: string | null };
+  arrival: { scheduled: string | null; actual: string | null; terminal: string | null; gate: string | null; baggageBelt: string | null };
+  aircraft: string | null; delayMinutes: number; updatedAt: string;
+}
+export interface WeatherForecast {
+  destinationId: string; place: string; temperature: number; label: string; icon: string; high: number; low: number;
+  days: Array<{ date: string; high: number; low: number; label: string; icon: string }>;
+}
+export interface ExternalImage { url: string; attribution: string | null; official: boolean }
+export interface PlaceProfile {
+  itineraryItemId: string; placeId: string; name: string; address: string | null; rating: number | null; ratingCount: number;
+  websiteUrl: string | null; phone: string | null; summary: string | null; mapsUrl: string | null; directionsUrl: string;
+  coordinates: { latitude: number; longitude: number }; images: ExternalImage[]; aiDescription: string | null; aiPending: boolean;
+}
+export interface CruiseSection { title: string; items: Array<{ name: string; text: string | null; images: string[]; videoUrl: string | null }> }
+export interface CruiseProfile {
+  itineraryItemId: string; name: string; operator: string | null; introduction: string | null; coverImageUrl: string | null;
+  profileImageUrl: string | null; facts: Array<{ label: string; value: string }>; sections: CruiseSection[];
+  voyage: { reference: string; name: string | null; description: string | null; highlights: string | null; included: string | null; images: string[]; days: CruisePort[] } | null;
+}
+export interface EnrichedDestinationGuide extends DestinationGuide { images: ExternalImage[]; mapUrl: string | null; aiPending: boolean }
+export interface PracticalGuide { id: string; kind: 'airline' | 'airport'; name: string; logoUrl: string | null; sections: Array<{ title: string; text: string }>; pending: boolean }
+export interface ExternalTripContent {
+  generatedAt: string; refreshAfterSeconds: number;
+  providers: { flights: ExternalProviderStatus; weather: ExternalProviderStatus; places: ExternalProviderStatus; widgety: ExternalProviderStatus; ai: ExternalProviderStatus };
+  flights: LiveFlightStatus[]; weather: WeatherForecast[]; stays: PlaceProfile[]; cruises: CruiseProfile[]; destinations: EnrichedDestinationGuide[]; guides: PracticalGuide[];
+}
+
 export interface TripExtra {
   id: string;
   name: string;

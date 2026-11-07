@@ -184,8 +184,8 @@ export class TripsService {
       communications,
       integrations: {
         liveFlightStatus: itinerary.some((item) => item.kind === 'flight') ? (process.env.FLIGHT_API_KEY ? 'available' : 'not_configured') : 'not_applicable',
-        weather: destinations.some((destination) => destination.coordinates) ? (process.env.WEATHER_API_KEY ? 'available' : 'not_configured') : 'not_applicable',
-        destinationGuides: destinations.length ? 'available' : 'not_available',
+        weather: destinations.length ? (process.env.WEATHER_ENABLED === 'false' ? 'not_configured' : 'available') : 'not_applicable',
+        destinationGuides: destinations.length && (process.env.AI_API_KEY || destinations.some((destination) => destination.overview || destination.imageUrl)) ? 'available' : 'not_available',
       },
       travellers,
       itinerary,
