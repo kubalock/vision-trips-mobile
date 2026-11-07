@@ -6,7 +6,8 @@ import { Network } from '@capacitor/network';
 import { Share } from '@capacitor/share';
 import type { CustomerMessageTopic, LinkExchangeChallenge, LinkExchangeResponse, MobileSession, TripDocument, TripSnapshot } from '@vision-trips/contracts';
 import { VisionApiService } from './core/api/vision-api.service';
-import { SavedTripsStore } from './core/storage/saved-trips.store';
+import { SavedTripsStore, type SavedTrip } from './core/storage/saved-trips.store';
+import { groupSavedTrips } from './core/storage/trip-library';
 import { DocumentWalletStore, type WalletStatus } from './core/storage/document-wallet.store';
 import { DocumentsSection } from './features/trip/documents-section';
 import { DestinationsSection } from './features/trip/destinations-section';
@@ -16,6 +17,7 @@ import { ExtrasSection } from './features/trip/extras-section';
 import { PaymentsSection } from './features/trip/payments-section';
 
 type AppView = 'home' | 'itinerary' | 'payments' | 'documents' | 'help';
+type TripRefreshState = 'idle' | 'refreshing' | 'fresh' | 'stale' | 'offline' | 'error';
 
 @Component({
   selector: 'app-root',
@@ -57,6 +59,11 @@ export class App implements OnInit, OnDestroy {
   protected readonly shareResult = signal('');
   protected readonly documentStatuses = signal<Record<string, WalletStatus>>({});
   protected readonly downloadingDocumentId = signal<string | null>(null);
+  protected readonly savedTripList = signal<SavedTrip[]>([]);
+  protected readonly showTripLibrary = signal(false);
+  protected readonly expiredTripsRemoved = signal(0);
+  protected readonly tripRefreshStates = signal<Record<string, TripRefreshState>>({});
+  protected readonly tripGroups = computed(() => groupSavedTrips(this.savedTripList()));
   private readonly session = signal<MobileSession | null>(null);
   private paymentAwaitingReturn = false;
   private paymentOpenedAt = 0;
@@ -321,6 +328,7 @@ export class App implements OnInit, OnDestroy {
         this.trip.set(latest);
         await this.refreshDocumentStatuses(latest);
         this.storedSecurely.set(await this.savedTrips.save(latest, currentSession));
+        await this.reloadSavedTrips();
       }
       this.paymentReturnState.set(reconciled ? 'updated' : 'unchanged');
     } catch {
@@ -338,6 +346,7 @@ export class App implements OnInit, OnDestroy {
       this.trip.set(snapshot);
       await this.refreshDocumentStatuses(snapshot);
       this.storedSecurely.set(await this.savedTrips.save(snapshot, currentSession));
+      await this.reloadSavedTrips();
     } catch {
       // The write already succeeded. Keep the optimistic state and refresh next time the trip opens.
     }
@@ -352,6 +361,8 @@ export class App implements OnInit, OnDestroy {
       return;
     }
     this.refreshing.set(true);
+    const tripId = this.trip()?.tripId;
+    if (tripId) this.setTripRefreshState(tripId, 'refreshing');
     if (showError) this.error.set('');
     try {
       let activeSession = currentSession;
@@ -367,8 +378,11 @@ export class App implements OnInit, OnDestroy {
       this.trip.set(snapshot);
       await this.refreshDocumentStatuses(snapshot);
       this.storedSecurely.set(await this.savedTrips.save(snapshot, activeSession));
+      await this.reloadSavedTrips();
+      this.setTripRefreshState(snapshot.tripId, 'fresh');
     } catch (error) {
       this.markFreshness(this.online() ? 'stale' : 'offline');
+      if (tripId) this.setTripRefreshState(tripId, this.online() ? 'error' : 'offline');
       if (showError) this.error.set(this.apiError(error, 'We could not refresh this trip. Your saved copy is still available.'));
     } finally {
       this.refreshing.set(false);
@@ -383,15 +397,17 @@ export class App implements OnInit, OnDestroy {
       if (!connected) this.markFreshness('offline');
       else if (this.trip()) void this.refreshCurrentTrip(false);
     });
-    if (!Capacitor.isNativePlatform() || this.trip()) return;
-    const saved = (await this.savedTrips.all()).sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0];
-    if (!saved || this.trip()) return;
-    this.session.set(saved.session);
-    const offlineSnapshot = { ...saved.snapshot, freshness: { ...saved.snapshot.freshness, status: status.connected && !isSnapshotStale(saved.snapshot) ? 'fresh' as const : status.connected ? 'stale' as const : 'offline' as const } };
-    this.trip.set(offlineSnapshot);
-    await this.refreshDocumentStatuses(offlineSnapshot);
-    this.storedSecurely.set(true);
-    if (status.connected) await this.refreshCurrentTrip(false);
+    if (this.trip()) return;
+    const beforePrune = (await this.savedTrips.all()).length;
+    const saved = (await this.savedTrips.pruneExpired()).sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+    this.expiredTripsRemoved.set(Math.max(0, beforePrune - saved.length));
+    this.setSavedTripList(saved, status.connected);
+    if (!saved.length || this.trip()) return;
+    if (saved.length > 1) {
+      this.showTripLibrary.set(true);
+      return;
+    }
+    await this.activateSavedTrip(saved[0], status.connected);
   }
 
   private markFreshness(status: 'stale' | 'offline'): void {
@@ -449,8 +465,10 @@ export class App implements OnInit, OnDestroy {
     await this.refreshDocumentStatuses(response.snapshot);
     this.session.set(response.session);
     this.challenge.set(null);
+    this.showTripLibrary.set(false);
     this.activeView.set('home');
     this.storedSecurely.set(await this.savedTrips.save(response.snapshot, response.session));
+    await this.reloadSavedTrips();
     if (response.trustedDeviceToken) await this.savedTrips.saveDeviceTrust(response.trustedDeviceToken);
   }
 
@@ -460,6 +478,80 @@ export class App implements OnInit, OnDestroy {
   }
 
   protected openAnotherTrip(): void {
+    this.clearOpenTrip();
+    this.showTripLibrary.set(this.savedTripList().length > 0);
+  }
+
+  protected addAnotherTrip(): void {
+    this.clearOpenTrip();
+    this.showTripLibrary.set(false);
+    this.baseId.set('');
+    this.recordId.set('');
+    this.error.set('');
+  }
+
+  protected async openSavedTrip(saved: SavedTrip): Promise<void> {
+    this.showTripLibrary.set(false);
+    await this.activateSavedTrip(saved, this.online());
+  }
+
+  protected async refreshSavedTrip(saved: SavedTrip, event?: Event): Promise<void> {
+    event?.stopPropagation();
+    const tripId = saved.snapshot.tripId;
+    if (!this.online()) {
+      this.setTripRefreshState(tripId, 'offline');
+      return;
+    }
+    if (this.tripRefreshStates()[tripId] === 'refreshing') return;
+    this.setTripRefreshState(tripId, 'refreshing');
+    try {
+      let session = saved.session;
+      let snapshot: TripSnapshot;
+      try {
+        snapshot = await this.api.refreshTrip(session.accessToken);
+      } catch (error) {
+        if (!(error instanceof HttpErrorResponse) || error.status !== 401) throw error;
+        session = await this.api.refreshSession(session.refreshToken);
+        snapshot = await this.api.refreshTrip(session.accessToken);
+      }
+      await this.savedTrips.save(snapshot, session);
+      await this.reloadSavedTrips();
+      this.setTripRefreshState(tripId, 'fresh');
+      if (this.trip()?.tripId === tripId) {
+        this.session.set(session);
+        this.trip.set(snapshot);
+        await this.refreshDocumentStatuses(snapshot);
+      }
+    } catch {
+      this.setTripRefreshState(tripId, 'error');
+    }
+  }
+
+  protected async removeSavedTrip(saved: SavedTrip, event?: Event): Promise<void> {
+    event?.stopPropagation();
+    if (!window.confirm(`Remove ${saved.snapshot.summary.name} from this device?`)) return;
+    await this.savedTrips.remove(saved.snapshot.tripId);
+    this.savedTripList.update((trips) => trips.filter((trip) => trip.snapshot.tripId !== saved.snapshot.tripId));
+    this.tripRefreshStates.update((states) => {
+      const next = { ...states };
+      delete next[saved.snapshot.tripId];
+      return next;
+    });
+    if (this.trip()?.tripId === saved.snapshot.tripId) this.clearOpenTrip();
+    if (!this.savedTripList().length) this.showTripLibrary.set(false);
+  }
+
+  protected refreshStateLabel(saved: SavedTrip): string {
+    const state = this.tripRefreshStates()[saved.snapshot.tripId] ?? 'idle';
+    if (state === 'refreshing') return 'Refreshing…';
+    if (state === 'fresh') return 'Up to date';
+    if (state === 'offline') return 'Saved offline';
+    if (state === 'error') return 'Refresh failed';
+    if (state === 'stale') return 'May be out of date';
+    return `Saved ${saved.savedAt.slice(0, 10)}`;
+  }
+
+  private clearOpenTrip(): void {
     this.trip.set(null);
     this.session.set(null);
     this.activeView.set('home');
@@ -474,6 +566,33 @@ export class App implements OnInit, OnDestroy {
     this.openingPaymentId.set(null);
     this.shareResult.set('');
     this.documentStatuses.set({});
+  }
+
+  private async activateSavedTrip(saved: SavedTrip, refresh: boolean): Promise<void> {
+    this.session.set(saved.session);
+    const status = refresh && !isSnapshotStale(saved.snapshot) ? 'fresh' as const : refresh ? 'stale' as const : 'offline' as const;
+    const snapshot = { ...saved.snapshot, freshness: { ...saved.snapshot.freshness, status } };
+    this.trip.set(snapshot);
+    this.activeView.set('home');
+    this.storedSecurely.set(true);
+    await this.refreshDocumentStatuses(snapshot);
+    if (refresh) await this.refreshCurrentTrip(false);
+  }
+
+  private async reloadSavedTrips(): Promise<void> {
+    this.setSavedTripList((await this.savedTrips.pruneExpired()).sort((a, b) => b.savedAt.localeCompare(a.savedAt)), this.online());
+  }
+
+  private setSavedTripList(saved: SavedTrip[], connected: boolean): void {
+    this.savedTripList.set(saved);
+    this.tripRefreshStates.update((states) => Object.fromEntries(saved.map((trip) => [
+      trip.snapshot.tripId,
+      states[trip.snapshot.tripId] === 'refreshing' ? 'refreshing' : connected ? (isSnapshotStale(trip.snapshot) ? 'stale' : 'fresh') : 'offline',
+    ])));
+  }
+
+  private setTripRefreshState(tripId: string, state: TripRefreshState): void {
+    this.tripRefreshStates.update((states) => ({ ...states, [tripId]: state }));
   }
 
   protected async downloadCalendar(): Promise<void> {
