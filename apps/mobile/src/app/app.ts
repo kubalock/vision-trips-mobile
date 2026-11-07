@@ -8,6 +8,7 @@ import type { CustomerMessageTopic, LinkExchangeChallenge, LinkExchangeResponse,
 import { VisionApiService } from './core/api/vision-api.service';
 import { SavedTripsStore, type SavedTrip } from './core/storage/saved-trips.store';
 import { groupSavedTrips } from './core/storage/trip-library';
+import { CustomerNotificationsStore, type CustomerNotification } from './core/storage/customer-notifications.store';
 import { DocumentWalletStore, type WalletStatus } from './core/storage/document-wallet.store';
 import { DocumentsSection } from './features/trip/documents-section';
 import { DestinationsSection } from './features/trip/destinations-section';
@@ -29,6 +30,7 @@ export class App implements OnInit, OnDestroy {
   private readonly api = inject(VisionApiService);
   private readonly savedTrips = inject(SavedTripsStore);
   private readonly documentWallet = inject(DocumentWalletStore);
+  private readonly customerNotifications = inject(CustomerNotificationsStore);
   protected readonly baseId = signal('');
   protected readonly recordId = signal('');
   protected readonly submitting = signal(false);
@@ -64,6 +66,10 @@ export class App implements OnInit, OnDestroy {
   protected readonly expiredTripsRemoved = signal(0);
   protected readonly tripRefreshStates = signal<Record<string, TripRefreshState>>({});
   protected readonly tripGroups = computed(() => groupSavedTrips(this.savedTripList()));
+  protected readonly notifications = signal<CustomerNotification[]>([]);
+  protected readonly showNotifications = signal(false);
+  protected readonly deviceNotificationsEnabled = signal(false);
+  protected readonly unreadNotifications = computed(() => this.notifications().filter((notification) => !notification.readAt).length);
   private readonly session = signal<MobileSession | null>(null);
   private paymentAwaitingReturn = false;
   private paymentOpenedAt = 0;
@@ -76,6 +82,7 @@ export class App implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     document.body.classList.add('vt');
+    this.deviceNotificationsEnabled.set(this.customerNotifications.deviceEnabled());
     void this.openSharedLinkFromLocation();
     void this.initializeOfflineState();
     if (Capacitor.isNativePlatform()) {
@@ -182,6 +189,8 @@ export class App implements OnInit, OnDestroy {
         confirmations: this.acceptanceConfirmations(),
       }, currentSession.accessToken);
       this.acceptanceComplete.set(true);
+      await this.customerNotifications.quoteAccepted(currentTrip);
+      this.loadCustomerNotifications(currentTrip.tripId);
       this.acceptanceNotice.set(result.notifications.customer === 'sent' ? 'A confirmation email has been sent to you.' : result.notifications.customer === 'local_preview' ? 'Email delivery is in local preview mode.' : 'Your acceptance was recorded, but the confirmation email could not be sent.');
       this.trip.update((trip) => trip ? {
         ...trip,
@@ -325,7 +334,9 @@ export class App implements OnInit, OnDestroy {
         if (reconciled) break;
       }
       if (latest) {
+        const previous = this.trip();
         this.trip.set(latest);
+        await this.syncCustomerNotifications(previous, latest);
         await this.refreshDocumentStatuses(latest);
         this.storedSecurely.set(await this.savedTrips.save(latest, currentSession));
         await this.reloadSavedTrips();
@@ -343,7 +354,9 @@ export class App implements OnInit, OnDestroy {
     if (!currentSession) return;
     try {
       const snapshot = await this.api.refreshTrip(currentSession.accessToken);
+      const previous = this.trip();
       this.trip.set(snapshot);
+      await this.syncCustomerNotifications(previous, snapshot);
       await this.refreshDocumentStatuses(snapshot);
       this.storedSecurely.set(await this.savedTrips.save(snapshot, currentSession));
       await this.reloadSavedTrips();
@@ -375,7 +388,9 @@ export class App implements OnInit, OnDestroy {
         this.session.set(activeSession);
         snapshot = await this.api.refreshTrip(activeSession.accessToken);
       }
+      const previous = this.trip();
       this.trip.set(snapshot);
+      await this.syncCustomerNotifications(previous, snapshot);
       await this.refreshDocumentStatuses(snapshot);
       this.storedSecurely.set(await this.savedTrips.save(snapshot, activeSession));
       await this.reloadSavedTrips();
@@ -462,6 +477,7 @@ export class App implements OnInit, OnDestroy {
 
   private async acceptAuthorized(response: Extract<LinkExchangeResponse, { status: 'authorized' }>): Promise<void> {
     this.trip.set(response.snapshot);
+    await this.syncCustomerNotifications(null, response.snapshot);
     await this.refreshDocumentStatuses(response.snapshot);
     this.session.set(response.session);
     this.challenge.set(null);
@@ -515,11 +531,13 @@ export class App implements OnInit, OnDestroy {
         snapshot = await this.api.refreshTrip(session.accessToken);
       }
       await this.savedTrips.save(snapshot, session);
+      await this.customerNotifications.sync(saved.snapshot, snapshot);
       await this.reloadSavedTrips();
       this.setTripRefreshState(tripId, 'fresh');
       if (this.trip()?.tripId === tripId) {
         this.session.set(session);
         this.trip.set(snapshot);
+        this.loadCustomerNotifications(tripId);
         await this.refreshDocumentStatuses(snapshot);
       }
     } catch {
@@ -531,6 +549,7 @@ export class App implements OnInit, OnDestroy {
     event?.stopPropagation();
     if (!window.confirm(`Remove ${saved.snapshot.summary.name} from this device?`)) return;
     await this.savedTrips.remove(saved.snapshot.tripId);
+    this.customerNotifications.clear(saved.snapshot.tripId);
     this.savedTripList.update((trips) => trips.filter((trip) => trip.snapshot.tripId !== saved.snapshot.tripId));
     this.tripRefreshStates.update((states) => {
       const next = { ...states };
@@ -566,6 +585,8 @@ export class App implements OnInit, OnDestroy {
     this.openingPaymentId.set(null);
     this.shareResult.set('');
     this.documentStatuses.set({});
+    this.notifications.set([]);
+    this.showNotifications.set(false);
   }
 
   private async activateSavedTrip(saved: SavedTrip, refresh: boolean): Promise<void> {
@@ -573,6 +594,7 @@ export class App implements OnInit, OnDestroy {
     const status = refresh && !isSnapshotStale(saved.snapshot) ? 'fresh' as const : refresh ? 'stale' as const : 'offline' as const;
     const snapshot = { ...saved.snapshot, freshness: { ...saved.snapshot.freshness, status } };
     this.trip.set(snapshot);
+    await this.syncCustomerNotifications(null, snapshot);
     this.activeView.set('home');
     this.storedSecurely.set(true);
     await this.refreshDocumentStatuses(snapshot);
@@ -593,6 +615,32 @@ export class App implements OnInit, OnDestroy {
 
   private setTripRefreshState(tripId: string, state: TripRefreshState): void {
     this.tripRefreshStates.update((states) => ({ ...states, [tripId]: state }));
+  }
+
+  protected toggleNotifications(): void {
+    const tripId = this.trip()?.tripId;
+    if (!tripId) return;
+    const opening = !this.showNotifications();
+    this.showNotifications.set(opening);
+    if (opening) {
+      this.customerNotifications.markAllRead(tripId);
+      this.loadCustomerNotifications(tripId);
+    }
+  }
+
+  protected async toggleDeviceNotifications(event: Event): Promise<void> {
+    const requested = (event.target as HTMLInputElement).checked;
+    const enabled = await this.customerNotifications.setDeviceEnabled(requested);
+    this.deviceNotificationsEnabled.set(enabled);
+  }
+
+  private async syncCustomerNotifications(previous: TripSnapshot | null, snapshot: TripSnapshot): Promise<void> {
+    await this.customerNotifications.sync(previous, snapshot);
+    this.loadCustomerNotifications(snapshot.tripId);
+  }
+
+  private loadCustomerNotifications(tripId: string): void {
+    this.notifications.set(this.customerNotifications.list(tripId));
   }
 
   protected async downloadCalendar(): Promise<void> {
