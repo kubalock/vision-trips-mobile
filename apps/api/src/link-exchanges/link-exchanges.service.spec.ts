@@ -6,6 +6,7 @@ import type { SessionsService } from '../sessions/sessions.service.js';
 import type { TripsService } from '../trips/trips.service.js';
 import type { OtpDeliveryService } from './otp-delivery.service.js';
 import { LinkExchangesService } from './link-exchanges.service.js';
+import { DurableAuthStore } from '../sessions/durable-auth.store.js';
 
 describe('LinkExchangesService OTP', () => {
   it('sends a forced OTP, limits attempts, and can remember the device', async () => {
@@ -16,6 +17,7 @@ describe('LinkExchangesService OTP', () => {
       { issue: vi.fn().mockReturnValue({ accessToken: 'a', accessExpiresAt: 'x', refreshToken: 'r', refreshExpiresAt: 'x' }) } as unknown as SessionsService,
       new DeviceTrustService(),
       { send: vi.fn(async (_email: string, sentCode: string) => { code = sentCode; }) } as unknown as OtpDeliveryService,
+      new DurableAuthStore(':memory:'),
     );
 
     const created = await service.create('a-valid-link-token');
@@ -40,6 +42,7 @@ describe('LinkExchangesService OTP', () => {
       {} as SessionsService,
       new DeviceTrustService(),
       { send: vi.fn() } as unknown as OtpDeliveryService,
+      new DurableAuthStore(':memory:'),
     );
     const created = await service.create('a-valid-link-token');
     if (created.status !== 'verification_required') return;

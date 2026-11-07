@@ -1,8 +1,12 @@
 import { SessionsService } from './sessions.service.js';
+import { DurableAuthStore } from './durable-auth.store.js';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 describe('SessionsService', () => {
   it('rotates refresh tokens and rejects replay of the previous token', () => {
-    const service = new SessionsService();
+    const service = serviceInMemory();
     const initial = service.issue({
       baseId: 'appABCDEFGHIJKLMN',
       recordId: 'recABCDEFGHIJKLMN',
@@ -15,7 +19,7 @@ describe('SessionsService', () => {
   });
 
   it('rejects refresh after revocation', () => {
-    const service = new SessionsService();
+    const service = serviceInMemory();
     const session = service.issue({
       baseId: 'appABCDEFGHIJKLMN',
       recordId: 'recABCDEFGHIJKLMN',
@@ -26,9 +30,24 @@ describe('SessionsService', () => {
   });
 
   it('validates issued access tokens and rejects fabricated ones', () => {
-    const service = new SessionsService();
+    const service = serviceInMemory();
     const session = service.issue({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false });
     expect(service.validateAccess(`Bearer ${session.accessToken}`)).toEqual({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false });
     expect(() => service.validateAccess('Bearer vta_fabricated.session')).toThrow('expired');
   });
+
+  it('keeps sessions valid when the API service is recreated', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'vision-auth-'));
+    const path = join(directory, 'auth.sqlite');
+    const firstStore = new DurableAuthStore(path);
+    const session = new SessionsService(firstStore).issue({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false });
+    firstStore.onModuleDestroy();
+
+    const secondStore = new DurableAuthStore(path);
+    expect(new SessionsService(secondStore).validateAccess(`Bearer ${session.accessToken}`)).toEqual({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false });
+    secondStore.onModuleDestroy();
+    rmSync(directory, { recursive: true });
+  });
 });
+
+function serviceInMemory(): SessionsService { return new SessionsService(new DurableAuthStore(':memory:')); }
