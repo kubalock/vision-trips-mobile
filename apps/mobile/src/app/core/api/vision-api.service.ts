@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import type { CustomerMessageRequest, CustomerMessageResponse, ExternalTripContent, FellowTravellerLinkResponse, LinkExchangeResponse, MobileSession, OpenRelatedQuotationResponse, PaymentLinkResponse, QuotationAcceptanceRequest, QuotationAcceptanceResponse, RelatedQuotationsResponse, TripSnapshot } from '@vision-trips/contracts';
+import type { CustomerAccount, CustomerMessageRequest, CustomerMessageResponse, CustomerPreferences, ExternalTripContent, FellowTravellerLinkResponse, LinkExchangeResponse, MobileSession, OpenCustomerAccountTripResponse, OpenRelatedQuotationResponse, PaymentLinkResponse, QuotationAcceptanceRequest, QuotationAcceptanceResponse, RelatedQuotationsResponse, TripSnapshot, UpdateCustomerPreferencesResponse } from '@vision-trips/contracts';
 import { firstValueFrom } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
@@ -77,6 +77,11 @@ export class VisionApiService {
   openRelatedQuotation(comparisonId: string, accessToken: string): Promise<OpenRelatedQuotationResponse> {
     return firstValueFrom(this.http.post<OpenRelatedQuotationResponse>(`${this.baseUrl}/trips/current/related-quotations/${encodeURIComponent(comparisonId)}/open`, {}, { headers: { Authorization: `Bearer ${accessToken}` } }));
   }
+
+  customerAccount(accessToken: string): Promise<CustomerAccount> { return firstValueFrom(this.http.get<CustomerAccount>(`${this.baseUrl}/trips/current/account`, { headers: { Authorization: `Bearer ${accessToken}` } })); }
+  updateCustomerPreferences(preferences: CustomerPreferences, accessToken: string): Promise<UpdateCustomerPreferencesResponse> { return firstValueFrom(this.http.post<UpdateCustomerPreferencesResponse>(`${this.baseUrl}/trips/current/account/preferences`, preferences, { headers: { Authorization: `Bearer ${accessToken}` } })); }
+  openCustomerAccountTrip(accountTripId: string, accessToken: string): Promise<OpenCustomerAccountTripResponse> { return firstValueFrom(this.http.post<OpenCustomerAccountTripResponse>(`${this.baseUrl}/trips/current/account/trips/${encodeURIComponent(accountTripId)}/open`, {}, { headers: { Authorization: `Bearer ${accessToken}` } })); }
+  revokeSession(refreshToken: string): Promise<void> { return firstValueFrom(this.http.delete<void>(`${this.baseUrl}/sessions/current`, { body: { refreshToken } })); }
 
   paymentLink(paymentId: string, accessToken: string): Promise<PaymentLinkResponse> {
     return firstValueFrom(this.http.post<PaymentLinkResponse>(`${this.baseUrl}/trips/current/payments/${encodeURIComponent(paymentId)}/link`, {}, {

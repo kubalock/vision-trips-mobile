@@ -115,6 +115,9 @@ export const personFields = {
 export const customerFields = {
   name: ['Full Name', 'Name'], first: ['First Name'], last: ['Last Name'],
   primaryEmail: ['Primary Email'], secondaryEmail: ['Secondary Email'], trips: ['Trips'],
+  marketingEmail: ['Email Marketing'], marketingEmailUnsubscribe: ['Email Marketing Unsubscribe'],
+  marketingSms: ['SMS Marketing'], marketingPost: ['Postal Marketing'],
+  preferredAirports: ['Preferred Departure Airport(s)'], preferredMonths: ['Preferred Travel Month(s)'],
 } as const;
 export const memberFields = { company: ['Company Name'], proposition: ['Proposition'], tAtolEnabled: ['T-ATOL Enabled'], tAtolNumber: ['T-ATOL Number'], number: ['Members | Number', 'Member Number'] } as const;
 

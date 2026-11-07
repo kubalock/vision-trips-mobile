@@ -1,6 +1,6 @@
 import { BadGatewayException, BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, Headers, Logger, NotFoundException, Optional, Param, Post, Req, ServiceUnavailableException, StreamableFile } from '@nestjs/common';
 import { ApiBearerAuth, ApiProduces, ApiTags } from '@nestjs/swagger';
-import type { CustomerMessageRequest, CustomerMessageResponse, CustomerMessageTopic, FellowTravellerLinkResponse, OpenRelatedQuotationResponse, PaymentLinkResponse, QuotationAcceptanceRequest, QuotationAcceptanceResponse, RelatedQuotationsResponse } from '@vision-trips/contracts';
+import type { CustomerAccount, CustomerMessageRequest, CustomerMessageResponse, CustomerMessageTopic, CustomerPreferences, FellowTravellerLinkResponse, OpenCustomerAccountTripResponse, OpenRelatedQuotationResponse, PaymentLinkResponse, QuotationAcceptanceRequest, QuotationAcceptanceResponse, RelatedQuotationsResponse, UpdateCustomerPreferencesResponse } from '@vision-trips/contracts';
 import type { Request } from 'express';
 import { AirtableService } from '../airtable/airtable.service.js';
 import { SessionsService } from '../sessions/sessions.service.js';
@@ -10,6 +10,7 @@ import { AcceptanceNotificationsService } from './acceptance-notifications.servi
 import { PdfDocumentService } from './pdf-document.service.js';
 import { MintPaymentsService } from './mint-payments.service.js';
 import { RelatedQuotationsService } from './related-quotations.service.js';
+import { CustomerAccountService } from './customer-account.service.js';
 
 @ApiTags('trip actions')
 @Controller('trips/current')
@@ -25,7 +26,29 @@ export class TripActionsController {
     private readonly pdf: PdfDocumentService,
     private readonly mintPayments: MintPaymentsService,
     @Optional() private readonly relatedQuotations?: RelatedQuotationsService,
+    @Optional() private readonly customerAccount?: CustomerAccountService,
   ) {}
+
+  @Get('account')
+  @ApiBearerAuth()
+  account(@Headers('authorization') authorization: string | undefined): Promise<CustomerAccount> {
+    if (!this.customerAccount) throw new ServiceUnavailableException('Customer accounts are not available.');
+    return this.customerAccount.account(this.sessions.validateAccess(authorization));
+  }
+
+  @Post('account/preferences')
+  @ApiBearerAuth()
+  updatePreferences(@Headers('authorization') authorization: string | undefined, @Body() body: Partial<CustomerPreferences>): Promise<UpdateCustomerPreferencesResponse> {
+    if (!this.customerAccount) throw new ServiceUnavailableException('Customer accounts are not available.');
+    return this.customerAccount.update(this.sessions.validateAccess(authorization), body);
+  }
+
+  @Post('account/trips/:accountTripId/open')
+  @ApiBearerAuth()
+  openAccountTrip(@Headers('authorization') authorization: string | undefined, @Param('accountTripId') accountTripId: string): Promise<OpenCustomerAccountTripResponse> {
+    if (!this.customerAccount) throw new ServiceUnavailableException('Customer accounts are not available.');
+    return this.customerAccount.open(this.sessions.validateAccess(authorization), accountTripId);
+  }
 
   @Get('related-quotations')
   @ApiBearerAuth()

@@ -57,7 +57,7 @@
         @if (currentTrip.payments; as payments) { <app-payments-section [payments]="payments" [openingPaymentId]="openingPaymentId()" [actionsDisabled]="!online()" (pay)="openPayment($event)" (payCustom)="openCustomPayment($event)" /> } @else { <p class="mt-5 rounded-2xl bg-white p-5 text-slate-600 ring-1 ring-slate-200">Payment information is only available to the lead customer.</p> }
       } @else if (activeView() === 'documents') {
         <header><p class="text-sm font-semibold uppercase tracking-widest text-teal-700">Travel wallet</p><h1 class="mt-1 text-3xl font-semibold">Documents</h1><p class="mt-2 text-sm text-slate-600">Downloaded documents are kept on this device for offline access. When your agent replaces one, it will be marked Updated.</p></header><app-documents-section [documents]="currentTrip.documents" [statuses]="documentStatuses()" [downloadingId]="downloadingDocumentId()" (download)="downloadDocument($event)" />
-      } @else {
+      } @else if (activeView() === 'help') {
         <header><p class="text-sm font-semibold uppercase tracking-widest text-teal-700">We’re here for you</p><h1 class="mt-1 text-3xl font-semibold">Help</h1></header>
         <section class="vt-section vt-card"><h2 class="text-xl font-semibold">Contact {{ currentTrip.support.companyName }}</h2><div class="mt-4 grid gap-3">@if (currentTrip.support.phone) { <a class="rounded-xl border border-slate-200 p-4 font-semibold" [href]="'tel:' + currentTrip.support.phone">Call · {{ currentTrip.support.phone }}</a> }@if (currentTrip.support.email) { <a class="rounded-xl border border-slate-200 p-4 font-semibold" [href]="'mailto:' + currentTrip.support.email">Email · {{ currentTrip.support.email }}</a> }@if (currentTrip.support.emergencyPhone) { <a class="rounded-xl bg-red-50 p-4 font-semibold text-red-900" [href]="'tel:' + currentTrip.support.emergencyPhone">Emergency line · {{ currentTrip.support.emergencyPhone }}</a> }</div></section>
         @if (currentTrip.capabilities.sendMessage) {
@@ -70,6 +70,10 @@
           <section class="vt-section vt-card"><h2 class="text-xl font-semibold">Share this trip</h2><p class="mt-2 text-sm leading-6 text-slate-600">Create a seven-day restricted link. Fellow travellers can see the itinerary and documents, but not prices, payments, supplier references, or quotation acceptance.</p><button type="button" class="mt-4 w-full rounded-full bg-slate-900 px-5 py-4 font-semibold text-white disabled:opacity-40" [disabled]="sharing() || !online()" (click)="shareWithTraveller()">{{ sharing() ? 'Creating link…' : online() ? 'Share with a traveller' : 'Connect to share' }}</button>@if (shareResult()) { <p class="mt-3 text-sm font-medium text-emerald-800">{{ shareResult() }}</p> }</section>
         }
         <section class="vt-section vt-card"><h2 class="text-xl font-semibold">Financial protection</h2><p class="mt-3 text-sm leading-6 text-slate-600">{{ currentTrip.protection.summary }}</p>@if (currentTrip.protection.holderName) { <p class="mt-3 text-sm font-medium">Holder: {{ currentTrip.protection.holderName }}</p> }</section>
+      } @else {
+        <header><p class="text-sm font-semibold uppercase tracking-widest text-teal-700">Your details</p><h1 class="mt-1 text-3xl font-semibold">Account and preferences</h1></header>
+        <app-customer-account-section [account]="customerAccount()" [loading]="accountLoading()" [saving]="accountSaving()" [savedNotice]="accountNotice()" [openingTripId]="openingAccountTripId()" (save)="saveCustomerPreferences($event)" (openTrip)="openCustomerAccountTrip($event)" (signOut)="signOutDevice()" />
+        @if (error()) { <p class="mt-4 rounded-xl bg-red-50 p-4 text-sm text-red-800">{{ error() }}</p> }
       }
 
       <nav class="vt-nav" aria-label="Trip navigation">
@@ -78,6 +82,7 @@
         @if (currentTrip.payments) { <button type="button" [class.is-active]="activeView() === 'payments'" (click)="selectView('payments')"><span class="vt-nav__icon">£</span><span>Payments</span></button> }
         <button type="button" [class.is-active]="activeView() === 'documents'" (click)="selectView('documents')"><span class="vt-nav__icon">▤</span><span>Documents</span></button>
         <button type="button" [class.is-active]="activeView() === 'help'" (click)="selectView('help')"><span class="vt-nav__icon">?</span><span>Help</span></button>
+        @if (currentTrip.accessScope === 'primary_customer') { <button type="button" [class.is-active]="activeView() === 'account'" (click)="selectView('account')"><span class="vt-nav__icon">◎</span><span>Account</span></button> }
       </nav>
     } @else if (showTripLibrary()) {
       <section class="mx-auto w-full max-w-5xl pb-10">

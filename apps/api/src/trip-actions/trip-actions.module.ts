@@ -8,10 +8,11 @@ import { AcceptanceNotificationsService } from './acceptance-notifications.servi
 import { PdfDocumentService } from './pdf-document.service.js';
 import { MintPaymentsService } from './mint-payments.service.js';
 import { RelatedQuotationsService } from './related-quotations.service.js';
+import { CustomerAccountService } from './customer-account.service.js';
 
 @Module({
   imports: [SessionsModule],
   controllers: [TripActionsController],
-  providers: [TripsService, AirtableService, LinkTokenService, AcceptanceNotificationsService, PdfDocumentService, MintPaymentsService, RelatedQuotationsService],
+  providers: [TripsService, AirtableService, LinkTokenService, AcceptanceNotificationsService, PdfDocumentService, MintPaymentsService, RelatedQuotationsService, CustomerAccountService],
 })
 export class TripActionsModule {}

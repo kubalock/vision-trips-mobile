@@ -255,6 +255,36 @@ export interface RelatedQuotationSummary {
 export interface RelatedQuotationsResponse { quotations: RelatedQuotationSummary[] }
 export interface OpenRelatedQuotationResponse { snapshot: TripSnapshot; session: MobileSession }
 
+export interface CustomerPreferences {
+  emailMarketing: boolean;
+  smsMarketing: boolean;
+  postalMarketing: boolean;
+  preferredAirports: string[];
+  preferredMonths: string[];
+}
+
+export interface CustomerAccountTrip {
+  accountTripId: string;
+  reference: string;
+  name: string;
+  departureDate: string | null;
+  returnDate: string | null;
+  status: TripStage;
+  heroImageUrl: string | null;
+  current: boolean;
+}
+
+export interface CustomerAccount {
+  emailHint: string;
+  preferences: CustomerPreferences;
+  airportOptions: string[];
+  monthOptions: string[];
+  trips: CustomerAccountTrip[];
+}
+
+export interface UpdateCustomerPreferencesResponse { saved: true; updatedRecords: number; preferences: CustomerPreferences }
+export interface OpenCustomerAccountTripResponse { snapshot: TripSnapshot; session: MobileSession }
+
 export interface DestinationGuide {
   id: string;
   name: string;

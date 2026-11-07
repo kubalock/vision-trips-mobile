@@ -4,7 +4,7 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import { Network } from '@capacitor/network';
 import { Share } from '@capacitor/share';
-import type { CustomerMessageTopic, ExternalTripContent, LinkExchangeChallenge, LinkExchangeResponse, MobileSession, RelatedQuotationSummary, TripDocument, TripSnapshot } from '@vision-trips/contracts';
+import type { CustomerAccount, CustomerMessageTopic, CustomerPreferences, ExternalTripContent, LinkExchangeChallenge, LinkExchangeResponse, MobileSession, RelatedQuotationSummary, TripDocument, TripSnapshot } from '@vision-trips/contracts';
 import { VisionApiService } from './core/api/vision-api.service';
 import { SavedTripsStore, type SavedTrip } from './core/storage/saved-trips.store';
 import { groupSavedTrips } from './core/storage/trip-library';
@@ -19,13 +19,14 @@ import { PaymentsSection } from './features/trip/payments-section';
 import { ExternalContentSection } from './features/trip/external-content-section';
 import { StageExperienceSection } from './features/trip/stage-experience-section';
 import { BookingJourneySection } from './features/trip/booking-journey-section';
+import { CustomerAccountSection } from './features/account/customer-account-section';
 
-type AppView = 'home' | 'itinerary' | 'payments' | 'documents' | 'help';
+type AppView = 'home' | 'itinerary' | 'payments' | 'documents' | 'help' | 'account';
 type TripRefreshState = 'idle' | 'refreshing' | 'fresh' | 'stale' | 'offline' | 'error';
 
 @Component({
   selector: 'app-root',
-  imports: [BookingJourneySection, CommunicationsSection, DestinationsSection, DocumentsSection, ExtrasSection, ExternalContentSection, ItinerarySection, PaymentsSection, StageExperienceSection],
+  imports: [BookingJourneySection, CommunicationsSection, CustomerAccountSection, DestinationsSection, DocumentsSection, ExtrasSection, ExternalContentSection, ItinerarySection, PaymentsSection, StageExperienceSection],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -79,6 +80,11 @@ export class App implements OnInit, OnDestroy {
   protected readonly displayedDestinations = computed(() => this.externalContent()?.destinations ?? this.trip()?.destinations ?? []);
   protected readonly relatedQuotations = signal<RelatedQuotationSummary[]>([]);
   protected readonly openingRelatedId = signal<string | null>(null);
+  protected readonly customerAccount = signal<CustomerAccount | null>(null);
+  protected readonly accountLoading = signal(false);
+  protected readonly accountSaving = signal(false);
+  protected readonly accountNotice = signal('');
+  protected readonly openingAccountTripId = signal<string | null>(null);
   private readonly session = signal<MobileSession | null>(null);
   private paymentAwaitingReturn = false;
   private paymentOpenedAt = 0;
@@ -506,7 +512,41 @@ export class App implements OnInit, OnDestroy {
 
   protected selectView(view: AppView): void {
     this.activeView.set(view);
+    if (view === 'account') void this.loadCustomerAccount();
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  protected async saveCustomerPreferences(preferences: CustomerPreferences): Promise<void> {
+    const currentSession = this.session(); if (!currentSession || this.accountSaving()) return;
+    this.accountSaving.set(true); this.accountNotice.set('');
+    try { const result = await this.api.updateCustomerPreferences(preferences, currentSession.accessToken); this.customerAccount.update((account) => account ? { ...account, preferences: result.preferences } : account); this.accountNotice.set(`Saved across ${result.updatedRecords} customer ${result.updatedRecords === 1 ? 'record' : 'records'}.`); }
+    catch (error) { this.error.set(this.apiError(error, 'We could not save your preferences. Please try again.')); }
+    finally { this.accountSaving.set(false); }
+  }
+
+  protected async openCustomerAccountTrip(accountTripId: string): Promise<void> {
+    const currentSession = this.session(); if (!currentSession || this.openingAccountTripId()) return;
+    this.openingAccountTripId.set(accountTripId);
+    try { const response = await this.api.openCustomerAccountTrip(accountTripId, currentSession.accessToken); await this.acceptAuthorized({ status: 'authorized', exchangeId: 'account', expiresAt: response.session.refreshExpiresAt, snapshot: response.snapshot, session: response.session }); }
+    catch (error) { this.error.set(this.apiError(error, 'We could not open that trip. Please refresh your account.')); }
+    finally { this.openingAccountTripId.set(null); }
+  }
+
+  protected async signOutDevice(): Promise<void> {
+    if (!window.confirm('Sign out and remove all locally saved trips from this device?')) return;
+    const saved = await this.savedTrips.all();
+    const refreshTokens = [...new Set([this.session()?.refreshToken, ...saved.map((trip) => trip.session.refreshToken)].filter((token): token is string => Boolean(token)))];
+    await Promise.allSettled(refreshTokens.map((refreshToken) => this.api.revokeSession(refreshToken)));
+    for (const trip of saved) { await this.savedTrips.remove(trip.snapshot.tripId); this.customerNotifications.clear(trip.snapshot.tripId); }
+    this.clearOpenTrip(); this.savedTripList.set([]); this.showTripLibrary.set(false); this.storedSecurely.set(false);
+  }
+
+  private async loadCustomerAccount(): Promise<void> {
+    const currentSession = this.session(); if (!currentSession || this.accountLoading() || this.trip()?.accessScope !== 'primary_customer') return;
+    this.accountLoading.set(true); this.accountNotice.set(''); this.error.set('');
+    try { this.customerAccount.set(await this.api.customerAccount(currentSession.accessToken)); }
+    catch (error) { this.customerAccount.set(null); this.error.set(this.apiError(error, 'We could not load your customer account.')); }
+    finally { this.accountLoading.set(false); }
   }
 
   protected planNextTrip(): void {
@@ -629,6 +669,7 @@ export class App implements OnInit, OnDestroy {
     this.externalContentLoading.set(false);
     this.externalContentFailed.set(false);
     this.relatedQuotations.set([]);
+    this.customerAccount.set(null); this.accountLoading.set(false); this.accountSaving.set(false); this.accountNotice.set(''); this.openingAccountTripId.set(null);
     if (this.externalContentTimer) clearTimeout(this.externalContentTimer);
     this.notifications.set([]);
     this.showNotifications.set(false);
