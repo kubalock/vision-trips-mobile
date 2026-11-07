@@ -1,0 +1,49 @@
+import { Component, OnDestroy, computed, input, output, signal } from '@angular/core';
+import { Share } from '@capacitor/share';
+import type { ExternalTripContent, TripSnapshot } from '@vision-trips/contracts';
+import { buildChecklist, countdownTo, todayAndUpcoming } from './stage-experience';
+
+@Component({
+  selector: 'app-stage-experience-section',
+  template: `
+    @if (surprise().concealed) {
+      <section class="vt-section overflow-hidden rounded-3xl bg-gradient-to-br from-violet-950 via-indigo-900 to-teal-800 p-7 text-white"><p class="text-xs font-semibold uppercase tracking-[.25em] text-teal-200">A surprise is waiting</p><h2 class="mt-3 text-3xl font-semibold">Your destination is under wraps</h2><p class="mt-3 max-w-xl leading-7 text-indigo-100">Your travel expert is keeping the destination and itinerary secret for now. Dates, payments, preparation and support remain available.</p>@if (surprise().revealAt) { <p class="mt-5 text-sm font-semibold text-white">Reveal date: {{ surprise().revealAt }}</p> }</section>
+    }
+    @if (countdown(); as count) { @if (trip().stage === 'countdown' || trip().stage === 'prep') { <section class="vt-section rounded-3xl bg-slate-900 p-6 text-white"><p class="text-xs font-semibold uppercase tracking-widest text-teal-300">Until you leave</p><div class="mt-4 grid max-w-md grid-cols-3 gap-3 text-center"><div class="rounded-2xl bg-white/10 p-4"><strong class="block text-3xl">{{ count.days }}</strong><span class="text-xs text-slate-300">days</span></div><div class="rounded-2xl bg-white/10 p-4"><strong class="block text-3xl">{{ count.hours }}</strong><span class="text-xs text-slate-300">hours</span></div><div class="rounded-2xl bg-white/10 p-4"><strong class="block text-3xl">{{ count.minutes }}</strong><span class="text-xs text-slate-300">minutes</span></div></div></section> } }
+    @if (isAway()) {
+      <section class="vt-section rounded-3xl bg-teal-950 p-6 text-white"><div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><p class="text-xs font-semibold uppercase tracking-widest text-teal-300">Today · {{ todayLabel() }}</p><h2 class="mt-2 text-3xl font-semibold">Your day at a glance</h2></div>@if (trip().support.emergencyPhone) { <a class="rounded-full bg-red-500 px-5 py-3 text-center text-sm font-bold text-white" [href]="'tel:' + trip().support.emergencyPhone">Emergency · {{ trip().support.emergencyPhone }}</a> }</div>
+        @if (dayPlan().today.length) { <h3 class="mt-6 text-sm font-semibold uppercase tracking-wider text-teal-200">Today</h3><ol class="mt-3 grid gap-3">@for (item of dayPlan().today; track item.id) { <li class="flex gap-4 rounded-2xl bg-white/10 p-4"><time class="font-semibold text-teal-200">{{ item.startTime || 'All day' }}</time><div><strong>{{ item.title }}</strong><p class="mt-1 text-sm text-teal-50">{{ item.from }}{{ item.to ? ' → ' + item.to : '' }}{{ item.address ? item.address : '' }}</p></div></li> }</ol> } @else { <p class="mt-6 text-teal-100">There are no timed itinerary items for today.</p> }
+        @if (dayPlan().upcoming.length) { <h3 class="mt-6 text-sm font-semibold uppercase tracking-wider text-teal-200">Coming up</h3><div class="mt-3 grid gap-3 sm:grid-cols-2">@for (item of dayPlan().upcoming; track item.id) { <div class="rounded-2xl border border-white/15 p-4"><strong>{{ item.title }}</strong><p class="mt-1 text-sm text-teal-100">{{ item.startDate }}{{ item.startTime ? ' · ' + item.startTime : '' }}</p></div> }</div> }
+      </section>
+    }
+    @if (trip().stage === 'prep') {
+      <section class="vt-section"><p class="text-xs font-semibold uppercase tracking-widest text-teal-700">Before you go</p><h2 class="vt-h2">Final checks</h2><ul class="mt-5 grid gap-3">@for (item of checklist(); track item.id) { <li class="flex items-start gap-4 rounded-2xl bg-white p-4 ring-1" [class.ring-red-200]="item.level === 'alert'" [class.ring-slate-200]="item.level !== 'alert'"><button type="button" class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-bold" [class.bg-emerald-600]="isDone(item.id) || item.level === 'done'" [class.text-white]="isDone(item.id) || item.level === 'done'" [disabled]="item.locked" (click)="toggleCheck(item.id)">{{ isDone(item.id) || item.level === 'done' ? '✓' : item.level === 'alert' ? '!' : '' }}</button><div><strong [class.text-red-800]="item.level === 'alert'">{{ item.title }}</strong><p class="mt-1 text-sm leading-6 text-slate-600">{{ item.text }}</p>@if (item.id === 'advice' && trip().summary.countries[0]) { <a class="mt-2 inline-block text-sm font-semibold text-teal-700" [href]="adviceUrl()" target="_blank" rel="noopener">Official travel advice ↗</a> }</div></li> }</ul></section>
+    }
+    @if (trip().stage === 'home' || trip().stage === 'past') {
+      <section class="vt-section rounded-3xl bg-gradient-to-br from-amber-50 to-teal-50 p-6"><p class="text-xs font-semibold uppercase tracking-widest text-teal-700">Welcome home</p><h2 class="mt-2 text-3xl font-semibold">Thank you for travelling with {{ trip().brand.name }}</h2><p class="mt-3 max-w-2xl leading-7 text-slate-600">We hope your trip gave you plenty of good memories. We would love to hear how it went—and help whenever the next idea arrives.</p><div class="mt-6 grid gap-3 sm:grid-cols-3">@if (reviewUrl()) { <a class="vt-btn vt-btn--primary" [href]="reviewUrl()" target="_blank" rel="noopener">Leave a review</a> }<button type="button" class="vt-btn vt-btn--ghost" (click)="recommend()">Recommend us</button><button type="button" class="vt-btn vt-btn--ghost" (click)="planNext.emit()">Plan the next trip</button></div>@if (trip().summary.gallery.length) { <div class="mt-6 flex snap-x gap-2 overflow-x-auto">@for (image of trip().summary.gallery.slice(0, 10); track image.url) { <img class="h-32 min-w-52 snap-center rounded-2xl object-cover" [src]="image.url" [alt]="image.alt" /> }</div> }</section>
+    }
+  `,
+})
+export class StageExperienceSection implements OnDestroy {
+  readonly trip = input.required<TripSnapshot>();
+  readonly external = input<ExternalTripContent | null>(null);
+  readonly planNext = output<void>();
+  private readonly tick = signal(Date.now());
+  private readonly checked = signal<string[]>([]);
+  private readonly timer = setInterval(() => this.tick.set(Date.now()), 30_000);
+  readonly countdown = computed(() => { this.tick(); return countdownTo(this.trip()); });
+  readonly dayPlan = computed(() => { this.tick(); return todayAndUpcoming(this.trip().itinerary); });
+  readonly checklist = computed(() => buildChecklist(this.trip()));
+  constructor() { this.checked.set(readChecks()); }
+  ngOnDestroy(): void { clearInterval(this.timer); }
+  surprise(): TripSnapshot['experience']['surprise'] { return this.trip().experience.surprise ?? { enabled: false, concealed: false, revealAt: null }; }
+  isAway(): boolean { return ['departure', 'travelling', 'returning'].includes(this.trip().stage); }
+  todayLabel(): string { this.tick(); return new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date()); }
+  isDone(id: string): boolean { return this.checked().includes(`${this.trip().tripId}:${id}`); }
+  toggleCheck(id: string): void { const key = `${this.trip().tripId}:${id}`; this.checked.update((items) => items.includes(key) ? items.filter((item) => item !== key) : [...items, key]); localStorage.setItem('vision-trips:checklist', JSON.stringify(this.checked())); }
+  adviceUrl(): string { return `https://www.gov.uk/foreign-travel-advice/${slug(this.trip().summary.countries[0] || '')}`; }
+  reviewUrl(): string | null { return this.trip().brand.profile.reviewLinks.find((link) => link.provider === 'google')?.url ?? this.trip().brand.profile.reviewLinks[0]?.url ?? null; }
+  async recommend(): Promise<void> { const trip = this.trip(); await Share.share({ title: trip.brand.name, text: `We booked with ${trip.brand.name} and they looked after our trip. ${trip.support.phone || trip.support.websiteUrl || ''}` }); }
+}
+function readChecks(): string[] { try { const value = JSON.parse(localStorage.getItem('vision-trips:checklist') || '[]') as unknown; return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []; } catch { return []; } }
+function slug(value: string): string { return value.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }

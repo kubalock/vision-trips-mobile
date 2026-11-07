@@ -17,13 +17,14 @@ import { ItinerarySection } from './features/trip/itinerary-section';
 import { ExtrasSection } from './features/trip/extras-section';
 import { PaymentsSection } from './features/trip/payments-section';
 import { ExternalContentSection } from './features/trip/external-content-section';
+import { StageExperienceSection } from './features/trip/stage-experience-section';
 
 type AppView = 'home' | 'itinerary' | 'payments' | 'documents' | 'help';
 type TripRefreshState = 'idle' | 'refreshing' | 'fresh' | 'stale' | 'offline' | 'error';
 
 @Component({
   selector: 'app-root',
-  imports: [CommunicationsSection, DestinationsSection, DocumentsSection, ExtrasSection, ExternalContentSection, ItinerarySection, PaymentsSection],
+  imports: [CommunicationsSection, DestinationsSection, DocumentsSection, ExtrasSection, ExternalContentSection, ItinerarySection, PaymentsSection, StageExperienceSection],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -504,6 +505,12 @@ export class App implements OnInit, OnDestroy {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
+  protected planNextTrip(): void {
+    this.customerMessage.set('We are thinking about our next trip. Could you send us some ideas?');
+    this.messageTopic.set('other');
+    this.selectView('help');
+  }
+
   protected openAnotherTrip(): void {
     this.clearOpenTrip();
     this.showTripLibrary.set(this.savedTripList().length > 0);
@@ -652,6 +659,10 @@ export class App implements OnInit, OnDestroy {
   }
 
   private async syncCustomerNotifications(previous: TripSnapshot | null, snapshot: TripSnapshot): Promise<void> {
+    if (snapshot.experience.surprise?.concealed) {
+      this.externalContent.set(null);
+      if (this.externalContentTimer) clearTimeout(this.externalContentTimer);
+    }
     await this.customerNotifications.sync(previous, snapshot);
     this.loadCustomerNotifications(snapshot.tripId);
   }

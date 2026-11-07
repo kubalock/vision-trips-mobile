@@ -194,4 +194,27 @@ describe('TripsService', () => {
       expect(JSON.stringify(snapshot)).not.toContain('PRIVATE-REF');
     }
   });
+
+  it('removes destination-bearing content from a surprise booking until departure', () => {
+    const service = new TripsService({} as never);
+    const snapshot = service.mapSnapshot(
+      'appABCDEFGHIJKLMN',
+      { id: 'recABCDEFGHIJKLMN', fields: { Status: 'Confirmed', 'Trip Name': 'Secret Lisbon', 'Departure Date': '2027-03-01', 'Surprise Booking': true, Destinations: ['recLOCATIONABCDEF'] } },
+      { id: '', fields: {} },
+      'primary_customer',
+      {
+        elements: [{ id: 'recELEMENTABCDEFG', fields: { Type: 'Accommodation', 'Accommodation Name': 'Secret Hotel', 'Customer Documentation': [{ url: 'https://files.example/voucher.pdf', filename: 'Hotel voucher.pdf' }] } }],
+        locations: [{ id: 'recLOCATIONABCDEF', fields: { Name: 'Lisbon', Country: 'Portugal' } }],
+      },
+    );
+
+    expect(snapshot.experience.surprise).toEqual({ enabled: true, concealed: true, revealAt: '2027-03-01' });
+    expect(snapshot.summary.name).toBe('Your surprise trip');
+    expect(snapshot.summary.countries).toEqual([]);
+    expect(snapshot.itinerary).toEqual([]);
+    expect(snapshot.destinations).toEqual([]);
+    expect(snapshot.documents.some((document) => document.kind === 'supplier')).toBe(false);
+    expect(JSON.stringify(snapshot)).not.toContain('Lisbon');
+    expect(JSON.stringify(snapshot)).not.toContain('Secret Hotel');
+  });
 });

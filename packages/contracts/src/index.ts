@@ -237,6 +237,7 @@ export interface TripExperience {
   overview: string | null;
   personalisedMessage: string | null;
   agentName: string | null;
+  surprise: { enabled: boolean; concealed: boolean; revealAt: string | null };
 }
 
 export interface TripSupport {

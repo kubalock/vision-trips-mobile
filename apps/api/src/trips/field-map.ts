@@ -20,6 +20,7 @@ export const bookingFields = {
   supplierTickets: ['Supplier Tickets Received'], supplierConfirmations: ['Supplier Confirmations Received'],
   taskConfirmation: ['Booking Confirmation'], taskReconfirmed: ['Booking Reconfirmed'], taskDocuments: ['Travel Documents'], taskPredeparture: ['Pre-Departure Call'], taskFollowup: ['Post-Travel Follow-Up'],
   group: ['Group Booking'], giftVoucher: ['Gift Voucher'], totalTravellers: ['Total Passengers & Guests', 'Total Passengers'],
+  surprise: ['Surprise Booking'],
   hero: ['Hero Image', 'Featured Image', 'Hero'],
   gallery: ['Gallery', 'Accommodation Gallery', 'Cruise Ship Gallery'],
   brand: ['Brands & Branches'],

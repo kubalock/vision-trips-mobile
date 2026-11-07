@@ -80,6 +80,8 @@ export class TripsService {
     const version = dateTimeString(booking.fields['Last modified time']) ?? booking.createdTime ?? now.toISOString();
     const tripId = publicTripId(baseId, booking.id);
     const stage = resolveStage(status, departure, returns, quoteExpiry);
+    const surpriseEnabled = process.env.SURPRISE_MODE !== 'false' && truthy(bookingValue('surprise'));
+    const surpriseConcealed = surpriseEnabled && ['confirmed', 'countdown', 'prep'].includes(stage);
     const hideSupplierInfo = accessScope === 'fellow_traveller' || stage === 'quote' || stage === 'quote_expired';
     const graph = recordGraph(allRelated);
     const itinerary = allRelated.elements.map((record, index) => mapElement(record, tripId, index, graph, hideSupplierInfo)).filter((item) => item.status.toLowerCase() !== 'cancelled');
@@ -113,6 +115,13 @@ export class TripsService {
       sector: safeText(bookingValue('sector')) || null, totalTravellers: Math.max(numberValue(bookingValue('totalTravellers')), travellers.length),
       groupBooking: truthy(bookingValue('group')), giftVoucher: truthy(bookingValue('giftVoucher')),
     };
+    const visibleSummary = surpriseConcealed ? {
+      ...summary, name: 'Your surprise trip', heroImageUrl: null, gallery: [], countries: [], holidayTypes: [], travellerType: null, sector: null,
+    } : summary;
+    const visibleItinerary = surpriseConcealed ? [] : itinerary;
+    const visibleDestinations = surpriseConcealed ? [] : destinations;
+    const visibleExtras = surpriseConcealed ? [] : extras;
+    const visibleDocuments = surpriseConcealed ? documents.filter((item) => item.kind !== 'supplier') : documents;
 
     return {
       schemaVersion: 3,
@@ -139,13 +148,14 @@ export class TripsService {
         }),
         profile: mapBrandProfile(brandValue),
       },
-      summary,
+      summary: visibleSummary,
       experience: {
-        overview: safeText(bookingValue('overview')) || null,
-        personalisedMessage: bookingValue('includeMessage') === undefined || truthy(bookingValue('includeMessage'))
+        overview: surpriseConcealed ? null : safeText(bookingValue('overview')) || null,
+        personalisedMessage: !surpriseConcealed && (bookingValue('includeMessage') === undefined || truthy(bookingValue('includeMessage')))
           ? safeText(bookingValue('personalMessage')) || null
           : null,
         agentName: safeText(bookingValue('agent')) || null,
+        surprise: { enabled: surpriseEnabled, concealed: surpriseConcealed, revealAt: surpriseEnabled ? departure : null },
       },
       support: {
         companyName: brandName,
@@ -178,19 +188,19 @@ export class TripsService {
         requiredConfirmations: stage === 'quote' ? ['package', 'names', 'important', 'protection', 'terms'] : [],
         reviewSections: stage === 'quote' ? mapQuotationReview(summary, travellers, itinerary, payments, protection, brandName) : [],
       },
-      timeline: mapTimeline(itinerary, departure, now),
-      destinations,
-      extras,
+      timeline: mapTimeline(visibleItinerary, departure, now),
+      destinations: visibleDestinations,
+      extras: visibleExtras,
       communications,
       integrations: {
-        liveFlightStatus: itinerary.some((item) => item.kind === 'flight') ? (process.env.FLIGHT_API_KEY ? 'available' : 'not_configured') : 'not_applicable',
-        weather: destinations.length ? (process.env.WEATHER_ENABLED === 'false' ? 'not_configured' : 'available') : 'not_applicable',
-        destinationGuides: destinations.length && (process.env.AI_API_KEY || destinations.some((destination) => destination.overview || destination.imageUrl)) ? 'available' : 'not_available',
+        liveFlightStatus: visibleItinerary.some((item) => item.kind === 'flight') ? (process.env.FLIGHT_API_KEY ? 'available' : 'not_configured') : 'not_applicable',
+        weather: visibleDestinations.length ? (process.env.WEATHER_ENABLED === 'false' ? 'not_configured' : 'available') : 'not_applicable',
+        destinationGuides: visibleDestinations.length && (process.env.AI_API_KEY || visibleDestinations.some((destination) => destination.overview || destination.imageUrl)) ? 'available' : 'not_available',
       },
       travellers,
-      itinerary,
+      itinerary: visibleItinerary,
       ...(payments ? { payments } : {}),
-      documents,
+      documents: visibleDocuments,
       capabilities: {
         acceptQuotation: accessScope === 'primary_customer' && stage === 'quote' && !quotationAccepted,
         makePayment: accessScope === 'primary_customer' && !['closed', 'cancelled', 'quote_expired'].includes(stage),
