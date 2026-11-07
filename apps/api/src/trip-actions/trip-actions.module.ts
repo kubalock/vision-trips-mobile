@@ -7,10 +7,11 @@ import { TripActionsController } from './trip-actions.controller.js';
 import { AcceptanceNotificationsService } from './acceptance-notifications.service.js';
 import { PdfDocumentService } from './pdf-document.service.js';
 import { MintPaymentsService } from './mint-payments.service.js';
+import { RelatedQuotationsService } from './related-quotations.service.js';
 
 @Module({
   imports: [SessionsModule],
   controllers: [TripActionsController],
-  providers: [TripsService, AirtableService, LinkTokenService, AcceptanceNotificationsService, PdfDocumentService, MintPaymentsService],
+  providers: [TripsService, AirtableService, LinkTokenService, AcceptanceNotificationsService, PdfDocumentService, MintPaymentsService, RelatedQuotationsService],
 })
 export class TripActionsModule {}

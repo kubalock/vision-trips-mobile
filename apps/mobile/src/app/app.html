@@ -25,6 +25,7 @@
           </div>
         </article>
         <app-stage-experience-section [trip]="currentTrip" [external]="externalContent()" (planNext)="planNextTrip()" />
+        @if (currentTrip.bookingJourney; as journey) { <app-booking-journey-section [journey]="journey" [related]="relatedQuotations()" [openingId]="openingRelatedId()" (enquire)="enquireAboutExtra($event)" (open)="openRelatedQuotation($event)" /> }
         @if (acceptanceComplete()) {
           <section class="vt-section vt-notice vt-notice--ok"><h2 class="vt-h3">Quotation accepted</h2><p>Your acceptance has been recorded. Your travel agent will confirm the booking after checking each part with the suppliers.</p><p class="vt-small">{{ acceptanceNotice() }}</p><button type="button" class="vt-btn vt-btn--ghost vt-btn--sm" (click)="downloadDocument('acceptance')">Download acceptance receipt</button></section>
         } @else if (currentTrip.quotation.canAccept) {

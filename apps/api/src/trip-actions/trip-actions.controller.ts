@@ -1,6 +1,6 @@
-import { BadGatewayException, BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, Headers, Logger, NotFoundException, Param, Post, Req, StreamableFile } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, Headers, Logger, NotFoundException, Optional, Param, Post, Req, ServiceUnavailableException, StreamableFile } from '@nestjs/common';
 import { ApiBearerAuth, ApiProduces, ApiTags } from '@nestjs/swagger';
-import type { CustomerMessageRequest, CustomerMessageResponse, CustomerMessageTopic, FellowTravellerLinkResponse, PaymentLinkResponse, QuotationAcceptanceRequest, QuotationAcceptanceResponse } from '@vision-trips/contracts';
+import type { CustomerMessageRequest, CustomerMessageResponse, CustomerMessageTopic, FellowTravellerLinkResponse, OpenRelatedQuotationResponse, PaymentLinkResponse, QuotationAcceptanceRequest, QuotationAcceptanceResponse, RelatedQuotationsResponse } from '@vision-trips/contracts';
 import type { Request } from 'express';
 import { AirtableService } from '../airtable/airtable.service.js';
 import { SessionsService } from '../sessions/sessions.service.js';
@@ -9,6 +9,7 @@ import { LinkTokenService } from '../security/link-token.service.js';
 import { AcceptanceNotificationsService } from './acceptance-notifications.service.js';
 import { PdfDocumentService } from './pdf-document.service.js';
 import { MintPaymentsService } from './mint-payments.service.js';
+import { RelatedQuotationsService } from './related-quotations.service.js';
 
 @ApiTags('trip actions')
 @Controller('trips/current')
@@ -23,7 +24,22 @@ export class TripActionsController {
     private readonly notifications: AcceptanceNotificationsService,
     private readonly pdf: PdfDocumentService,
     private readonly mintPayments: MintPaymentsService,
+    @Optional() private readonly relatedQuotations?: RelatedQuotationsService,
   ) {}
+
+  @Get('related-quotations')
+  @ApiBearerAuth()
+  related(@Headers('authorization') authorization: string | undefined): Promise<RelatedQuotationsResponse> {
+    if (!this.relatedQuotations) throw new ServiceUnavailableException('Quotation comparison is not available.');
+    return this.relatedQuotations.list(this.sessions.validateAccess(authorization));
+  }
+
+  @Post('related-quotations/:comparisonId/open')
+  @ApiBearerAuth()
+  openRelated(@Headers('authorization') authorization: string | undefined, @Param('comparisonId') comparisonId: string): Promise<OpenRelatedQuotationResponse> {
+    if (!this.relatedQuotations) throw new ServiceUnavailableException('Quotation comparison is not available.');
+    return this.relatedQuotations.open(this.sessions.validateAccess(authorization), comparisonId);
+  }
 
   @Get()
   @ApiBearerAuth()

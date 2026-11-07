@@ -4,7 +4,7 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import { Network } from '@capacitor/network';
 import { Share } from '@capacitor/share';
-import type { CustomerMessageTopic, ExternalTripContent, LinkExchangeChallenge, LinkExchangeResponse, MobileSession, TripDocument, TripSnapshot } from '@vision-trips/contracts';
+import type { CustomerMessageTopic, ExternalTripContent, LinkExchangeChallenge, LinkExchangeResponse, MobileSession, RelatedQuotationSummary, TripDocument, TripSnapshot } from '@vision-trips/contracts';
 import { VisionApiService } from './core/api/vision-api.service';
 import { SavedTripsStore, type SavedTrip } from './core/storage/saved-trips.store';
 import { groupSavedTrips } from './core/storage/trip-library';
@@ -18,13 +18,14 @@ import { ExtrasSection } from './features/trip/extras-section';
 import { PaymentsSection } from './features/trip/payments-section';
 import { ExternalContentSection } from './features/trip/external-content-section';
 import { StageExperienceSection } from './features/trip/stage-experience-section';
+import { BookingJourneySection } from './features/trip/booking-journey-section';
 
 type AppView = 'home' | 'itinerary' | 'payments' | 'documents' | 'help';
 type TripRefreshState = 'idle' | 'refreshing' | 'fresh' | 'stale' | 'offline' | 'error';
 
 @Component({
   selector: 'app-root',
-  imports: [CommunicationsSection, DestinationsSection, DocumentsSection, ExtrasSection, ExternalContentSection, ItinerarySection, PaymentsSection, StageExperienceSection],
+  imports: [BookingJourneySection, CommunicationsSection, DestinationsSection, DocumentsSection, ExtrasSection, ExternalContentSection, ItinerarySection, PaymentsSection, StageExperienceSection],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -76,6 +77,8 @@ export class App implements OnInit, OnDestroy {
   protected readonly externalContentLoading = signal(false);
   protected readonly externalContentFailed = signal(false);
   protected readonly displayedDestinations = computed(() => this.externalContent()?.destinations ?? this.trip()?.destinations ?? []);
+  protected readonly relatedQuotations = signal<RelatedQuotationSummary[]>([]);
+  protected readonly openingRelatedId = signal<string | null>(null);
   private readonly session = signal<MobileSession | null>(null);
   private paymentAwaitingReturn = false;
   private paymentOpenedAt = 0;
@@ -492,6 +495,7 @@ export class App implements OnInit, OnDestroy {
     await this.refreshDocumentStatuses(response.snapshot);
     this.session.set(response.session);
     void this.loadExternalContent();
+    void this.loadRelatedQuotations();
     this.challenge.set(null);
     this.showTripLibrary.set(false);
     this.activeView.set('home');
@@ -509,6 +513,23 @@ export class App implements OnInit, OnDestroy {
     this.customerMessage.set('We are thinking about our next trip. Could you send us some ideas?');
     this.messageTopic.set('other');
     this.selectView('help');
+  }
+
+  protected enquireAboutExtra(message: string): void { this.customerMessage.set(message); this.messageTopic.set('itinerary'); this.messageSent.set(false); this.selectView('help'); }
+
+  protected async openRelatedQuotation(comparisonId: string): Promise<void> {
+    const currentSession = this.session(); if (!currentSession || this.openingRelatedId()) return;
+    this.openingRelatedId.set(comparisonId); this.error.set('');
+    try {
+      const response = await this.api.openRelatedQuotation(comparisonId, currentSession.accessToken);
+      await this.acceptAuthorized({ status: 'authorized', exchangeId: 'related', expiresAt: response.session.refreshExpiresAt, snapshot: response.snapshot, session: response.session });
+    } catch (error) { this.error.set(this.apiError(error, 'We could not open that quotation. Refresh and try again.')); }
+    finally { this.openingRelatedId.set(null); }
+  }
+
+  private async loadRelatedQuotations(): Promise<void> {
+    const currentSession = this.session(); if (!currentSession || !this.online() || this.trip()?.accessScope !== 'primary_customer') { this.relatedQuotations.set([]); return; }
+    try { this.relatedQuotations.set((await this.api.relatedQuotations(currentSession.accessToken)).quotations); } catch { this.relatedQuotations.set([]); }
   }
 
   protected openAnotherTrip(): void {
@@ -607,6 +628,7 @@ export class App implements OnInit, OnDestroy {
     this.externalContent.set(null);
     this.externalContentLoading.set(false);
     this.externalContentFailed.set(false);
+    this.relatedQuotations.set([]);
     if (this.externalContentTimer) clearTimeout(this.externalContentTimer);
     this.notifications.set([]);
     this.showNotifications.set(false);

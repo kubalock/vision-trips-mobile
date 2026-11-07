@@ -68,4 +68,15 @@ describe('AirtableService', () => {
       method: 'POST', body: JSON.stringify({ text: 'Accepted online' }),
     }));
   });
+
+  it('searches a table using encoded formulas and selected fields', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ records: [{ id: 'recABCDEFGHIJKLMN', fields: { Trips: ['recNOPQRSTUVWXYZ1'] } }] }), { status: 200 }));
+    const records = await new AirtableService().list('appABCDEFGHIJKLMN', 'Customers', { filterByFormula: "LOWER({Primary Email})='alex@example.com'", fields: ['Trips'], maxRecords: 20 });
+    expect(records).toHaveLength(1);
+    const request = fetchMock.mock.calls[0][0];
+    const url = typeof request === 'string' ? request : request instanceof URL ? request.href : request.url;
+    expect(url).toContain('filterByFormula=');
+    expect(url).toContain('fields%5B%5D=Trips');
+    expect(url).not.toContain('alex@example.com');
+  });
 });

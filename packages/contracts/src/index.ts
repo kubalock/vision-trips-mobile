@@ -78,6 +78,7 @@ export interface TripSnapshot {
   bookingStatus: BookingStatus;
   quotation: QuotationState;
   timeline: TripTimeline;
+  bookingJourney: BookingJourney;
   destinations: DestinationGuide[];
   extras: TripExtra[];
   communications: TripCommunication[];
@@ -219,6 +220,40 @@ export interface TripTimeline {
   nextItemDate: string | null;
   nextItemTime: string | null;
 }
+
+export interface BookingJourney {
+  steps: Array<{
+    id: 'confirmation' | 'balance' | 'reconfirmation' | 'documents' | 'pre_departure_call' | 'post_trip_follow_up';
+    title: string;
+    description: string;
+    date: string | null;
+    status: 'complete' | 'current' | 'upcoming';
+  }>;
+  faqs: Array<{ id: string; question: string; answer: string }>;
+  suggestedExtras: Array<{
+    id: 'transfers' | 'airport' | 'flight_upgrade' | 'room_upgrade' | 'experiences' | 'cruise_packages' | 'instalments' | 'insurance' | 'extra_nights';
+    title: string;
+    description: string;
+    enquiry: string;
+  }>;
+}
+
+export interface RelatedQuotationSummary {
+  comparisonId: string;
+  reference: string;
+  name: string;
+  departureDate: string | null;
+  returnDate: string | null;
+  durationDays: number | null;
+  total: number;
+  currency: string;
+  heroImageUrl: string | null;
+  status: 'available' | 'expired';
+  current: boolean;
+}
+
+export interface RelatedQuotationsResponse { quotations: RelatedQuotationSummary[] }
+export interface OpenRelatedQuotationResponse { snapshot: TripSnapshot; session: MobileSession }
 
 export interface DestinationGuide {
   id: string;

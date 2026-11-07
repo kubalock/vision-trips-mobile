@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import type { CustomerMessageRequest, CustomerMessageResponse, ExternalTripContent, FellowTravellerLinkResponse, LinkExchangeResponse, MobileSession, PaymentLinkResponse, QuotationAcceptanceRequest, QuotationAcceptanceResponse, TripSnapshot } from '@vision-trips/contracts';
+import type { CustomerMessageRequest, CustomerMessageResponse, ExternalTripContent, FellowTravellerLinkResponse, LinkExchangeResponse, MobileSession, OpenRelatedQuotationResponse, PaymentLinkResponse, QuotationAcceptanceRequest, QuotationAcceptanceResponse, RelatedQuotationsResponse, TripSnapshot } from '@vision-trips/contracts';
 import { firstValueFrom } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
@@ -68,6 +68,14 @@ export class VisionApiService {
 
   externalContent(accessToken: string): Promise<ExternalTripContent> {
     return firstValueFrom(this.http.get<ExternalTripContent>(`${this.baseUrl}/trips/current/external-content`, { headers: { Authorization: `Bearer ${accessToken}` } }));
+  }
+
+  relatedQuotations(accessToken: string): Promise<RelatedQuotationsResponse> {
+    return firstValueFrom(this.http.get<RelatedQuotationsResponse>(`${this.baseUrl}/trips/current/related-quotations`, { headers: { Authorization: `Bearer ${accessToken}` } }));
+  }
+
+  openRelatedQuotation(comparisonId: string, accessToken: string): Promise<OpenRelatedQuotationResponse> {
+    return firstValueFrom(this.http.post<OpenRelatedQuotationResponse>(`${this.baseUrl}/trips/current/related-quotations/${encodeURIComponent(comparisonId)}/open`, {}, { headers: { Authorization: `Bearer ${accessToken}` } }));
   }
 
   paymentLink(paymentId: string, accessToken: string): Promise<PaymentLinkResponse> {

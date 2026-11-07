@@ -112,7 +112,10 @@ export const personFields = {
   nationality: ['Nationality'], passportExpiry: ['Expiry Date'], insurance: ['Travel Insurance'],
 } as const;
 
-export const customerFields = { name: ['Full Name', 'Name'], first: ['First Name'], last: ['Last Name'] } as const;
+export const customerFields = {
+  name: ['Full Name', 'Name'], first: ['First Name'], last: ['Last Name'],
+  primaryEmail: ['Primary Email'], secondaryEmail: ['Secondary Email'], trips: ['Trips'],
+} as const;
 export const memberFields = { company: ['Company Name'], proposition: ['Proposition'], tAtolEnabled: ['T-ATOL Enabled'], tAtolNumber: ['T-ATOL Number'], number: ['Members | Number', 'Member Number'] } as const;
 
 export function pick(fields: Record<string, unknown>, candidates: readonly string[]): unknown {

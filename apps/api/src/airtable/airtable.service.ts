@@ -6,6 +6,12 @@ export interface AirtableRecord {
   fields: Record<string, unknown>;
 }
 
+export interface AirtableListOptions {
+  filterByFormula?: string;
+  fields?: string[];
+  maxRecords?: number;
+}
+
 @Injectable()
 export class AirtableService {
   private readonly logger = new Logger(AirtableService.name);
@@ -14,6 +20,31 @@ export class AirtableService {
 
   records(baseId: string, table: string, recordIds: string[]): Promise<AirtableRecord[]> {
     return Promise.all([...new Set(recordIds)].filter(isRecordId).map((id) => this.record(baseId, table, id)));
+  }
+
+  async list(baseId: string, table: string, options: AirtableListOptions = {}): Promise<AirtableRecord[]> {
+    const token = process.env.AIRTABLE_TOKEN;
+    if (!token) throw new ServiceUnavailableException('Airtable is not configured.');
+    const limit = Math.min(Math.max(options.maxRecords ?? 100, 1), 100);
+    const params = new URLSearchParams({ pageSize: String(limit), maxRecords: String(limit) });
+    if (options.filterByFormula) params.set('filterByFormula', options.filterByFormula);
+    for (const field of options.fields ?? []) params.append('fields[]', field);
+    const url = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(table)}?${params}`;
+    await this.throttle();
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(Number(process.env.AIRTABLE_REQUEST_TIMEOUT_MS ?? 10_000)) });
+    if (!response.ok) {
+      const detail = await responseText(response);
+      this.logger.warn(`Airtable ${response.status} listing ${table}: ${detail}`);
+      if (response.status === 401 || response.status === 403) throw new ServiceUnavailableException('The Airtable token cannot search this base or table.');
+      if (response.status === 422) throw new BadGatewayException(`Airtable rejected the ${table} search. Check that this base uses the Vision schema.`);
+      if (response.status === 429 || response.status >= 500) throw new ServiceUnavailableException('Airtable is temporarily unavailable. Try again shortly.');
+      throw new BadGatewayException(`Airtable rejected the ${table} search (status ${response.status}).`);
+    }
+    try {
+      const value = await response.json() as { records?: unknown };
+      if (!Array.isArray(value.records)) throw new Error('invalid list');
+      return value.records.filter((record): record is AirtableRecord => Boolean(record && typeof record === 'object' && typeof (record as AirtableRecord).id === 'string' && (record as AirtableRecord).fields));
+    } catch { throw new BadGatewayException('Airtable returned a malformed record list.'); }
   }
 
   async record(baseId: string, table: string, recordId: string): Promise<AirtableRecord> {
