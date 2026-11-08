@@ -4,7 +4,7 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import { Network } from '@capacitor/network';
 import { Share } from '@capacitor/share';
-import type { CustomerAccount, CustomerMessageTopic, CustomerPreferences, ExternalTripContent, LinkExchangeChallenge, LinkExchangeResponse, MobileSession, RelatedQuotationSummary, TripDocument, TripSnapshot } from '@vision-trips/contracts';
+import type { CustomerAccount, CustomerEngagementEvent, CustomerMessageTopic, CustomerPreferences, ExternalTripContent, LinkExchangeChallenge, LinkExchangeResponse, MobileSession, RelatedQuotationSummary, TripDocument, TripSnapshot } from '@vision-trips/contracts';
 import { VisionApiService } from './core/api/vision-api.service';
 import { SavedTripsStore, type SavedTrip } from './core/storage/saved-trips.store';
 import { groupSavedTrips } from './core/storage/trip-library';
@@ -121,6 +121,14 @@ export class App implements OnInit, OnDestroy {
   @HostListener('window:focus')
   protected onWindowFocus(): void {
     void this.checkPaymentReturn();
+  }
+
+  @HostListener('document:click', ['$event'])
+  protected recordClickedAction(event: MouseEvent): void {
+    const target = event.target instanceof Element ? event.target.closest<HTMLElement>('button, a') : null;
+    if (!target || target.hasAttribute('disabled')) return;
+    const label = (target.dataset['engagement'] || target.getAttribute('aria-label') || target.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 100);
+    if (label) this.trackEngagement('action_clicked', label);
   }
 
   protected updateBaseId(event: Event): void {
@@ -513,6 +521,7 @@ export class App implements OnInit, OnDestroy {
 
   protected selectView(view: AppView): void {
     this.activeView.set(view);
+    this.trackEngagement('section_opened', view);
     if (view === 'account') void this.loadCustomerAccount();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -775,6 +784,18 @@ export class App implements OnInit, OnDestroy {
       activeSession = await this.refreshSession(activeSession);
       return request(activeSession.accessToken);
     }
+  }
+
+  private trackEngagement(event: CustomerEngagementEvent, detail: string): void {
+    const session = this.session();
+    if (!session || !this.online()) return;
+    void this.withSession(session, (accessToken) => this.api.engagement({
+      event,
+      detail,
+      stage: this.trip()?.stage,
+      occurredAt: new Date().toISOString(),
+      device: Capacitor.getPlatform(),
+    }, accessToken)).catch(() => undefined);
   }
 
   private refreshSession(expiredSession: MobileSession): Promise<MobileSession> {

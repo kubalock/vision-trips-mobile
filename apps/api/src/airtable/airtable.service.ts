@@ -103,6 +103,25 @@ export class AirtableService {
     return this.write(baseId, table, recordId, 'PATCH', { fields, typecast: true });
   }
 
+  async createRecord(baseId: string, table: string, fields: Record<string, unknown>): Promise<AirtableRecord> {
+    const token = process.env.AIRTABLE_TOKEN;
+    if (!token) throw new ServiceUnavailableException('Airtable is not configured.');
+    const url = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(table)}`;
+    await this.throttle();
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields, typecast: true }),
+      signal: AbortSignal.timeout(Number(process.env.AIRTABLE_REQUEST_TIMEOUT_MS ?? 10_000)),
+    });
+    if (!response.ok) {
+      const detail = await responseText(response);
+      this.logger.warn(`Airtable ${response.status} creating ${table}: ${detail}`);
+      throw new ServiceUnavailableException('Airtable could not record the engagement event.');
+    }
+    return this.parseRecord(response);
+  }
+
   async addComment(baseId: string, table: string, recordId: string, text: string): Promise<void> {
     await this.write(baseId, table, recordId, 'POST', { text: text.slice(0, 1_000) }, 'comments');
   }

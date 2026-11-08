@@ -153,8 +153,13 @@ export interface PracticalGuide { id: string; kind: 'airline' | 'airport'; name:
 export interface ExternalTripContent {
   generatedAt: string; refreshAfterSeconds: number;
   providers: { flights: ExternalProviderStatus; weather: ExternalProviderStatus; places: ExternalProviderStatus; widgety: ExternalProviderStatus; ai: ExternalProviderStatus };
+  diagnostics: { cache: { entries: number; hits: number; misses: number; writes: number }; sources: Array<{ provider: string; configured: boolean; source: string }> };
   flights: LiveFlightStatus[]; weather: WeatherForecast[]; stays: PlaceProfile[]; cruises: CruiseProfile[]; destinations: EnrichedDestinationGuide[]; guides: PracticalGuide[];
 }
+
+export type CustomerEngagementEvent = 'section_opened' | 'action_clicked';
+export interface CustomerEngagementRequest { event: CustomerEngagementEvent; detail: string; stage?: string; occurredAt?: string; device?: string }
+export interface CustomerEngagementResponse { accepted: true }
 
 export interface TripExtra {
   id: string;

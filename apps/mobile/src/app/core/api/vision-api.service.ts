@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import type { CustomerAccount, CustomerMessageRequest, CustomerMessageResponse, CustomerPreferences, ExternalTripContent, FellowTravellerLinkResponse, LinkExchangeResponse, MobileSession, OpenCustomerAccountTripResponse, OpenRelatedQuotationResponse, PaymentLinkResponse, QuotationAcceptanceRequest, QuotationAcceptanceResponse, RelatedQuotationsResponse, TripSnapshot, UpdateCustomerPreferencesResponse } from '@vision-trips/contracts';
+import type { CustomerAccount, CustomerEngagementRequest, CustomerEngagementResponse, CustomerMessageRequest, CustomerMessageResponse, CustomerPreferences, ExternalTripContent, FellowTravellerLinkResponse, LinkExchangeResponse, MobileSession, OpenCustomerAccountTripResponse, OpenRelatedQuotationResponse, PaymentLinkResponse, QuotationAcceptanceRequest, QuotationAcceptanceResponse, RelatedQuotationsResponse, TripSnapshot, UpdateCustomerPreferencesResponse } from '@vision-trips/contracts';
 import { firstValueFrom } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
@@ -68,6 +68,10 @@ export class VisionApiService {
 
   externalContent(accessToken: string): Promise<ExternalTripContent> {
     return firstValueFrom(this.http.get<ExternalTripContent>(`${this.baseUrl}/trips/current/external-content`, { headers: { Authorization: `Bearer ${accessToken}` } }));
+  }
+
+  engagement(input: CustomerEngagementRequest, accessToken: string): Promise<CustomerEngagementResponse> {
+    return firstValueFrom(this.http.post<CustomerEngagementResponse>(`${this.baseUrl}/trips/current/engagement`, input, { headers: { Authorization: `Bearer ${accessToken}` } }));
   }
 
   relatedQuotations(accessToken: string): Promise<RelatedQuotationsResponse> {

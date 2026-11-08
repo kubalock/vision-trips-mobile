@@ -15,4 +15,13 @@ describe('ExternalCacheService', () => {
     expect(cache.get('missing:place')).toBeUndefined();
     vi.useRealTimers();
   });
+
+  it('reports cache activity without exposing cached values', () => {
+    const cache = new ExternalCacheService();
+    cache.set('place:secret-key', { private: 'value' }, 1_000);
+    cache.get('place:secret-key');
+    cache.get('missing');
+    expect(cache.stats()).toEqual({ entries: 1, hits: 1, misses: 1, writes: 1 });
+    expect(JSON.stringify(cache.stats())).not.toContain('secret-key');
+  });
 });

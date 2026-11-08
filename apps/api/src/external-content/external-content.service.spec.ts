@@ -18,6 +18,8 @@ describe('ExternalContentService', () => {
     expect(result.providers.weather.source).toBe('Open-Meteo');
     expect(result.providers.places.state).toBe('not_configured');
     expect(result.providers.widgety.state).toBe('not_configured');
+    expect(result.diagnostics.sources.find((source) => source.provider === 'weather')?.configured).toBe(false);
+    expect(result.diagnostics.cache).toEqual(expect.objectContaining({ entries: expect.any(Number), hits: expect.any(Number), misses: expect.any(Number), writes: expect.any(Number) }));
     expect(JSON.stringify(result)).not.toContain('API_KEY');
     process.env = previous;
   });

@@ -23,7 +23,21 @@ export class ExternalContentService {
         widgety: provider(Boolean(process.env.WIDGETY_APP_ID && process.env.WIDGETY_TOKEN), snapshot.itinerary.some((item) => item.kind === 'cruise') || snapshot.destinations.length > 0, cruises.length || destinations.some((destination) => destination.images.some((image) => image.attribution === 'Widgety')), 'Widgety'),
         ai: aiPending ? { state: 'pending', source: 'Anthropic', message: 'Content is being prepared.' } : provider(Boolean(process.env.AI_API_KEY), snapshot.itinerary.some((item) => ['flight', 'stay'].includes(item.kind)) || snapshot.destinations.length > 0, aiReady, 'Anthropic'),
       },
+      diagnostics: this.diagnostics(),
       flights, weather, stays, cruises, destinations, guides,
+    };
+  }
+
+  diagnostics(): ExternalTripContent['diagnostics'] {
+    return {
+      cache: this.cache.stats(),
+      sources: [
+        { provider: 'flights', configured: Boolean(process.env.FLIGHT_API_KEY), source: process.env.FLIGHT_PROVIDER || 'aerodatabox' },
+        { provider: 'weather', configured: process.env.WEATHER_ENABLED !== 'false', source: 'Open-Meteo' },
+        { provider: 'places', configured: Boolean(process.env.GOOGLE_PLACES_API_KEY), source: 'Google Places' },
+        { provider: 'widgety', configured: Boolean(process.env.WIDGETY_APP_ID && process.env.WIDGETY_TOKEN), source: 'Widgety' },
+        { provider: 'ai', configured: Boolean(process.env.AI_API_KEY), source: 'Anthropic' },
+      ],
     };
   }
 

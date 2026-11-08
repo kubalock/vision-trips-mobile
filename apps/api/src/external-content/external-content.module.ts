@@ -5,6 +5,7 @@ import { TripsService } from '../trips/trips.service.js';
 import { ExternalCacheService } from './external-cache.service.js';
 import { ExternalContentController } from './external-content.controller.js';
 import { ExternalContentService } from './external-content.service.js';
+import { ProviderHealthController } from './provider-health.controller.js';
 
-@Module({ imports: [SessionsModule], controllers: [ExternalContentController], providers: [AirtableService, TripsService, ExternalCacheService, ExternalContentService] })
+@Module({ imports: [SessionsModule], controllers: [ExternalContentController, ProviderHealthController], providers: [AirtableService, TripsService, ExternalCacheService, ExternalContentService] })
 export class ExternalContentModule {}
