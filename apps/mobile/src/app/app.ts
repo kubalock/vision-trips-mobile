@@ -92,6 +92,7 @@ export class App implements OnInit, OnDestroy {
   private paymentPaidBefore = 0;
   private paymentIdAwaiting: string | null = null;
   private resumeListener: PluginListenerHandle | null = null;
+  private backButtonListener: PluginListenerHandle | null = null;
   private networkListener: PluginListenerHandle | null = null;
   private resendTimer: ReturnType<typeof setInterval> | null = null;
   private externalContentTimer: ReturnType<typeof setTimeout> | null = null;
@@ -107,12 +108,18 @@ export class App implements OnInit, OnDestroy {
       void CapacitorApp.addListener('appStateChange', ({ isActive }) => {
         if (isActive) void this.checkPaymentReturn();
       }).then((listener) => { this.resumeListener = listener; });
+      if (Capacitor.getPlatform() === 'android') {
+        void CapacitorApp.addListener('backButton', () => this.handleAndroidBack()).then((listener) => {
+          this.backButtonListener = listener;
+        });
+      }
     }
   }
 
   ngOnDestroy(): void {
     document.body.classList.remove('vt');
     void this.resumeListener?.remove();
+    void this.backButtonListener?.remove();
     void this.networkListener?.remove();
     if (this.resendTimer) clearInterval(this.resendTimer);
     if (this.externalContentTimer) clearTimeout(this.externalContentTimer);
@@ -523,7 +530,25 @@ export class App implements OnInit, OnDestroy {
     this.activeView.set(view);
     this.trackEngagement('section_opened', view);
     if (view === 'account') void this.loadCustomerAccount();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
+    requestAnimationFrame(() => document.querySelector<HTMLElement>('#main-content')?.focus({ preventScroll: true }));
+  }
+
+  private handleAndroidBack(): void {
+    if (this.showNotifications()) {
+      this.showNotifications.set(false);
+      return;
+    }
+    if (this.trip() && this.activeView() !== 'home') {
+      this.selectView('home');
+      return;
+    }
+    if (this.trip() && this.savedTripList().length) {
+      this.openAnotherTrip();
+      return;
+    }
+    void CapacitorApp.minimizeApp();
   }
 
   protected async saveCustomerPreferences(preferences: CustomerPreferences): Promise<void> {

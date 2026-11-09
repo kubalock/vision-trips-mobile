@@ -10,15 +10,24 @@ body {
   margin: 0;
 }
 
-body.vt { min-height: 100dvh; }
+html { min-height: 100%; background: var(--wash-bg); overscroll-behavior-y: none; }
+body.vt { min-height: 100dvh; min-width: 320px; }
 button { font: inherit; }
 .vt-app { min-height: 100dvh; }
+.vt-app :is(button, a, summary, label, input, select, textarea) { -webkit-tap-highlight-color: transparent; }
+.vt-app :is(button, a, summary) { touch-action: manipulation; }
+.vt-app :is(input, select, textarea) { font-size: max(1rem, 16px); }
+.vt-app textarea { field-sizing: content; min-height: 8rem; }
+.vt-app :is(button, input, select, textarea)[disabled] { cursor: not-allowed; }
+.vt-app #main-content:focus { outline: none; }
 .vt-app .vt-top__brand { gap: 10px; }
 .vt-app .vt-top__logo { max-width: 150px; }
 .vt-app .vt-top__mark { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 10px; background: var(--vt-accent); color: var(--accent-ink); font-weight: 700; }
 .vt-app .vt-top__brand:has(.vt-top__mark) { background: transparent; padding: 0; }
+.vt-app .vt-top__meta .vt-iconbtn.is-active { color: var(--link); background: var(--tint); border-color: var(--vt-accent); }
 .vt-app .vt-hero__img { width: 100%; height: 100%; object-fit: cover; }
-.vt-app .vt-nav button { flex: 1; display: grid; justify-items: center; gap: 3px; padding: 6px 2px; border: 0; background: transparent; color: var(--ink-3); font-size: .68rem; font-weight: 600; border-radius: 12px; min-width: 0; cursor: pointer; }
+.vt-app .vt-nav { padding-left: max(4px, env(safe-area-inset-left)); padding-right: max(4px, env(safe-area-inset-right)); }
+.vt-app .vt-nav button { flex: 1; display: grid; justify-items: center; align-content: center; gap: 3px; min-height: 48px; padding: 6px 2px; border: 0; background: transparent; color: var(--ink-3); font-size: .68rem; font-weight: 600; border-radius: 12px; min-width: 0; cursor: pointer; }
 .vt-app .vt-nav button.is-active { color: var(--link); }
 .vt-app .vt-nav__icon { font-size: 1.25rem; line-height: 1; }
 .vt-app .vt-freshness { margin: 0 0 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-radius: var(--r-s); background: var(--surface-2); border: 1px solid var(--line); font-size: var(--fs-0); }
@@ -56,6 +65,52 @@ button { font: inherit; }
 .vt-app .vt-el__main > :is(dl, details, div, a) { max-width: 100%; }
 @media (min-width:760px) { .vt-app .vt-nav button { flex: 0 0 auto; padding: 8px 14px; grid-auto-flow: column; align-items: center; gap: 7px; font-size: .82rem; } .vt-app .vt-nav button.is-active { background: var(--tint); } }
 
+@media (min-width: 900px) {
+  .vt-app .vt-wrap { width: min(100% - 64px, 960px); }
+}
+
+/* Expanded tablet windows use a reachable navigation rail rather than a phone tab bar. */
+@media (min-width: 1024px) and (min-height: 600px) {
+  body.vt { padding-bottom: 24px; }
+  .vt-app .vt-wrap {
+    width: min(calc(100% - 144px), 960px);
+    margin-left: max(120px, calc((100% - 960px) / 2));
+    margin-right: auto;
+  }
+  .vt-app .vt-nav {
+    left: max(16px, env(safe-area-inset-left));
+    right: auto;
+    top: 50%;
+    bottom: auto;
+    transform: translateY(-50%);
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: 24px;
+    box-shadow: var(--shadow);
+  }
+  .vt-app .vt-nav button {
+    width: 76px;
+    min-height: 64px;
+    padding: 8px 6px;
+    grid-auto-flow: row;
+    gap: 5px;
+    font-size: .75rem;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .vt-app .vt-iconbtn { width: 44px; height: 44px; }
+  .vt-app .vt-btn--sm { min-height: 44px; }
+  .vt-app a.vt-link { display: inline-flex; align-items: center; min-height: 44px; }
+}
+
+@media (orientation: landscape) and (max-height: 540px) {
+  .vt-app .vt-hero { min-height: min(330px, calc(100dvh - 90px)); }
+  .vt-app .vt-hero__body { padding-block: 20px; }
+}
+
 /* Angular mobile shell — phone-first adaptations around the shared PHP components. */
 @media (max-width: 559px) {
   :root { --fs-1: 1rem; --fs-2: 1.125rem; --fs-3: 1.25rem; --fs-4: 1.55rem; --fs-5: clamp(2rem, 9vw, 2.65rem); --nav-h: 66px; }
@@ -84,9 +139,15 @@ button { font: inherit; }
   .vt-app .vt-msg__icon { width: 36px; height: 36px; }
   .vt-app .vt-msg__sent { grid-column: 2; justify-self: start; }
   .vt-app .vt-nav { padding-inline: 2px; }
-  .vt-app .vt-nav button { padding-inline: 1px; font-size: .64rem; }
+  .vt-app .vt-nav button { padding-inline: 2px; font-size: .66rem; }
   .vt-app .vt-nav__icon { font-size: 1.15rem; }
   .vt-app .vt-gate__panel { padding: 22px 18px 26px; }
+}
+
+@media (max-width: 420px) {
+  .vt-app .vt-status { display: none; }
+  .vt-app .vt-top__logo { max-width: 112px; }
+  .vt-app .vt-top__name { max-width: 8.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
 
 @media (min-width: 560px) and (max-width: 899px) {
@@ -107,4 +168,9 @@ button { font: inherit; }
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }
+}
+
+@media (forced-colors: active) {
+  .vt-app :is(.vt-btn, .vt-iconbtn, .vt-card, .vt-nav) { border: 1px solid CanvasText; }
+  .vt-app .vt-nav button.is-active { outline: 2px solid Highlight; outline-offset: -2px; }
 }
