@@ -10,28 +10,28 @@ export class VisionApiService {
 
   exchangeLink(linkOrCode: string, deviceTrustToken?: string | null): Promise<LinkExchangeResponse> {
     return firstValueFrom(
-      this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges`, { linkOrCode, deviceTrustToken }),
+      this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges`, { linkOrCode, deviceTrustToken }, this.writeOptions()),
     );
   }
 
   exchangeLocalTrip(baseId: string, recordId: string): Promise<LinkExchangeResponse> {
     return firstValueFrom(
-      this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges/local`, { baseId, recordId }),
+      this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges/local`, { baseId, recordId }, this.writeOptions()),
     );
   }
 
   verifyPostcode(exchangeId: string, postcode: string, rememberDevice: boolean): Promise<LinkExchangeResponse> {
     return firstValueFrom(
-      this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges/${exchangeId}/verify/knowledge`, { postcode, rememberDevice }),
+      this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges/${exchangeId}/verify/knowledge`, { postcode, rememberDevice }, this.writeOptions()),
     );
   }
 
   sendOtp(exchangeId: string): Promise<import('@vision-trips/contracts').LinkExchangeChallenge> {
-    return firstValueFrom(this.http.post<import('@vision-trips/contracts').LinkExchangeChallenge>(`${this.baseUrl}/link-exchanges/${exchangeId}/otp/send`, {}));
+    return firstValueFrom(this.http.post<import('@vision-trips/contracts').LinkExchangeChallenge>(`${this.baseUrl}/link-exchanges/${exchangeId}/otp/send`, {}, this.writeOptions()));
   }
 
   verifyOtp(exchangeId: string, code: string, rememberDevice: boolean): Promise<LinkExchangeResponse> {
-    return firstValueFrom(this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges/${exchangeId}/verify/otp`, { code, rememberDevice }));
+    return firstValueFrom(this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges/${exchangeId}/verify/otp`, { code, rememberDevice }, this.writeOptions()));
   }
 
   downloadCalendar(accessToken: string): Promise<Blob> {
@@ -50,13 +50,13 @@ export class VisionApiService {
 
   acceptQuotation(input: QuotationAcceptanceRequest, accessToken: string): Promise<QuotationAcceptanceResponse> {
     return firstValueFrom(this.http.post<QuotationAcceptanceResponse>(`${this.baseUrl}/trips/current/quotation-acceptance`, input, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      ...this.writeOptions(accessToken),
     }));
   }
 
   sendMessage(input: CustomerMessageRequest, accessToken: string): Promise<CustomerMessageResponse> {
     return firstValueFrom(this.http.post<CustomerMessageResponse>(`${this.baseUrl}/trips/current/messages`, input, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      ...this.writeOptions(accessToken),
     }));
   }
 
@@ -71,7 +71,7 @@ export class VisionApiService {
   }
 
   engagement(input: CustomerEngagementRequest, accessToken: string): Promise<CustomerEngagementResponse> {
-    return firstValueFrom(this.http.post<CustomerEngagementResponse>(`${this.baseUrl}/trips/current/engagement`, input, { headers: { Authorization: `Bearer ${accessToken}` } }));
+    return firstValueFrom(this.http.post<CustomerEngagementResponse>(`${this.baseUrl}/trips/current/engagement`, input, this.writeOptions(accessToken)));
   }
 
   relatedQuotations(accessToken: string): Promise<RelatedQuotationsResponse> {
@@ -79,31 +79,35 @@ export class VisionApiService {
   }
 
   openRelatedQuotation(comparisonId: string, accessToken: string): Promise<OpenRelatedQuotationResponse> {
-    return firstValueFrom(this.http.post<OpenRelatedQuotationResponse>(`${this.baseUrl}/trips/current/related-quotations/${encodeURIComponent(comparisonId)}/open`, {}, { headers: { Authorization: `Bearer ${accessToken}` } }));
+    return firstValueFrom(this.http.post<OpenRelatedQuotationResponse>(`${this.baseUrl}/trips/current/related-quotations/${encodeURIComponent(comparisonId)}/open`, {}, this.writeOptions(accessToken)));
   }
 
   customerAccount(accessToken: string): Promise<CustomerAccount> { return firstValueFrom(this.http.get<CustomerAccount>(`${this.baseUrl}/trips/current/account`, { headers: { Authorization: `Bearer ${accessToken}` } })); }
-  updateCustomerPreferences(preferences: CustomerPreferences, accessToken: string): Promise<UpdateCustomerPreferencesResponse> { return firstValueFrom(this.http.post<UpdateCustomerPreferencesResponse>(`${this.baseUrl}/trips/current/account/preferences`, preferences, { headers: { Authorization: `Bearer ${accessToken}` } })); }
-  openCustomerAccountTrip(accountTripId: string, accessToken: string): Promise<OpenCustomerAccountTripResponse> { return firstValueFrom(this.http.post<OpenCustomerAccountTripResponse>(`${this.baseUrl}/trips/current/account/trips/${encodeURIComponent(accountTripId)}/open`, {}, { headers: { Authorization: `Bearer ${accessToken}` } })); }
-  revokeSession(refreshToken: string): Promise<void> { return firstValueFrom(this.http.delete<void>(`${this.baseUrl}/sessions/current`, { body: { refreshToken } })); }
+  updateCustomerPreferences(preferences: CustomerPreferences, accessToken: string): Promise<UpdateCustomerPreferencesResponse> { return firstValueFrom(this.http.post<UpdateCustomerPreferencesResponse>(`${this.baseUrl}/trips/current/account/preferences`, preferences, this.writeOptions(accessToken))); }
+  openCustomerAccountTrip(accountTripId: string, accessToken: string): Promise<OpenCustomerAccountTripResponse> { return firstValueFrom(this.http.post<OpenCustomerAccountTripResponse>(`${this.baseUrl}/trips/current/account/trips/${encodeURIComponent(accountTripId)}/open`, {}, this.writeOptions(accessToken))); }
+  revokeSession(refreshToken: string): Promise<void> { return firstValueFrom(this.http.delete<void>(`${this.baseUrl}/sessions/current`, { body: { refreshToken }, ...this.writeOptions() })); }
 
   paymentLink(paymentId: string, accessToken: string): Promise<PaymentLinkResponse> {
     return firstValueFrom(this.http.post<PaymentLinkResponse>(`${this.baseUrl}/trips/current/payments/${encodeURIComponent(paymentId)}/link`, {}, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      ...this.writeOptions(accessToken),
     }));
   }
 
   customPaymentLink(amount: number, accessToken: string): Promise<PaymentLinkResponse> {
-    return firstValueFrom(this.http.post<PaymentLinkResponse>(`${this.baseUrl}/trips/current/payments/custom/link`, { amount }, { headers: { Authorization: `Bearer ${accessToken}` } }));
+    return firstValueFrom(this.http.post<PaymentLinkResponse>(`${this.baseUrl}/trips/current/payments/custom/link`, { amount }, this.writeOptions(accessToken)));
   }
 
   refreshSession(refreshToken: string): Promise<MobileSession> {
-    return firstValueFrom(this.http.post<MobileSession>(`${this.baseUrl}/sessions/refresh`, { refreshToken }));
+    return firstValueFrom(this.http.post<MobileSession>(`${this.baseUrl}/sessions/refresh`, { refreshToken }, this.writeOptions()));
   }
 
   fellowTravellerLink(accessToken: string): Promise<FellowTravellerLinkResponse> {
     return firstValueFrom(this.http.post<FellowTravellerLinkResponse>(`${this.baseUrl}/trips/current/fellow-traveller-link`, {}, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      ...this.writeOptions(accessToken),
     }));
+  }
+
+  private writeOptions(accessToken?: string): { headers: Record<string, string> } {
+    return { headers: { ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), 'Idempotency-Key': crypto.randomUUID() } };
   }
 }

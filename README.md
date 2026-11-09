@@ -30,6 +30,8 @@ External content is requested through the API, so flight, Places, Widgety and AI
 
 Customer section opens and action clicks are posted to the authenticated engagement endpoint. Set `AIRTABLE_ENGAGEMENT_TABLE` to append them to an Airtable table with `Booking`, `Event`, `Detail`, `Stage`, `When`, and `Device` fields; leave it blank to accept events without external logging. Provider configuration and cache counters are available at `GET /v1/health/providers`, and each external-content response includes redacted source diagnostics. Credentials and cached values are never returned.
 
+Operational controls use the same persistent SQLite database as sessions: fixed-window API rate limits survive restarts, mutating requests can be replayed safely with `Idempotency-Key`, and Airtable engagement writes run through a durable retry queue. Every response carries `X-Request-Id`, with one structured JSON request log containing method, path, status, and duration. In production, configure an explicit comma-separated `MOBILE_ORIGIN`, set `TRUST_PROXY` when behind a trusted reverse proxy, and opt into API documentation only with `ENABLE_API_DOCS=true`.
+
 ## Customer email automations
 
 Set `RESEND_API_KEY`, `VISION_EMAIL_FROM`, `VISION_AUTOMATION_KEY` and `VISION_TRIP_LINK_BASE_URL` in `apps/api/.env`. Airtable automations can then call `POST /v1/notifications/customer` with the `X-Vision-Key` header and JSON containing `baseId`, `recordId`, `template` and an optional stable `idempotencyKey`. Supported templates are `balance_reminder`, `documents_issued`, `payment_received`, `welcome_home`, `quote_reminder` and `custom`. Custom messages also accept `subject`, `heading` and plain-text `body`.

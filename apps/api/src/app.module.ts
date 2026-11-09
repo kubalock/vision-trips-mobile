@@ -6,9 +6,10 @@ import { TripActionsModule } from './trip-actions/trip-actions.module.js';
 import { ExternalContentModule } from './external-content/external-content.module.js';
 import { CustomerNotificationsModule } from './customer-notifications/customer-notifications.module.js';
 import { EngagementModule } from './engagement/engagement.module.js';
+import { OperationsModule } from './operations/operations.module.js';
 
 @Module({
-  imports: [SessionsModule, LinkExchangesModule, TripActionsModule, ExternalContentModule, CustomerNotificationsModule, EngagementModule],
+  imports: [SessionsModule, LinkExchangesModule, TripActionsModule, ExternalContentModule, CustomerNotificationsModule, EngagementModule, OperationsModule],
   controllers: [AppController],
 })
 export class AppModule {}
