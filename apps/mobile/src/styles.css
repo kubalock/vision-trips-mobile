@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
 :root { --vt-accent: #0f766e; --vt-accent-2: #115e59; --vt-accent-text: #0f766e; --vt-accent-text-dark: #5eead4; --accent-ink: #fff; --vt-display: ui-serif, Georgia, serif; --vt-display-weight: 600; --vt-body: ui-sans-serif, system-ui, sans-serif; --vt-wash: #0f766e; --vt-hero-a: #134e4a; --vt-hero-b: #0f766e; --vt-soft: 0; }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 
 * {
   box-sizing: border-box;
@@ -24,7 +26,13 @@ button { font: inherit; }
 .vt-app .vt-top__logo { max-width: 150px; }
 .vt-app .vt-top__mark { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 10px; background: var(--vt-accent); color: var(--accent-ink); font-weight: 700; }
 .vt-app .vt-top__brand:has(.vt-top__mark) { background: transparent; padding: 0; }
+.vt-app .vt-top__meta { flex: 1; margin-left: 0; }
+.vt-app .vt-top__booking { display: grid; justify-items: start; gap: 5px; min-width: 0; }
+.vt-app .vt-top__booking .vt-ref { line-height: 1.15; }
+.vt-app .vt-top__booking .vt-status { line-height: 1; }
+.vt-app .vt-top__actions { gap: 10px; margin-left: auto; }
 .vt-app .vt-top__meta .vt-iconbtn.is-active { color: var(--link); background: var(--tint); border-color: var(--vt-accent); }
+.vt-app .vt-action-icon { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .vt-app .vt-hero__img { width: 100%; height: 100%; object-fit: cover; }
 .vt-app .vt-nav { padding-left: max(4px, env(safe-area-inset-left)); padding-right: max(4px, env(safe-area-inset-right)); }
 .vt-app .vt-nav button { flex: 1; display: grid; justify-items: center; align-content: center; gap: 3px; min-height: 48px; padding: 6px 2px; border: 0; background: transparent; color: var(--ink-3); font-size: .68rem; font-weight: 600; border-radius: 12px; min-width: 0; cursor: pointer; }
@@ -145,9 +153,13 @@ button { font: inherit; }
 }
 
 @media (max-width: 420px) {
-  .vt-app .vt-status { display: none; }
-  .vt-app .vt-top__logo { max-width: 112px; }
-  .vt-app .vt-top__name { max-width: 8.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vt-app .vt-top__booking { display: none; }
+  .vt-app .vt-top__logo { max-width: 80px; }
+  .vt-app .vt-top__name { max-width: 5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+
+@media (max-width: 360px) {
+  .vt-app .vt-top__brand:has(.vt-top__mark) .vt-top__name { display: none; }
 }
 
 @media (min-width: 560px) and (max-width: 899px) {
@@ -174,3 +186,13 @@ button { font: inherit; }
   .vt-app :is(.vt-btn, .vt-iconbtn, .vt-card, .vt-nav) { border: 1px solid CanvasText; }
   .vt-app .vt-nav button.is-active { outline: 2px solid Highlight; outline-offset: -2px; }
 }
+
+:root[data-theme="dark"] .vt-app :is(.bg-amber-50, .bg-amber-100) { background: color-mix(in srgb, var(--warn) 16%, var(--surface)); }
+:root[data-theme="dark"] .vt-app .bg-emerald-50 { background: color-mix(in srgb, var(--ok) 15%, var(--surface)); }
+:root[data-theme="dark"] .vt-app .bg-red-50 { background: color-mix(in srgb, var(--bad) 14%, var(--surface)); }
+:root[data-theme="dark"] .vt-app :is(.text-amber-800, .text-amber-900) { color: var(--warn); }
+:root[data-theme="dark"] .vt-app :is(.text-emerald-700, .text-emerald-800, .text-emerald-900, .text-emerald-950) { color: var(--ok); }
+:root[data-theme="dark"] .vt-app :is(.text-red-700, .text-red-800, .text-red-900, .text-red-950) { color: var(--bad); }
+
+/* The shared web theme adds a dark-mode logo plate; the app keeps an identical header footprint in both modes. */
+:root[data-theme="dark"] .vt-app .vt-top__brand { background: transparent; border-radius: 0; padding: 0; }

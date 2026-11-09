@@ -41,6 +41,29 @@ describe('App', () => {
     expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
   });
 
+  it('presents internal trip stages with customer-friendly labels', () => {
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance as unknown as { stageLabel: (stage: string) => string };
+
+    expect(app.stageLabel('countdown')).toBe('Confirmed');
+    expect(app.stageLabel('prep')).toBe('Confirmed');
+    expect(app.stageLabel('departure')).toBe('Departure day');
+  });
+
+  it('persists an explicit appearance choice', () => {
+    localStorage.setItem('vision-trips:appearance', 'light');
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const app = fixture.componentInstance as unknown as { appearance: () => string; toggleAppearance: () => void };
+
+    app.toggleAppearance();
+
+    expect(app.appearance()).toBe('dark');
+    expect(document.documentElement.dataset['theme']).toBe('dark');
+    expect(localStorage.getItem('vision-trips:appearance')).toBe('dark');
+    localStorage.removeItem('vision-trips:appearance');
+  });
+
   it('should preserve and mark the saved snapshot when refreshing offline', async () => {
     const fixture = TestBed.createComponent(App);
     const app = fixture.componentInstance as unknown as {

@@ -4,7 +4,7 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import { Network } from '@capacitor/network';
 import { Share } from '@capacitor/share';
-import type { CustomerAccount, CustomerEngagementEvent, CustomerMessageTopic, CustomerPreferences, ExternalTripContent, LinkExchangeChallenge, LinkExchangeResponse, MobileSession, RelatedQuotationSummary, TripDocument, TripSnapshot } from '@vision-trips/contracts';
+import type { CustomerAccount, CustomerEngagementEvent, CustomerMessageTopic, CustomerPreferences, ExternalTripContent, LinkExchangeChallenge, LinkExchangeResponse, MobileSession, RelatedQuotationSummary, TripDocument, TripSnapshot, TripStage } from '@vision-trips/contracts';
 import { VisionApiService } from './core/api/vision-api.service';
 import { SavedTripsStore, type SavedTrip } from './core/storage/saved-trips.store';
 import { groupSavedTrips } from './core/storage/trip-library';
@@ -24,6 +24,7 @@ import { BrandSupportSection } from './features/trip/brand-support-section';
 
 type AppView = 'home' | 'itinerary' | 'payments' | 'documents' | 'help' | 'account';
 type TripRefreshState = 'idle' | 'refreshing' | 'fresh' | 'stale' | 'offline' | 'error';
+type Appearance = 'light' | 'dark';
 
 @Component({
   selector: 'app-root',
@@ -71,6 +72,7 @@ export class App implements OnInit, OnDestroy {
   protected readonly expiredTripsRemoved = signal(0);
   protected readonly tripRefreshStates = signal<Record<string, TripRefreshState>>({});
   protected readonly tripGroups = computed(() => groupSavedTrips(this.savedTripList()));
+  protected readonly displayedTrip = computed(() => this.showTripLibrary() ? null : this.trip());
   protected readonly notifications = signal<CustomerNotification[]>([]);
   protected readonly showNotifications = signal(false);
   protected readonly deviceNotificationsEnabled = signal(false);
@@ -86,6 +88,7 @@ export class App implements OnInit, OnDestroy {
   protected readonly accountSaving = signal(false);
   protected readonly accountNotice = signal('');
   protected readonly openingAccountTripId = signal<string | null>(null);
+  protected readonly appearance = signal<Appearance>(initialAppearance());
   private readonly session = signal<MobileSession | null>(null);
   private paymentAwaitingReturn = false;
   private paymentOpenedAt = 0;
@@ -101,6 +104,7 @@ export class App implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     document.body.classList.add('vt');
+    this.applyAppearance(this.appearance());
     this.deviceNotificationsEnabled.set(this.customerNotifications.deviceEnabled());
     void this.openSharedLinkFromLocation();
     void this.initializeOfflineState();
@@ -455,6 +459,7 @@ export class App implements OnInit, OnDestroy {
     this.setSavedTripList(saved, status.connected);
     if (!saved.length || this.trip()) return;
     if (saved.length > 1) {
+      await this.activateSavedTrip(saved[0], false);
       this.showTripLibrary.set(true);
       return;
     }
@@ -527,12 +532,39 @@ export class App implements OnInit, OnDestroy {
   }
 
   protected selectView(view: AppView): void {
+    this.showTripLibrary.set(false);
     this.activeView.set(view);
     this.trackEngagement('section_opened', view);
     if (view === 'account') void this.loadCustomerAccount();
     const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
     window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
     requestAnimationFrame(() => document.querySelector<HTMLElement>('#main-content')?.focus({ preventScroll: true }));
+  }
+
+  protected toggleAppearance(): void {
+    const next: Appearance = this.appearance() === 'dark' ? 'light' : 'dark';
+    this.appearance.set(next);
+    try { localStorage.setItem('vision-trips:appearance', next); } catch { /* Appearance still applies for this session. */ }
+    this.applyAppearance(next);
+  }
+
+  protected stageLabel(stage: TripStage): string {
+    if (stage === 'quote') return 'Quotation';
+    if (stage === 'quote_expired') return 'Quote expired';
+    if (stage === 'closed') return 'Closed';
+    if (stage === 'cancelled') return 'Cancelled';
+    if (stage === 'departure') return 'Departure day';
+    if (stage === 'travelling') return 'Travelling';
+    if (stage === 'returning') return 'Returning home';
+    if (stage === 'home') return 'Welcome home';
+    if (stage === 'past') return 'Past trip';
+    return 'Confirmed';
+  }
+
+  private applyAppearance(appearance: Appearance): void {
+    document.documentElement.dataset['theme'] = appearance;
+    const color = appearance === 'dark' ? '#121415' : '#f4f4f1';
+    document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]').forEach((meta) => { meta.content = color; });
   }
 
   private handleAndroidBack(): void {
@@ -608,7 +640,7 @@ export class App implements OnInit, OnDestroy {
   }
 
   protected openAnotherTrip(): void {
-    this.clearOpenTrip();
+    this.showNotifications.set(false);
     this.showTripLibrary.set(this.savedTripList().length > 0);
   }
 
@@ -742,6 +774,10 @@ export class App implements OnInit, OnDestroy {
   protected toggleNotifications(): void {
     const tripId = this.trip()?.tripId;
     if (!tripId) return;
+    if (this.showTripLibrary()) {
+      this.showTripLibrary.set(false);
+      this.activeView.set('home');
+    }
     const opening = !this.showNotifications();
     this.showNotifications.set(opening);
     if (opening) {
@@ -914,6 +950,14 @@ export class App implements OnInit, OnDestroy {
 
 function isSnapshotStale(snapshot: TripSnapshot): boolean {
   return !snapshot.freshness.nextRefreshAfter || Date.parse(snapshot.freshness.nextRefreshAfter) <= Date.now();
+}
+
+function initialAppearance(): Appearance {
+  try {
+    const saved = localStorage.getItem('vision-trips:appearance');
+    if (saved === 'light' || saved === 'dark') return saved;
+  } catch { /* Fall back to the device preference. */ }
+  return typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
 function fileExtension(mimeType: string): string { return mimeType.includes('pdf') ? '.pdf' : mimeType.includes('png') ? '.png' : mimeType.includes('jpeg') ? '.jpg' : '.bin'; }
