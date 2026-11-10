@@ -309,14 +309,14 @@ button { font: inherit; }
 /* Help-specific touch targets, form controls and section hierarchy. */
 .vt-app .vt-main--help { padding-bottom: 32px; }
 .vt-app .vt-main--help .vt-help-card {
-  margin: 20px var(--vt-flat-gutter) 0;
-  padding: clamp(20px, 3vw, 28px);
-  border: 1px solid var(--line);
-  border-radius: var(--r-l);
+  margin: 24px var(--vt-flat-gutter) 0;
+  padding: clamp(20px, 3vw, 24px);
+  border: 1px solid color-mix(in srgb, var(--ink) 5%, transparent);
+  border-radius: 16px;
   background: var(--surface);
-  box-shadow: var(--shadow-s);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, .03);
 }
-.vt-app .vt-main--help .vt-help-card:first-of-type { border-top: 1px solid var(--line); }
+.vt-app .vt-main--help .vt-help-card:first-of-type { border-top-color: color-mix(in srgb, var(--ink) 5%, transparent); }
 .vt-app .vt-help-heading { display: grid; gap: 5px; margin-bottom: 22px; }
 .vt-app .vt-help-heading h1 { font-size: clamp(2rem, 6vw, 2.6rem); }
 .vt-app .vt-help-heading > p:last-child { color: var(--ink-2); font-weight: 600; }
@@ -329,16 +329,16 @@ button { font: inherit; }
   min-width: 0;
   min-height: 64px;
   padding: 13px 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--r);
+  border: 1px solid color-mix(in srgb, var(--ink) 5%, transparent);
+  border-radius: 16px;
   background: var(--surface-2);
   color: var(--ink);
   text-decoration: none;
-  box-shadow: 0 1px 2px rgba(20, 22, 24, .04);
-  transition: border-color .15s ease, background-color .15s ease, transform .15s ease;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, .03);
+  transition: border-color .18s ease, background-color .18s ease, box-shadow .18s ease, transform .15s ease;
 }
-.vt-app .vt-contact-card:hover { border-color: var(--vt-accent); background: var(--tint); }
-.vt-app .vt-contact-card:active { transform: translateY(1px); }
+.vt-app .vt-contact-card:hover { border-color: color-mix(in srgb, var(--vt-accent) 25%, transparent); background: color-mix(in srgb, var(--vt-accent) 5%, var(--surface)); box-shadow: 0 7px 24px rgba(0, 0, 0, .05); transform: scale(1.006); }
+.vt-app .vt-contact-card:active { background: color-mix(in srgb, var(--vt-accent) 8%, var(--surface)); transform: scale(.992); }
 .vt-app .vt-contact-card__icon { display: grid; place-items: center; align-self: center; flex: 0 0 auto; width: 42px; height: 42px; border-radius: 50%; background: var(--tint); color: var(--vt-accent-text); }
 .vt-app .vt-contact-card__icon > vt-icon, .vt-app .vt-share-button > vt-icon { display: grid; place-items: center; width: 22px; height: 22px; }
 .vt-app .vt-contact-card__icon svg, .vt-app .vt-share-button svg { display: block; width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -348,29 +348,32 @@ button { font: inherit; }
 .vt-app .vt-contact-card__copy > span { overflow: hidden; color: var(--ink-2); font-size: .86rem; overflow-wrap: anywhere; }
 .vt-app .vt-contact-card__arrow { display: grid; place-items: center; align-self: center; flex: 0 0 auto; width: 24px; height: 24px; color: var(--ink-3); line-height: 0; }
 .vt-app .vt-contact-card__arrow > vt-icon { width: 20px; height: 20px; }
-.vt-app .vt-contact-card--whatsapp { border-color: color-mix(in srgb, var(--ok) 28%, var(--line)); }
+.vt-app .vt-contact-card--whatsapp { border-color: color-mix(in srgb, var(--ok) 20%, transparent); }
 .vt-app .vt-contact-card--whatsapp .vt-contact-card__icon { background: color-mix(in srgb, var(--ok) 13%, var(--surface)); color: var(--ok); }
-.vt-app .vt-contact-card--emergency { border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); background: color-mix(in srgb, var(--bad) 5%, var(--surface)); }
+.vt-app .vt-contact-card--whatsapp:hover { background: color-mix(in srgb, var(--ok) 5%, var(--surface)); }
+.vt-app .vt-contact-card--emergency { border-color: color-mix(in srgb, var(--bad) 20%, transparent); background: color-mix(in srgb, var(--bad) 5%, var(--surface)); }
 .vt-app .vt-contact-card--emergency .vt-contact-card__icon { background: color-mix(in srgb, var(--bad) 12%, var(--surface)); color: var(--bad); }
+.vt-app .vt-contact-card--emergency:hover { background: color-mix(in srgb, var(--bad) 8%, var(--surface)); }
 .vt-app .vt-help-visit { display: grid; gap: 5px; margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); font-size: .9rem; }
 .vt-app .vt-help-visit p { color: var(--ink-2); }
 .vt-app .vt-help-visit a { justify-self: start; margin-top: 3px; color: var(--vt-accent-text); font-weight: 700; }
 .vt-app .vt-help-card h2 { font-size: 1.28rem; }
-.vt-app .vt-help-intro { margin-top: 8px; color: var(--ink-2); font-size: .92rem; line-height: 1.55; }
+.vt-app .vt-help-intro { margin-top: 8px; color: color-mix(in srgb, var(--ink) 78%, var(--surface)); font-size: .92rem; line-height: 1.55; }
 .vt-app .vt-help-form { display: grid; gap: 18px; margin-top: 22px; }
 .vt-app .vt-help-field { display: grid; gap: 8px; color: var(--ink); font-size: .9rem; font-weight: 700; }
-.vt-app .vt-help-field :is(select, textarea) { width: 100%; min-height: 52px; padding: 13px 14px; border: 1.5px solid var(--line-2); border-radius: var(--r-s); background: var(--surface-2); color: var(--ink); font-weight: 400; }
+.vt-app .vt-help-field :is(select, textarea) { width: 100%; min-height: 52px; padding: 13px 14px; border: 1.5px solid var(--line-2); border-radius: 12px; background: var(--surface-2); color: var(--ink); font-weight: 400; }
 .vt-app .vt-help-select { display: grid; align-items: center; }
 .vt-app .vt-help-select select { grid-area: 1 / 1; appearance: none; padding-right: 52px; }
 .vt-app .vt-help-select > vt-icon { z-index: 1; grid-area: 1 / 1; justify-self: end; width: 20px; height: 20px; margin-right: 18px; color: var(--ink-2); pointer-events: none; }
 .vt-app .vt-help-field textarea { min-height: 180px; resize: vertical; line-height: 1.55; }
+.vt-app .vt-help-field textarea::placeholder { color: color-mix(in srgb, var(--ink-2) 78%, var(--ink)); opacity: 1; }
 .vt-app .vt-help-field :is(select, textarea):focus { border-color: var(--vt-accent); outline: none; box-shadow: 0 0 0 3px var(--tint-2); background: var(--surface); }
 .vt-app .vt-help-form__meta { display: flex; justify-content: space-between; gap: 16px; margin-top: -10px; color: var(--ink-2); font-size: .78rem; }
 .vt-app .vt-help-form__meta span:last-child { white-space: nowrap; }
-.vt-app .vt-help-send { min-height: 54px; margin-top: 2px; font-size: 1rem; transition: background-color .18s ease, border-color .18s ease, color .18s ease, opacity .18s ease, box-shadow .18s ease, transform .12s ease; }
+.vt-app .vt-help-send { width: 100%; min-height: 54px; margin-top: 2px; border-radius: 999px; font-size: 1rem; transition: background-color .18s ease, border-color .18s ease, color .18s ease, opacity .18s ease, box-shadow .18s ease, transform .12s ease; }
 .vt-app .vt-help-send__icon { flex: 0 0 auto; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .vt-app .vt-help-send:disabled { border-color: var(--line-2); background: var(--surface-2); color: var(--ink-3); opacity: 1; box-shadow: none; }
-.vt-app .vt-help-send:not(:disabled) { border-color: var(--vt-accent); background: var(--vt-accent); color: var(--accent-ink); box-shadow: 0 8px 20px color-mix(in srgb, var(--vt-accent) 24%, transparent); }
+.vt-app .vt-help-send:not(:disabled) { border-color: transparent; background: linear-gradient(135deg, var(--vt-accent), var(--vt-accent-2)); color: var(--accent-ink); box-shadow: 0 8px 20px color-mix(in srgb, var(--vt-accent) 24%, transparent); }
 .vt-app .vt-help-send:not(:disabled):hover { filter: brightness(1.08); }
 .vt-app .vt-share-button { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 52px; margin-top: 18px; padding: 10px 18px; border: 1.5px solid var(--vt-accent); border-radius: var(--btn-r); background: var(--tint); color: var(--vt-accent-text); font-weight: 750; cursor: pointer; }
 .vt-app .vt-share-button:hover { background: color-mix(in srgb, var(--vt-accent) 16%, var(--surface)); }
@@ -383,6 +386,8 @@ button { font: inherit; }
 @media (min-width: 700px) {
   .vt-app .vt-help-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+:root[data-theme="dark"] .vt-app .vt-main--help .vt-help-card,
+:root[data-theme="dark"] .vt-app .vt-contact-card { border-color: rgba(255, 255, 255, .07); box-shadow: 0 8px 28px rgba(0, 0, 0, .22); }
 
 /* Account-specific trip and preference hierarchy. */
 .vt-app .vt-main--account .vt-section:first-child { border-top: 0; }
