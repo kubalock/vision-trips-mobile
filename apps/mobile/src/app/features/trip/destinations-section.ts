@@ -2,10 +2,11 @@ import { Component, inject, input } from '@angular/core';
 import { DomSanitizer, type SafeResourceUrl } from '@angular/platform-browser';
 import type { DestinationGuide, EnrichedDestinationGuide } from '@vision-trips/contracts';
 import { PhotoGallery } from '../../shared/photo-gallery';
+import { VtIcon } from '../../shared/lucide-icon';
 
 @Component({
   selector: 'app-destinations-section',
-  imports: [PhotoGallery],
+  imports: [PhotoGallery, VtIcon],
   template: `
     @if (destinations().length) {
       <section class="vt-section" aria-labelledby="destinations-title">
@@ -27,8 +28,8 @@ import { PhotoGallery } from '../../shared/photo-gallery';
                     @if (destination.culturalInformation) { <p class="mt-3 leading-6 text-slate-600">{{ destination.culturalInformation }}</p> }
                   </details>
                 }
-                @if (destination.travelAdviceUrl) { <a class="vt-link" [href]="destination.travelAdviceUrl" target="_blank" rel="noopener">Official travel advice ↗</a> }
-                <a class="vt-link ml-4" [href]="directionsUrl(destination)" target="_blank" rel="noopener">Directions ↗</a>
+                @if (destination.travelAdviceUrl) { <a class="vt-link inline-flex items-center gap-1" [href]="destination.travelAdviceUrl" target="_blank" rel="noopener">Official travel advice <vt-icon name="external" [size]="14" /></a> }
+                <a class="vt-link ml-4 inline-flex items-center gap-1" [href]="directionsUrl(destination)" target="_blank" rel="noopener">Directions <vt-icon name="external" [size]="14" /></a>
                 @if (mapUrl(destination)) { <details class="mt-4 rounded-xl border border-slate-200 p-3"><summary class="cursor-pointer font-semibold">Map</summary><iframe class="mt-3 h-64 w-full rounded-xl border-0" [src]="mapUrl(destination)" [title]="'Map of ' + destination.name" loading="lazy"></iframe></details> }
                 @if (aiPending(destination) && !destination.overview) { <p class="mt-4 animate-pulse text-sm text-slate-500">Preparing your destination guide…</p> }
               </div>

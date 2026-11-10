@@ -22,6 +22,7 @@ import { StageExperienceSection } from './features/trip/stage-experience-section
 import { BookingJourneySection } from './features/trip/booking-journey-section';
 import { CustomerAccountSection } from './features/account/customer-account-section';
 import { BrandSupportSection } from './features/trip/brand-support-section';
+import { VtIcon } from './shared/lucide-icon';
 
 type AppView = 'home' | 'itinerary' | 'payments' | 'documents' | 'help' | 'account';
 type TripRefreshState = 'idle' | 'refreshing' | 'fresh' | 'stale' | 'offline' | 'error';
@@ -29,7 +30,7 @@ type Appearance = 'light' | 'dark';
 
 @Component({
   selector: 'app-root',
-  imports: [BookingJourneySection, BrandSupportSection, CommunicationsSection, CustomerAccountSection, DestinationsSection, DocumentsSection, ExtrasSection, ExternalContentSection, ItinerarySection, PaymentsSection, StageExperienceSection],
+  imports: [BookingJourneySection, BrandSupportSection, CommunicationsSection, CustomerAccountSection, DestinationsSection, DocumentsSection, ExtrasSection, ExternalContentSection, ItinerarySection, PaymentsSection, StageExperienceSection, VtIcon],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })

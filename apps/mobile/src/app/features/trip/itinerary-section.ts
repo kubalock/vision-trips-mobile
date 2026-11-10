@@ -1,10 +1,11 @@
 import { Component, input } from '@angular/core';
 import type { ItineraryItem } from '@vision-trips/contracts';
 import { PhotoGallery } from '../../shared/photo-gallery';
+import { VtIcon } from '../../shared/lucide-icon';
 
 @Component({
   selector: 'app-itinerary-section',
-  imports: [PhotoGallery],
+  imports: [PhotoGallery, VtIcon],
   template: `
     <section class="vt-section" aria-labelledby="itinerary-title">
       <p class="text-sm font-semibold uppercase tracking-widest text-teal-700">Trip plan</p><h1 id="itinerary-title" class="mt-1 text-3xl font-semibold">Your itinerary</h1>
@@ -24,7 +25,7 @@ import { PhotoGallery } from '../../shared/photo-gallery';
                         <div><p class="vt-el__kind">{{ item.typeLabel }}</p><h4 class="vt-el__title">{{ item.title }}</h4></div>
                         @if (item.startTime) { <time class="vt-chip">{{ item.startTime }}</time> }
                       </div>
-                      @if (item.from || item.to) { <p class="vt-el__route">{{ item.from }}{{ item.to ? ' → ' + item.to : '' }}</p> }
+                      @if (item.from || item.to) { <p class="vt-el__route flex items-center gap-1">{{ item.from }}@if (item.to) { <vt-icon name="arrow-right" [size]="15" /> {{ item.to }} }</p> }
                       @if (item.carrier || item.flightNumber) { <p class="vt-el__meta">{{ item.carrier }} {{ item.flightNumber }}</p> }
                       @if (item.address) { <p class="vt-el__meta">{{ item.address }}</p> }
                       @if (item.details.length) {

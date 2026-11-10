@@ -25,6 +25,7 @@
     "@capacitor/network": "^8.0.0",
     "@capacitor/preferences": "^8.0.0",
     "@capacitor/share": "^8.0.0",
+    "@lucide/angular": "^1.71.0",
     "@vision-trips/contracts": "*",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"
