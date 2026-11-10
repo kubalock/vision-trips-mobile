@@ -2,7 +2,7 @@
   <a class="vt-skip" href="#main-content">Skip to main content</a>
   <header class="vt-top">
     <div class="vt-wrap vt-top__inner">
-      <div class="vt-top__brand">@if (trip()?.brand?.logoUrl; as logo) { <img class="vt-top__logo" [src]="logo" [alt]="trip()?.brand?.name || 'Vision Trips'" /> } @else { <span class="vt-top__mark">V</span><span class="vt-top__name">{{ trip()?.brand?.name || 'Vision Trips' }}</span> }</div>
+      <div class="vt-top__brand">@if (brandLogoUrl(); as logo) { <img class="vt-top__logo" [src]="logo" [alt]="trip()?.brand?.name || 'Vision Trips'" (error)="handleBrandLogoError()" /> } @else { <span class="vt-top__mark">V</span><span class="vt-top__name">{{ trip()?.brand?.name || 'Vision Trips' }}</span> }</div>
       <div class="vt-top__meta">
         @if (trip(); as headerTrip) {
           <div class="vt-top__booking">

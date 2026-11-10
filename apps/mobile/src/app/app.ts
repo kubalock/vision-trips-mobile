@@ -7,6 +7,7 @@ import { Share } from '@capacitor/share';
 import type { CustomerAccount, CustomerEngagementEvent, CustomerMessageTopic, CustomerPreferences, ExternalTripContent, LinkExchangeChallenge, LinkExchangeResponse, MobileSession, RelatedQuotationSummary, TripDocument, TripSnapshot, TripStage } from '@vision-trips/contracts';
 import { VisionApiService } from './core/api/vision-api.service';
 import { SavedTripsStore, type SavedTrip } from './core/storage/saved-trips.store';
+import { BrandAssetsStore } from './core/storage/brand-assets.store';
 import { groupSavedTrips } from './core/storage/trip-library';
 import { CustomerNotificationsStore, type CustomerNotification } from './core/storage/customer-notifications.store';
 import { DocumentWalletStore, type WalletStatus } from './core/storage/document-wallet.store';
@@ -35,6 +36,7 @@ type Appearance = 'light' | 'dark';
 export class App implements OnInit, OnDestroy {
   private readonly api = inject(VisionApiService);
   private readonly savedTrips = inject(SavedTripsStore);
+  private readonly brandAssets = inject(BrandAssetsStore);
   private readonly documentWallet = inject(DocumentWalletStore);
   private readonly customerNotifications = inject(CustomerNotificationsStore);
   protected readonly baseId = signal('');
@@ -42,6 +44,7 @@ export class App implements OnInit, OnDestroy {
   protected readonly submitting = signal(false);
   protected readonly error = signal('');
   protected readonly trip = signal<TripSnapshot | null>(null);
+  protected readonly brandLogoUrl = signal<string | null>(null);
   protected readonly challenge = signal<LinkExchangeChallenge | null>(null);
   protected readonly postcode = signal('');
   protected readonly otpCode = signal('');
@@ -127,6 +130,7 @@ export class App implements OnInit, OnDestroy {
     void this.networkListener?.remove();
     if (this.resendTimer) clearInterval(this.resendTimer);
     if (this.externalContentTimer) clearTimeout(this.externalContentTimer);
+    this.replaceBrandLogo(null);
   }
 
   @HostListener('window:focus')
@@ -374,6 +378,7 @@ export class App implements OnInit, OnDestroy {
       if (latest) {
         const previous = this.trip();
         this.trip.set(latest);
+        await this.loadBrandLogo(latest, true);
         await this.syncCustomerNotifications(previous, latest);
         void this.loadExternalContent(false);
         await this.refreshDocumentStatuses(latest);
@@ -395,6 +400,7 @@ export class App implements OnInit, OnDestroy {
       const snapshot = await this.api.refreshTrip(currentSession.accessToken);
       const previous = this.trip();
       this.trip.set(snapshot);
+      await this.loadBrandLogo(snapshot, true);
       await this.syncCustomerNotifications(previous, snapshot);
       void this.loadExternalContent(false);
       await this.refreshDocumentStatuses(snapshot);
@@ -429,6 +435,7 @@ export class App implements OnInit, OnDestroy {
       }
       const previous = this.trip();
       this.trip.set(snapshot);
+      await this.loadBrandLogo(snapshot, true);
       await this.syncCustomerNotifications(previous, snapshot);
       void this.loadExternalContent(false);
       await this.refreshDocumentStatuses(snapshot);
@@ -518,6 +525,7 @@ export class App implements OnInit, OnDestroy {
 
   private async acceptAuthorized(response: Extract<LinkExchangeResponse, { status: 'authorized' }>): Promise<void> {
     this.trip.set(response.snapshot);
+    await this.loadBrandLogo(response.snapshot, true);
     await this.syncCustomerNotifications(null, response.snapshot);
     await this.refreshDocumentStatuses(response.snapshot);
     this.session.set(response.session);
@@ -604,7 +612,7 @@ export class App implements OnInit, OnDestroy {
     const saved = await this.savedTrips.all();
     const refreshTokens = [...new Set([this.session()?.refreshToken, ...saved.map((trip) => trip.session.refreshToken)].filter((token): token is string => Boolean(token)))];
     await Promise.allSettled(refreshTokens.map((refreshToken) => this.api.revokeSession(refreshToken)));
-    for (const trip of saved) { await this.savedTrips.remove(trip.snapshot.tripId); this.customerNotifications.clear(trip.snapshot.tripId); }
+    for (const trip of saved) { await this.savedTrips.remove(trip.snapshot.tripId); await this.brandAssets.remove(trip.snapshot.tripId); this.customerNotifications.clear(trip.snapshot.tripId); }
     this.clearOpenTrip(); this.savedTripList.set([]); this.showTripLibrary.set(false); this.storedSecurely.set(false);
   }
 
@@ -677,12 +685,15 @@ export class App implements OnInit, OnDestroy {
         snapshot = await this.api.refreshTrip(session.accessToken);
       }
       await this.savedTrips.save(snapshot, session);
+      if (snapshot.brand.logoUrl) await this.brandAssets.cacheLogo(snapshot.tripId, snapshot.brand.logoUrl);
+      else await this.brandAssets.remove(snapshot.tripId);
       await this.customerNotifications.sync(saved.snapshot, snapshot);
       await this.reloadSavedTrips();
       this.setTripRefreshState(tripId, 'fresh');
       if (this.trip()?.tripId === tripId) {
         this.session.set(session);
         this.trip.set(snapshot);
+        await this.loadBrandLogo(snapshot, true);
         this.loadCustomerNotifications(tripId);
         void this.loadExternalContent(false);
         await this.refreshDocumentStatuses(snapshot);
@@ -696,6 +707,7 @@ export class App implements OnInit, OnDestroy {
     event?.stopPropagation();
     if (!window.confirm(`Remove ${saved.snapshot.summary.name} from this device?`)) return;
     await this.savedTrips.remove(saved.snapshot.tripId);
+    await this.brandAssets.remove(saved.snapshot.tripId);
     this.customerNotifications.clear(saved.snapshot.tripId);
     this.savedTripList.update((trips) => trips.filter((trip) => trip.snapshot.tripId !== saved.snapshot.tripId));
     this.tripRefreshStates.update((states) => {
@@ -719,6 +731,7 @@ export class App implements OnInit, OnDestroy {
 
   private clearOpenTrip(): void {
     this.trip.set(null);
+    this.replaceBrandLogo(null);
     this.session.set(null);
     this.activeView.set('home');
     this.acceptanceComplete.set(false);
@@ -747,6 +760,7 @@ export class App implements OnInit, OnDestroy {
     const status = refresh && !isSnapshotStale(saved.snapshot) ? 'fresh' as const : refresh ? 'stale' as const : 'offline' as const;
     const snapshot = { ...saved.snapshot, freshness: { ...saved.snapshot.freshness, status } };
     this.trip.set(snapshot);
+    await this.loadBrandLogo(snapshot, false);
     await this.syncCustomerNotifications(null, snapshot);
     if (refresh) void this.loadExternalContent();
     this.activeView.set('home');
@@ -769,6 +783,38 @@ export class App implements OnInit, OnDestroy {
 
   private setTripRefreshState(tripId: string, state: TripRefreshState): void {
     this.tripRefreshStates.update((states) => ({ ...states, [tripId]: state }));
+  }
+
+  protected handleBrandLogoError(): void {
+    this.replaceBrandLogo(null);
+  }
+
+  private async loadBrandLogo(snapshot: TripSnapshot, cacheFreshLogo: boolean): Promise<void> {
+    const sourceUrl = snapshot.brand.logoUrl;
+    this.replaceBrandLogo(cacheFreshLogo ? sourceUrl : null);
+    if (cacheFreshLogo && !sourceUrl) {
+      await this.brandAssets.remove(snapshot.tripId);
+      return;
+    }
+    const storedUrl = await this.brandAssets.logo(snapshot.tripId);
+    if (this.trip()?.tripId !== snapshot.tripId) {
+      if (storedUrl?.startsWith('blob:')) URL.revokeObjectURL(storedUrl);
+      return;
+    }
+    if (storedUrl) this.replaceBrandLogo(storedUrl);
+    if (!cacheFreshLogo || !sourceUrl) return;
+    const cachedUrl = await this.brandAssets.cacheLogo(snapshot.tripId, sourceUrl);
+    if (this.trip()?.tripId !== snapshot.tripId) {
+      if (cachedUrl?.startsWith('blob:')) URL.revokeObjectURL(cachedUrl);
+      return;
+    }
+    if (cachedUrl) this.replaceBrandLogo(cachedUrl);
+  }
+
+  private replaceBrandLogo(url: string | null): void {
+    const previous = this.brandLogoUrl();
+    if (previous && previous !== url && previous.startsWith('blob:')) URL.revokeObjectURL(previous);
+    this.brandLogoUrl.set(url);
   }
 
   protected toggleNotifications(): void {
