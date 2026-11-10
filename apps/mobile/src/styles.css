@@ -242,43 +242,79 @@ button { font: inherit; }
 }
 
 /* Payments-specific totals and transaction hierarchy. */
-.vt-app .vt-main--payments .vt-section:first-child { border-top: 0; }
-.vt-app .vt-main--payments #payments-title { margin-bottom: 24px; }
+.vt-app .vt-main--payments { padding-bottom: 32px; }
+.vt-app .vt-main--payments .vt-payments-screen { border-top: 0; }
 .vt-app .vt-main--payments > .vt-notice {
   margin: 0;
   padding: 12px var(--vt-flat-gutter);
   border-radius: 0;
   border-bottom: 1px solid var(--line);
 }
-.vt-app .vt-main--payments .vt-totals {
-  padding: 0 0 24px;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
+.vt-app .vt-payments__heading { display: grid; gap: 5px; }
+.vt-app .vt-payments__heading h1 { font-size: clamp(2rem, 6vw, 2.6rem); }
+.vt-app .vt-payments__kicker { color: var(--vt-accent-text); font-size: .78rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.vt-app .vt-payment-card { margin-top: 24px; padding: clamp(18px, 3vw, 22px); border: 1px solid color-mix(in srgb, var(--ink) 5%, transparent); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .03); }
+.vt-app .vt-payment-summary { display: grid; gap: 18px; }
+.vt-app .vt-payment-summary__total { display: grid; gap: 4px; }
+.vt-app .vt-payment-summary__total > span { color: var(--ink-2); font-size: .82rem; font-weight: 650; }
+.vt-app .vt-payment-summary__total > strong { color: var(--ink); font-family: var(--vt-display); font-size: clamp(2rem, 7vw, 2.7rem); font-variant-numeric: tabular-nums; line-height: 1.05; }
+.vt-app .vt-payment-summary__stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.vt-app .vt-payment-summary__stats > div { display: grid; align-content: start; gap: 3px; min-height: 82px; padding: 13px 14px; border-radius: 12px; background: var(--surface-2); }
+.vt-app .vt-payment-summary__stats span { color: var(--ink-2); font-size: .75rem; font-weight: 700; }
+.vt-app .vt-payment-summary__stats strong { color: var(--ink); font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.vt-app .vt-payment-summary__stats small { justify-self: start; margin-top: 2px; padding: 4px 8px; border-radius: 999px; background: color-mix(in srgb, var(--warn) 13%, var(--surface)); color: var(--warn); font-size: .64rem; font-weight: 800; line-height: 1; text-transform: uppercase; }
+.vt-app .vt-payment-summary__balance.is-paid small { background: color-mix(in srgb, var(--ok) 13%, var(--surface)); color: var(--ok); }
+.vt-app .vt-payment-progress__footer { display: grid; gap: 8px; padding-top: 2px; }
+.vt-app .vt-payment-progress__meta { display: flex; align-items: center; justify-content: space-between; gap: 16px; color: var(--ink-2); font-size: .72rem; }
+.vt-app .vt-payment-progress__meta span { font-weight: 650; }
+.vt-app .vt-payment-progress__meta strong { color: var(--ink); font-size: .72rem; font-variant-numeric: tabular-nums; }
+.vt-app .vt-payment-progress { height: 7px; overflow: hidden; border-radius: 999px; background: color-mix(in srgb, var(--ink-3) 14%, var(--surface)); }
+.vt-app .vt-payment-progress > span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--vt-accent), var(--ok)); transition: width .3s ease; }
+.vt-app .vt-payment-card__heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.vt-app .vt-payment-card__heading h2, .vt-app .vt-custom-payment h2 { color: var(--ink); font-size: 1.18rem; line-height: 1.25; }
+.vt-app .vt-payment-card__heading p, .vt-app .vt-custom-payment header p { margin-top: 4px; color: var(--ink-2); font-size: .82rem; line-height: 1.45; }
+.vt-app .vt-payment-card__heading > span { display: grid; place-items: center; flex: 0 0 auto; min-width: 28px; height: 28px; padding-inline: 8px; border-radius: 999px; background: var(--tint); color: var(--vt-accent-text); font-size: .74rem; font-weight: 800; }
+.vt-app .vt-main--payments .vt-payments { display: grid; gap: 10px; margin: 0; }
+.vt-app .vt-main--payments .vt-pay { min-height: 76px; padding: 13px 14px; border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent); border-radius: 16px; background: var(--surface-2); box-shadow: 0 4px 20px rgba(0, 0, 0, .03); }
+.vt-app .vt-main--payments .vt-pay.is-paid { border-color: color-mix(in srgb, var(--ok) 22%, transparent); background: color-mix(in srgb, var(--ok) 5%, var(--surface)); }
+.vt-app .vt-main--payments .vt-pay.is-overdue { border-color: color-mix(in srgb, var(--bad) 32%, transparent); background: color-mix(in srgb, var(--bad) 5%, var(--surface)); }
+.vt-app .vt-pay__main { display: grid; gap: 3px; }
+.vt-app .vt-pay__main .vt-pay__label { color: var(--ink-2); font-size: .8rem; font-weight: 700; }
+.vt-app .vt-pay__main strong { color: var(--ink); font-size: 1.06rem; font-variant-numeric: tabular-nums; }
+.vt-app .vt-pay__date { color: var(--ink-3); font-size: .72rem; font-weight: 600; }
+.vt-app .vt-pay__status { display: inline-flex; align-items: center; justify-content: center; min-height: 30px; padding: 7px 11px; border-radius: 999px; background: color-mix(in srgb, var(--ink-3) 10%, var(--surface)); color: var(--ink-2); font-size: .68rem; font-weight: 800; line-height: 1; text-transform: uppercase; white-space: nowrap; }
+.vt-app .vt-pay__status--paid { background: color-mix(in srgb, var(--ok) 13%, var(--surface)); color: var(--ok); }
+.vt-app .vt-pay__status--overdue { background: color-mix(in srgb, var(--bad) 12%, var(--surface)); color: var(--bad); }
+.vt-app .vt-main--payments .vt-pay__action { flex: 0 0 auto; min-width: 104px; min-height: 42px; padding: 9px 16px; border: 1px solid var(--vt-accent); border-radius: 999px; background: var(--vt-accent); color: var(--accent-ink); font-size: .82rem; font-weight: 800; box-shadow: 0 6px 16px color-mix(in srgb, var(--vt-accent) 28%, transparent); cursor: pointer; transition: filter .18s ease, opacity .18s ease, transform .12s ease; }
+.vt-app .vt-main--payments .vt-pay__action:hover { filter: brightness(1.08); }
+.vt-app .vt-main--payments .vt-pay__action:active { transform: scale(.97); }
+.vt-app .vt-main--payments .vt-pay__action:focus-visible { outline: 3px solid var(--tint-2); outline-offset: 2px; }
+.vt-app .vt-main--payments .vt-pay__action:disabled { border-color: var(--line-2); background: var(--surface-2); color: var(--ink-3); box-shadow: none; cursor: not-allowed; opacity: 1; }
+.vt-app .vt-payment-schedule__empty { padding: 20px; border: 1px dashed var(--line-2); border-radius: 12px; color: var(--ink-2); font-size: .86rem; text-align: center; }
+.vt-app .vt-custom-payment { display: grid; gap: 12px; }
+.vt-app .vt-custom-payment label { margin-top: 6px; color: var(--ink); font-size: .86rem; font-weight: 750; }
+.vt-app .vt-custom-payment__field { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; min-height: 52px; overflow: hidden; border: 1.5px solid var(--line-2); border-radius: 12px; background: var(--surface-2); transition: border-color .18s ease, background-color .18s ease, box-shadow .18s ease; }
+.vt-app .vt-custom-payment__field:focus-within { border-color: var(--vt-accent); background: var(--surface); box-shadow: 0 0 0 3px var(--tint-2); }
+.vt-app .vt-custom-payment__field > span { display: grid; place-items: center; align-self: stretch; min-width: 50px; padding: 0 12px; border-right: 1px solid var(--line-2); color: var(--ink); font-weight: 800; }
+.vt-app .vt-custom-payment__field input { width: 100%; min-width: 0; min-height: 50px; padding: 12px 14px; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 1rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+.vt-app .vt-custom-payment__field input::placeholder { color: var(--ink-3); opacity: 1; }
+.vt-app .vt-custom-payment__limit { margin-top: -5px; color: var(--ink-2); font-size: .75rem; }
+.vt-app .vt-custom-payment__submit { width: 100%; min-height: 50px; margin-top: 4px; padding: 10px 18px; border: 1px solid var(--vt-accent); border-radius: 999px; background: var(--vt-accent); color: var(--accent-ink); font-weight: 800; box-shadow: 0 8px 20px color-mix(in srgb, var(--vt-accent) 30%, transparent); cursor: pointer; transition: filter .18s ease, opacity .18s ease, transform .12s ease; }
+.vt-app .vt-custom-payment__submit:hover { filter: brightness(1.08); }
+.vt-app .vt-custom-payment__submit:active { transform: scale(.99); }
+.vt-app .vt-custom-payment__submit:focus-visible { outline: 3px solid var(--tint-2); outline-offset: 2px; }
+.vt-app .vt-custom-payment__submit:disabled { border-color: var(--line-2); background: var(--surface-2); color: var(--ink-3); box-shadow: none; cursor: not-allowed; opacity: 1; }
+@media (max-width: 520px) {
+  .vt-app .vt-main--payments .vt-pay { align-items: stretch; }
+  .vt-app .vt-main--payments .vt-pay__action { width: 100%; min-height: 44px; }
+  .vt-app .vt-pay__status { align-self: flex-start; }
 }
-.vt-app .vt-main--payments .vt-totals__split div {
-  padding: 12px 0;
-  border-top: 1px solid var(--line);
-  border-radius: 0;
-  background: transparent;
-}
-.vt-app .vt-main--payments .vt-payments { gap: 0; margin-top: 0; }
-.vt-app .vt-main--payments .vt-pay {
-  padding: 18px 0;
-  border-width: 1px 0 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-.vt-app .vt-main--payments .vt-pay:last-child { border-bottom: 1px solid var(--line); }
-.vt-app .vt-main--payments .vt-pay.is-overdue { box-shadow: inset 3px 0 var(--bad); padding-left: 14px; }
-.vt-app .vt-main--payments form.bg-white {
-  padding: 24px 0 0;
-  border-width: 1px 0 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
+:root[data-theme="dark"] .vt-app .vt-payment-card,
+:root[data-theme="dark"] .vt-app .vt-main--payments .vt-pay { border-color: rgba(255, 255, 255, .07); box-shadow: 0 8px 28px rgba(0, 0, 0, .22); }
+:root[data-theme="dark"] .vt-app .vt-custom-payment__field { border-color: rgba(255, 255, 255, .18); background: color-mix(in srgb, var(--surface-2) 78%, #000); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .025); }
+:root[data-theme="dark"] .vt-app .vt-custom-payment__field > span { border-right-color: rgba(255, 255, 255, .14); background: rgba(255, 255, 255, .025); color: var(--ink); }
+:root[data-theme="dark"] .vt-app .vt-custom-payment__field:focus-within { border-color: color-mix(in srgb, var(--vt-accent) 75%, white); background: var(--surface-2); box-shadow: 0 0 0 3px color-mix(in srgb, var(--vt-accent) 24%, transparent); }
+:root[data-theme="dark"] .vt-app :is(.vt-pay__action, .vt-custom-payment__submit):not(:disabled) { border-color: color-mix(in srgb, var(--vt-accent) 82%, white); background: color-mix(in srgb, var(--vt-accent) 82%, white); }
 .vt-app .vt-main--payments > p.bg-white {
   margin: 0;
   padding: 32px var(--vt-flat-gutter);
@@ -289,22 +325,48 @@ button { font: inherit; }
 }
 
 /* Documents-specific wallet hierarchy. */
-.vt-app .vt-main--documents .vt-section:first-child { border-top: 0; }
-.vt-app .vt-main--documents #documents-title { margin-bottom: 4px; }
-.vt-app .vt-main--documents .vt-docs { gap: 0; margin-top: 24px; }
-.vt-app .vt-main--documents .vt-docs > li {
-  border-top: 1px solid var(--line);
-  border-radius: 0;
+.vt-app .vt-main--documents { padding-bottom: 32px; }
+.vt-app .vt-main--documents .vt-documents { border-top: 0; }
+.vt-app .vt-documents__heading { display: grid; gap: 5px; }
+.vt-app .vt-documents__heading h1 { font-size: clamp(2rem, 6vw, 2.6rem); }
+.vt-app .vt-documents__heading > p:last-child { max-width: 42rem; margin-top: 3px; color: var(--ink-2); font-size: .92rem; font-weight: 500; line-height: 1.55; }
+.vt-app .vt-documents__kicker { color: var(--vt-accent-text); font-size: .78rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.vt-app .vt-doc-group { margin-top: 24px; padding: clamp(18px, 3vw, 22px); border: 1px solid color-mix(in srgb, var(--ink) 5%, transparent); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .03); }
+.vt-app .vt-doc-group__heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.vt-app .vt-doc-group__heading h2 { color: var(--ink); font-size: 1.18rem; line-height: 1.25; }
+.vt-app .vt-doc-group__heading p { margin-top: 4px; color: var(--ink-2); font-size: .82rem; line-height: 1.45; }
+.vt-app .vt-doc-group__heading > span { display: grid; place-items: center; flex: 0 0 auto; min-width: 28px; height: 28px; padding-inline: 8px; border-radius: 999px; background: var(--tint); color: var(--vt-accent-text); font-size: .74rem; font-weight: 800; }
+.vt-app .vt-main--documents .vt-docs { display: grid; gap: 10px; margin: 0; }
+.vt-app .vt-main--documents .vt-docs > li { border: 0; }
+.vt-app .vt-main--documents .vt-doc-button { min-height: 76px; padding: 13px 14px; border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent); border-radius: 16px; background: var(--surface-2); box-shadow: 0 4px 20px rgba(0, 0, 0, .03); transition: border-color .18s ease, background-color .18s ease, box-shadow .18s ease, transform .15s ease; }
+.vt-app .vt-main--documents button.vt-doc-button:hover { border-color: color-mix(in srgb, var(--vt-accent) 25%, transparent); background: color-mix(in srgb, var(--vt-accent) 5%, var(--surface)); box-shadow: 0 7px 24px rgba(0, 0, 0, .05); transform: scale(1.006); }
+.vt-app .vt-main--documents button.vt-doc-button:active { background: color-mix(in srgb, var(--vt-accent) 8%, var(--surface)); transform: scale(.992); }
+.vt-app .vt-main--documents button.vt-doc-button:focus-visible { border-color: var(--vt-accent); outline: 3px solid var(--tint-2); outline-offset: 2px; }
+.vt-app .vt-main--documents button.vt-doc-button:disabled { cursor: wait; opacity: .7; transform: none; }
+.vt-app .vt-doc-button__icon, .vt-app .vt-doc-button__action { display: grid; place-items: center; flex: 0 0 auto; width: 40px; height: 40px; border-radius: 10px; background: var(--tint); color: var(--vt-accent-text); }
+.vt-app .vt-doc-button__action { border-radius: 50%; background: color-mix(in srgb, var(--vt-accent) 10%, var(--surface)); }
+.vt-app .vt-doc-button__copy { display: grid; gap: 4px; min-width: 0; }
+.vt-app .vt-doc-button__title { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.vt-app .vt-doc-button__title strong { color: var(--ink); font-size: .96rem; line-height: 1.35; }
+.vt-app .vt-doc-button__description { color: var(--ink-2); font-size: .84rem; line-height: 1.4; }
+.vt-app .vt-doc-button__meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; color: var(--ink-3); font-size: .73rem; font-weight: 600; line-height: 1.35; }
+.vt-app .vt-doc-button__meta small { color: var(--ok); font: inherit; }
+.vt-app .vt-doc-badge { display: inline-flex; align-items: center; min-height: 20px; padding: 3px 7px; border-radius: 999px; font-size: .64rem; font-weight: 800; letter-spacing: .04em; line-height: 1; text-transform: uppercase; white-space: nowrap; }
+.vt-app .vt-doc-badge--type { background: color-mix(in srgb, var(--vt-accent) 9%, var(--surface)); color: var(--vt-accent-text); }
+.vt-app .vt-doc-badge--updated { background: color-mix(in srgb, var(--warn) 14%, var(--surface)); color: var(--warn); }
+.vt-app .vt-doc-badge--pending { justify-self: end; background: color-mix(in srgb, var(--warn) 12%, var(--surface)); color: var(--warn); }
+.vt-app .vt-doc-button--unavailable { cursor: default; }
+.vt-app .vt-doc-button--unavailable .vt-doc-button__icon { background: color-mix(in srgb, var(--ink-3) 10%, var(--surface)); color: var(--ink-3); }
+.vt-app .vt-doc-empty { display: grid; justify-items: center; gap: 8px; margin-top: 24px; padding: 32px 20px; border: 1px dashed var(--line-2); border-radius: 16px; background: var(--surface); text-align: center; }
+.vt-app .vt-doc-empty h2 { margin-top: 4px; font-size: 1.15rem; }
+.vt-app .vt-doc-empty p { max-width: 28rem; color: var(--ink-2); font-size: .88rem; line-height: 1.5; }
+@media (max-width: 480px) {
+  .vt-app .vt-main--documents .vt-doc-button { grid-template-columns: 40px minmax(0, 1fr) 40px; gap: 11px; padding-inline: 12px; }
+  .vt-app .vt-doc-button--unavailable { grid-template-columns: 40px minmax(0, 1fr); }
+  .vt-app .vt-doc-button--unavailable > .vt-doc-badge--pending { grid-column: 2; justify-self: start; }
 }
-.vt-app .vt-main--documents .vt-docs > li:last-child { border-bottom: 1px solid var(--line); }
-.vt-app .vt-main--documents .vt-doc-button {
-  padding: 18px 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-.vt-app .vt-main--documents .vt-docs > li > div { padding: 18px 0; }
+:root[data-theme="dark"] .vt-app .vt-doc-group,
+:root[data-theme="dark"] .vt-app .vt-main--documents .vt-doc-button { border-color: rgba(255, 255, 255, .07); box-shadow: 0 8px 28px rgba(0, 0, 0, .22); }
 
 /* Help-specific touch targets, form controls and section hierarchy. */
 .vt-app .vt-main--help { padding-bottom: 32px; }
