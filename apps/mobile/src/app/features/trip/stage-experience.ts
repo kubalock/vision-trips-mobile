@@ -1,4 +1,5 @@
 import type { ItineraryItem, TripSnapshot } from '@vision-trips/contracts';
+import { formatEuropeanDate } from '../../shared/european-date.pipe';
 
 export interface ChecklistItem { id: string; title: string; text: string; level: 'done' | 'todo' | 'alert'; locked: boolean }
 
@@ -11,7 +12,7 @@ export function todayAndUpcoming(itinerary: ItineraryItem[], now = new Date()): 
 export function buildChecklist(trip: TripSnapshot, now = new Date()): ChecklistItem[] {
   const items: ChecklistItem[] = [];
   const payments = trip.payments;
-  if (payments && payments.balance > 0.009) items.push({ id: 'balance', title: 'Pay your balance', text: `${money(payments.balance, payments.currency)} outstanding${payments.balanceDueDate ? `, due ${payments.balanceDueDate}` : ''}.`, level: payments.items.some((item) => item.status === 'overdue') ? 'alert' : 'todo', locked: true });
+  if (payments && payments.balance > 0.009) items.push({ id: 'balance', title: 'Pay your balance', text: `${money(payments.balance, payments.currency)} outstanding${payments.balanceDueDate ? `, due ${formatEuropeanDate(payments.balanceDueDate)}` : ''}.`, level: payments.items.some((item) => item.status === 'overdue') ? 'alert' : 'todo', locked: true });
   else if (payments) items.push({ id: 'balance', title: 'Paid in full', text: 'Nothing left to pay to us.', level: 'done', locked: true });
   if (trip.protection.hasFlight) {
     const short = trip.travellers.filter((traveller) => passportNeedsAttention(traveller.passportExpiry, trip.summary.returnDate, now)).map((traveller) => traveller.firstName || traveller.name);

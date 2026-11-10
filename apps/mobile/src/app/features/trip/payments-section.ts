@@ -1,10 +1,11 @@
 import { CurrencyPipe } from '@angular/common';
 import { Component, computed, input, output, signal } from '@angular/core';
 import type { PaymentSummary } from '@vision-trips/contracts';
+import { EuropeanDatePipe } from '../../shared/european-date.pipe';
 
 @Component({
   selector: 'app-payments-section',
-  imports: [CurrencyPipe],
+  imports: [CurrencyPipe, EuropeanDatePipe],
   template: `
     <section class="vt-section" aria-labelledby="payments-title">
       <p class="text-sm font-semibold uppercase tracking-widest text-teal-700">Your booking</p><h1 id="payments-title" class="mt-1 text-3xl font-semibold">Payments</h1>
@@ -15,7 +16,7 @@ import type { PaymentSummary } from '@vision-trips/contracts';
       <ul class="vt-payments" role="list">
         @for (payment of payments().items; track payment.id) {
           <li class="vt-pay" [class.is-paid]="payment.status === 'paid'" [class.is-overdue]="payment.status === 'overdue'" [class.is-refund]="payment.status === 'refund'" [class.is-resort]="payment.status === 'local'">
-            <div class="vt-pay__main"><strong>{{ payment.amount | currency: payment.currency }}</strong><span class="vt-pay__label">{{ payment.label }}{{ payment.dueDate ? ' · ' + payment.dueDate : '' }}</span></div>
+            <div class="vt-pay__main"><strong>{{ payment.amount | currency: payment.currency }}</strong><span class="vt-pay__label">{{ payment.label }}@if (payment.dueDate) { · {{ payment.dueDate | europeanDate }} }</span></div>
             @if (payment.canPay) { <button type="button" class="vt-btn vt-btn--primary vt-btn--sm vt-pay__action" [disabled]="openingPaymentId() !== null || actionsDisabled()" (click)="pay.emit(payment.id)">{{ openingPaymentId() === payment.id ? 'Opening…' : 'Pay now' }}</button> }
             @else { <span class="vt-small">{{ payment.status }}</span> }
           </li>

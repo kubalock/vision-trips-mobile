@@ -23,6 +23,7 @@ import { BookingJourneySection } from './features/trip/booking-journey-section';
 import { CustomerAccountSection } from './features/account/customer-account-section';
 import { BrandSupportSection } from './features/trip/brand-support-section';
 import { VtIcon } from './shared/lucide-icon';
+import { EuropeanDatePipe, formatEuropeanDate } from './shared/european-date.pipe';
 
 type AppView = 'home' | 'itinerary' | 'payments' | 'documents' | 'help' | 'account';
 type TripRefreshState = 'idle' | 'refreshing' | 'fresh' | 'stale' | 'offline' | 'error';
@@ -30,7 +31,7 @@ type Appearance = 'light' | 'dark';
 
 @Component({
   selector: 'app-root',
-  imports: [BookingJourneySection, BrandSupportSection, CommunicationsSection, CustomerAccountSection, DestinationsSection, DocumentsSection, ExtrasSection, ExternalContentSection, ItinerarySection, PaymentsSection, StageExperienceSection, VtIcon],
+  imports: [BookingJourneySection, BrandSupportSection, CommunicationsSection, CustomerAccountSection, DestinationsSection, DocumentsSection, EuropeanDatePipe, ExtrasSection, ExternalContentSection, ItinerarySection, PaymentsSection, StageExperienceSection, VtIcon],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -328,7 +329,7 @@ export class App implements OnInit, OnDestroy {
     this.error.set('');
     try {
       const link = await this.api.fellowTravellerLink(currentSession.accessToken);
-      const text = `View ${currentTrip.summary.name} in Vision Trips. This restricted link expires ${link.expiresAt.slice(0, 10)}.`;
+      const text = `View ${currentTrip.summary.name} in Vision Trips. This restricted link expires ${formatEuropeanDate(link.expiresAt)}.`;
       try {
         await Share.share({ title: currentTrip.summary.name, text, url: link.url, dialogTitle: 'Share trip' });
         this.shareResult.set('The restricted trip link is ready to share.');
@@ -727,7 +728,7 @@ export class App implements OnInit, OnDestroy {
     if (state === 'offline') return 'Saved offline';
     if (state === 'error') return 'Refresh failed';
     if (state === 'stale') return 'May be out of date';
-    return `Saved ${saved.savedAt.slice(0, 10)}`;
+    return `Saved ${formatEuropeanDate(saved.savedAt)}`;
   }
 
   private clearOpenTrip(): void {
