@@ -667,6 +667,10 @@ export class App implements OnInit, OnDestroy {
     await this.activateSavedTrip(saved, this.online());
   }
 
+  protected hideBrokenTripImage(event: Event): void {
+    (event.target as HTMLImageElement).hidden = true;
+  }
+
   protected async refreshSavedTrip(saved: SavedTrip, event?: Event): Promise<void> {
     event?.stopPropagation();
     const tripId = saved.snapshot.tripId;
