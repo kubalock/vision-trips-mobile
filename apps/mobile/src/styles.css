@@ -30,8 +30,13 @@ button { font: inherit; }
 .vt-app .vt-top__booking { display: grid; justify-items: start; gap: 5px; min-width: 0; }
 .vt-app .vt-top__booking .vt-ref { line-height: 1.15; }
 .vt-app .vt-top__booking .vt-status { line-height: 1; }
-.vt-app .vt-top__actions { gap: 10px; margin-left: auto; }
-.vt-app .vt-top__meta .vt-iconbtn.is-active { color: var(--link); background: var(--tint); border-color: var(--vt-accent); }
+.vt-app .vt-top__actions { gap: 4px; margin-left: auto; padding: 4px; border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--surface-2) 88%, transparent); box-shadow: 0 4px 18px rgba(0, 0, 0, .025); }
+.vt-app .vt-top__actions .vt-iconbtn { position: relative; display: grid; place-items: center; flex: 0 0 auto; width: 40px; height: 40px; min-width: 40px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--ink-2); box-shadow: none; transition: color .18s ease, background-color .18s ease, transform .12s ease; }
+.vt-app .vt-top__actions .vt-iconbtn:hover { background: color-mix(in srgb, var(--vt-accent) 8%, var(--surface)); color: var(--vt-accent-text); }
+.vt-app .vt-top__actions .vt-iconbtn:active { background: color-mix(in srgb, var(--vt-accent) 13%, var(--surface)); transform: scale(.94); }
+.vt-app .vt-top__actions .vt-iconbtn:focus-visible { outline: 3px solid var(--tint-2); outline-offset: 1px; }
+.vt-app .vt-top__meta .vt-iconbtn.is-active { color: var(--vt-accent-text); background: var(--tint); }
+.vt-app .vt-notification-count { position: absolute; top: -2px; right: -2px; display: grid; place-items: center; min-width: 17px; height: 17px; padding: 0 4px; border: 2px solid var(--surface); border-radius: 999px; background: var(--bad); color: white; font-size: .6rem; font-weight: 800; line-height: 1; }
 .vt-app .vt-action-icon { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .vt-app .vt-hero__img { width: 100%; height: 100%; object-fit: cover; }
 .vt-app .vt-nav { padding-left: max(4px, env(safe-area-inset-left)); padding-right: max(4px, env(safe-area-inset-right)); }
@@ -177,8 +182,71 @@ button { font: inherit; }
   box-shadow: none;
 }
 
+/* Shared trip status, notification sheet and header utilities. */
+.vt-app :is(.vt-main--home, .vt-main--itinerary, .vt-main--payments, .vt-main--documents, .vt-main--help, .vt-main--account) .vt-trip-status-card {
+  margin: 16px var(--vt-flat-gutter) 0;
+  padding: 13px 14px;
+  border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, .03);
+}
+.vt-app .vt-trip-status-card__copy { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.vt-app .vt-trip-status-card__copy > div { display: grid; gap: 3px; min-width: 0; }
+.vt-app .vt-trip-status-card__copy strong { color: currentColor; font-size: .86rem; line-height: 1.3; }
+.vt-app .vt-trip-status-card__copy > div > div { color: var(--ink-2); font-size: .73rem; font-weight: 550; line-height: 1.35; }
+.vt-app .vt-trip-status-card__indicator { flex: 0 0 auto; width: 10px; height: 10px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 5px color-mix(in srgb, currentColor 12%, transparent); }
+.vt-app .vt-trip-status-card__refresh { flex: 0 0 auto; min-width: 88px; min-height: 40px; padding: 8px 15px; border: 1px solid color-mix(in srgb, var(--vt-accent) 28%, transparent); border-radius: 999px; background: var(--tint); color: var(--vt-accent-text); font-size: .78rem; font-weight: 800; cursor: pointer; transition: background-color .18s ease, border-color .18s ease, color .18s ease, transform .12s ease; }
+.vt-app .vt-trip-status-card__refresh:hover { border-color: var(--vt-accent); background: color-mix(in srgb, var(--vt-accent) 14%, var(--surface)); }
+.vt-app .vt-trip-status-card__refresh:active { transform: scale(.97); }
+.vt-app .vt-trip-status-card__refresh:focus-visible { outline: 3px solid var(--tint-2); outline-offset: 2px; }
+.vt-app .vt-trip-status-card__refresh:disabled { border-color: var(--line-2); background: var(--surface-2); color: var(--ink-3); cursor: not-allowed; opacity: 1; }
+.vt-app .vt-notifications { position: relative; margin: 12px var(--vt-flat-gutter) 24px; padding: 20px; border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent); border-radius: 16px; background: var(--surface); box-shadow: 0 12px 36px rgba(0, 0, 0, .09); }
+.vt-app .vt-notifications__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; min-height: 40px; padding: 0 52px 14px 0; }
+.vt-app .vt-notifications__header h2 { color: var(--ink); font-size: 1.22rem; }
+.vt-app .vt-notifications__header p { margin-top: 4px; color: var(--ink-2); font-size: .78rem; line-height: 1.4; }
+.vt-app .vt-notifications__close { position: absolute; top: 20px; right: 20px; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 1px solid color-mix(in srgb, var(--ink) 7%, transparent); border-radius: 50%; background: var(--surface-2); color: var(--ink-2); cursor: pointer; transition: background-color .18s ease, color .18s ease, transform .12s ease; }
+.vt-app .vt-notifications__close:hover { background: var(--tint); color: var(--vt-accent-text); }
+.vt-app .vt-notifications__close:active { transform: scale(.94); }
+.vt-app .vt-notifications__close:focus-visible { outline: 3px solid var(--tint-2); outline-offset: 2px; }
+.vt-app .vt-notifications__device { display: flex; align-items: center; gap: 14px; padding: 14px; border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent); border-left: 4px solid var(--vt-accent); border-radius: 14px; background: var(--surface-2); cursor: pointer; }
+.vt-app .vt-notifications__device > input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+.vt-app .vt-notifications__switch { display: block; position: relative; flex: 0 0 auto; width: 46px; height: 28px; border: 1px solid var(--line-2); border-radius: 999px; background: color-mix(in srgb, var(--ink-3) 22%, var(--surface)); transition: border-color .2s ease, background-color .2s ease, box-shadow .2s ease; }
+.vt-app .vt-notifications__switch > span { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: white; box-shadow: 0 2px 6px rgba(0, 0, 0, .2); transition: transform .2s ease; }
+.vt-app .vt-notifications__device > input:checked + .vt-notifications__switch { border-color: var(--vt-accent); background: var(--vt-accent); }
+.vt-app .vt-notifications__device > input:checked + .vt-notifications__switch > span { transform: translateX(18px); }
+.vt-app .vt-notifications__device > input:focus-visible + .vt-notifications__switch { outline: 3px solid var(--tint-2); outline-offset: 2px; }
+.vt-app .vt-notifications__device-copy { display: grid; gap: 4px; min-width: 0; }
+.vt-app .vt-notifications__device-copy strong { color: var(--ink); font-size: .86rem; }
+.vt-app .vt-notifications__device-copy > span { color: var(--ink-2); font-size: .76rem; line-height: 1.45; }
+.vt-app .vt-notifications__list { display: grid; gap: 10px; max-height: min(28rem, 52dvh); margin-top: 12px; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.vt-app .vt-notification-row { display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: 16px; padding: 15px 16px 15px 13px; border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent); border-left: 4px solid var(--vt-accent); border-radius: 14px; background: var(--surface-2); }
+.vt-app .vt-notification-row--alert { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 5%, var(--surface)); }
+.vt-app .vt-notification-row--success { border-left-color: var(--ok); }
+.vt-app .vt-notification-row__icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; background: var(--tint); color: var(--vt-accent-text); }
+.vt-app .vt-notification-row--alert .vt-notification-row__icon { background: color-mix(in srgb, var(--warn) 13%, var(--surface)); color: var(--warn); }
+.vt-app .vt-notification-row--success .vt-notification-row__icon { background: color-mix(in srgb, var(--ok) 12%, var(--surface)); color: var(--ok); }
+.vt-app .vt-notification-row__icon vt-icon { width: 20px; height: 20px; }
+.vt-app .vt-notification-row h3 { color: var(--ink); font-size: .86rem; line-height: 1.35; }
+.vt-app .vt-notification-row p { margin-top: 4px; color: var(--ink-2); font-size: .78rem; line-height: 1.45; }
+.vt-app .vt-notification-row time { display: block; margin-top: 7px; color: var(--ink-3); font-size: .69rem; font-weight: 600; }
+.vt-app .vt-notifications__empty { margin-top: 12px; padding: 28px 18px; border: 1px dashed var(--line-2); border-radius: 14px; color: var(--ink-2); font-size: .82rem; line-height: 1.5; text-align: center; }
+@media (max-width: 520px) {
+  .vt-app :is(.vt-main--home, .vt-main--itinerary, .vt-main--payments, .vt-main--documents, .vt-main--help, .vt-main--account) .vt-trip-status-card { align-items: stretch; }
+  .vt-app .vt-trip-status-card__refresh { min-width: 80px; }
+}
+@media (max-width: 380px) {
+  .vt-app .vt-trip-status-card { flex-direction: column; }
+  .vt-app .vt-trip-status-card__refresh { width: 100%; }
+  .vt-app .vt-top__actions { gap: 2px; padding: 3px; }
+  .vt-app .vt-top__actions .vt-iconbtn { width: 38px; height: 38px; min-width: 38px; }
+}
+:root[data-theme="dark"] .vt-app .vt-top__actions { border-color: rgba(255, 255, 255, .08); background: color-mix(in srgb, var(--surface-2) 94%, #000); box-shadow: 0 6px 22px rgba(0, 0, 0, .2); }
+:root[data-theme="dark"] .vt-app :is(.vt-trip-status-card, .vt-notifications) { border-color: rgba(255, 255, 255, .08); box-shadow: 0 10px 32px rgba(0, 0, 0, .25); }
+:root[data-theme="dark"] .vt-app :is(.vt-notifications__device, .vt-notification-row, .vt-notifications__close) { border-color: rgba(255, 255, 255, .09); }
+
 /* Home-specific full-bleed feature areas. */
-.vt-app :is(.vt-main--home, .vt-main--itinerary, .vt-main--payments, .vt-main--documents, .vt-main--help, .vt-main--account, .vt-main--trips) .vt-freshness {
+.vt-app :is(.vt-main--home, .vt-main--itinerary, .vt-main--payments, .vt-main--documents, .vt-main--help, .vt-main--account, .vt-main--trips) .vt-freshness:not(.vt-trip-status-card) {
     margin: 0;
     padding: 12px var(--vt-flat-gutter);
     border-width: 0 0 1px;
