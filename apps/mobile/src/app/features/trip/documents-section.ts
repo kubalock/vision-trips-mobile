@@ -6,7 +6,7 @@ import type { WalletStatus } from '../../core/storage/document-wallet.store';
   selector: 'app-documents-section',
   template: `
     <section class="vt-section" aria-labelledby="documents-title">
-      <h2 id="documents-title" class="vt-h2">Your documents</h2>
+      <p class="text-sm font-semibold uppercase tracking-widest text-teal-700">Travel wallet</p><h1 id="documents-title" class="mt-1 text-3xl font-semibold">Your documents</h1><p class="mt-2 text-sm leading-6 text-slate-600">Downloaded documents are kept on this device for offline access. When your agent replaces one, it will be marked Updated.</p>
       <ul class="vt-docs" role="list">
         @for (document of documents(); track document.id; let last = $last) {
           <li>

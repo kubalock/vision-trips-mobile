@@ -7,7 +7,7 @@ import type { PaymentSummary } from '@vision-trips/contracts';
   imports: [CurrencyPipe],
   template: `
     <section class="vt-section" aria-labelledby="payments-title">
-      <h2 id="payments-title" class="vt-h2">Payments</h2>
+      <p class="text-sm font-semibold uppercase tracking-widest text-teal-700">Your booking</p><h1 id="payments-title" class="mt-1 text-3xl font-semibold">Payments</h1>
       <div class="vt-totals">
         <div class="vt-totals__main"><span class="vt-totals__label">Total trip price</span><strong class="vt-totals__amount">{{ payments().total | currency: payments().currency }}</strong></div>
         <div class="vt-totals__split"><div><span>Paid</span><strong>{{ payments().paid | currency: payments().currency }}</strong></div><div><span>Balance</span><strong>{{ payments().balance | currency: payments().currency }}</strong></div></div>

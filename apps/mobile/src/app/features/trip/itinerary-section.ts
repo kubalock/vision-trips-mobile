@@ -7,7 +7,7 @@ import { PhotoGallery } from '../../shared/photo-gallery';
   imports: [PhotoGallery],
   template: `
     <section class="vt-section" aria-labelledby="itinerary-title">
-      <h2 id="itinerary-title" class="vt-h2">Your itinerary</h2>
+      <p class="text-sm font-semibold uppercase tracking-widest text-teal-700">Trip plan</p><h1 id="itinerary-title" class="mt-1 text-3xl font-semibold">Your itinerary</h1>
       @if (items().length) {
         <div class="vt-days">
           @for (group of groupedItems(); track group.date) {
