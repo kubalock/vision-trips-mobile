@@ -1,4 +1,4 @@
-import { Body, Controller, Param, Post } from '@nestjs/common';
+import { Body, Controller, Delete, HttpCode, Param, Post } from '@nestjs/common';
 import { ApiBody, ApiCreatedResponse, ApiTags } from '@nestjs/swagger';
 import type { LinkExchangeResponse } from '@vision-trips/contracts';
 import { LinkExchangesService } from './link-exchanges.service.js';
@@ -16,6 +16,11 @@ export class LinkExchangesController {
     const tokens = Array.isArray(body?.deviceTrustTokens) ? body.deviceTrustTokens : body?.deviceTrustToken !== undefined ? [body.deviceTrustToken] : [];
     return this.exchanges.create(body?.linkOrCode, tokens);
   }
+
+  /** Browsers keep trusted-device tokens in HttpOnly cookies; the web-session interceptor clears them on this call. */
+  @Delete('device-trust')
+  @HttpCode(204)
+  forgetDeviceTrust(): void {}
 
   @Post('local')
   @ApiBody({ schema: { example: { baseId: 'appXXXXXXXXXXXXXX', recordId: 'recXXXXXXXXXXXXXX' } } })

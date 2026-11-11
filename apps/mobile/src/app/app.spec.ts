@@ -1,3 +1,4 @@
+import { SavedTripsStore } from './core/storage/saved-trips.store';
 import { TestBed } from '@angular/core/testing';
 import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -148,6 +149,20 @@ describe('App', () => {
     }
 
     afterEach(() => { localStorage.clear(); vi.restoreAllMocks(); });
+
+    /** Switches saved trips to the installed app's secure storage (backed by a map), which keeps whole sessions. */
+    function nativeStorage(): Map<string, unknown> {
+      const values = new Map<string, unknown>();
+      Object.assign(TestBed.inject(SavedTripsStore), {
+        native: true,
+        secure: {
+          get: async (key: string) => values.get(key) ?? null,
+          set: async (key: string, value: unknown) => { values.set(key, value); },
+          remove: async (key: string) => values.delete(key),
+        },
+      });
+      return values;
+    }
 
     it('retries a payment link with a renewed token after a 401', async () => {
       const { app, api } = setup();
@@ -314,8 +329,7 @@ describe('App', () => {
       const { app } = setup();
       app.trip.set(null); app.session.set(null);
       const future = new Date(Date.now() + 86_400_000).toISOString();
-      localStorage.setItem('vision-trips:trip:index', JSON.stringify(['trip-saved']));
-      localStorage.setItem('vision-trips:trip:trip-saved', JSON.stringify({ snapshot: { ...(minimalTrip() as object), tripId: 'trip-saved' }, session: { accessToken: 'a', accessExpiresAt: future, refreshToken: 'r', refreshExpiresAt: future }, savedAt: '2026-11-01T00:00:00Z' }));
+      await TestBed.inject(SavedTripsStore).save({ ...(minimalTrip() as object), tripId: 'trip-saved' } as never, { accessToken: 'a', accessExpiresAt: future, refreshToken: 'web:saved-trip-handle', refreshExpiresAt: future });
 
       await (app as unknown as { initializeOfflineState: (activate: boolean) => Promise<void> }).initializeOfflineState(false);
 
@@ -328,8 +342,9 @@ describe('App', () => {
       const future = new Date(Date.now() + 10 * 60_000).toISOString();
       app.trip.set({ ...(minimalTrip() as object), tripId: 'trip-1' });
       const renewedElsewhere = { accessToken: 'tab-b-access', accessExpiresAt: future, refreshToken: 'tab-b-refresh', refreshExpiresAt: future };
-      localStorage.setItem('vision-trips:trip:index', JSON.stringify(['trip-1']));
-      localStorage.setItem('vision-trips:trip:trip-1', JSON.stringify({ snapshot: { ...(minimalTrip() as object), tripId: 'trip-1' }, session: renewedElsewhere, savedAt: '2026-11-01T00:00:00Z' }));
+      // Installed app: another copy of the app may have renewed and saved the session (browsers share one cookie instead).
+      nativeStorage();
+      await TestBed.inject(SavedTripsStore).save({ ...(minimalTrip() as object), tripId: 'trip-1' } as never, renewedElsewhere);
       const refresh = vi.spyOn(api, 'refreshSession');
 
       const result = await app.refreshSession(app.session());
@@ -394,6 +409,7 @@ describe('App', () => {
 
       it('keeps a late refresh of the previous trip out of view but saves it', async () => {
         const { app, api } = setup();
+        nativeStorage();
         const view = app as unknown as Switching;
         app.trip.set({ ...(minimalTrip() as object), tripId: 'trip-A' });
         const late = deferred<unknown>();
@@ -406,20 +422,33 @@ describe('App', () => {
         await refreshing;
 
         expect((app as unknown as { trip: () => { tripId: string } }).trip().tripId).toBe('trip-B');
-        const stored = JSON.parse(localStorage.getItem('vision-trips:trip:trip-A') ?? 'null');
+        const stored = (await TestBed.inject(SavedTripsStore).all()).find((trip) => trip.snapshot.tripId === 'trip-A');
         expect(stored?.snapshot.summary.name).toBe('Updated A');
       });
     });
 
-    it('forgets the trusted-device token on sign-out', async () => {
+    it('forgets the trusted-device cookies on sign-out in a browser', async () => {
       const { app, api } = setup();
-      localStorage.setItem('vision-trips:device-trust', 'trust-token');
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      vi.spyOn(api, 'revokeSession').mockResolvedValue(undefined);
+      const forget = vi.spyOn(api, 'forgetDeviceTrust').mockResolvedValue(undefined);
+
+      await app.signOutDevice();
+
+      expect(forget).toHaveBeenCalledOnce();
+      expect(app.session()).toBeNull();
+    });
+
+    it('forgets the trusted-device token on sign-out in the installed app', async () => {
+      const { app, api } = setup();
+      const secure = nativeStorage();
+      secure.set('device:trust', ['trust-token']);
       vi.spyOn(window, 'confirm').mockReturnValue(true);
       vi.spyOn(api, 'revokeSession').mockResolvedValue(undefined);
 
       await app.signOutDevice();
 
-      expect(localStorage.getItem('vision-trips:device-trust')).toBeNull();
+      expect(secure.has('device:trust')).toBe(false);
       expect(app.session()).toBeNull();
     });
   });

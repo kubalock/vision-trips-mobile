@@ -43,6 +43,12 @@ The app sends API requests through Capacitor's native HTTP layer (`CapacitorHttp
 
 Production builds hide the Airtable-ID entry form; trips open only from their links.
 
+## Where sessions are kept
+
+- **Installed app:** the trip snapshot, its refresh token and the trusted-device tokens are kept in the device's secure storage (Keychain / Keystore).
+- **Browser:** the app sends `X-Vision-Client: web`, and the API puts the refresh token and trusted-device tokens in `HttpOnly; SameSite=Strict` cookies (`Secure` in production), scoped to `/v1/sessions` and `/v1/link-exchanges`. The app only sees a `web:` handle that names the cookie. Access tokens stay in memory, and only the trip snapshot is saved, in IndexedDB, labelled "Saved in this browser".
+- Because the cookies are `SameSite=Strict`, the web app and the API must be served from the same site in production (for example `trips.example.com` and `api.example.com`).
+
 ## Mint payments
 
 Mint credentials and the Airtable automation webhook remain in the Airtable `Brands & Branches` record (`Mint | API Key`, `Mint | Business Unit`, `Webhook URL`, allowed methods and custom-payment setting). The booking must contain a `Mint | Booking ID` beginning with `BK.`. Every generated Mint link includes that brand's HTTPS webhook URL. Mint posts successful payment data directly to Airtable; the mobile app then refreshes the Airtable-backed snapshot until the completed payment and receipt appear.

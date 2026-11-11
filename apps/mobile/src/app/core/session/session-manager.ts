@@ -2,6 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import type { MobileSession } from '@vision-trips/contracts';
 import { VisionApiService } from '../api/vision-api.service';
+import { isWebSessionHandle } from '../api/web-client.interceptor';
 import { SavedTripsStore } from '../storage/saved-trips.store';
 
 /** Emitted after a refresh token has been replaced, so holders of the old session can update their copies. */
@@ -68,13 +69,27 @@ export class SessionManager {
     const request = (async () => {
       const newer = await this.newerStoredSession(refreshToken);
       const fromServer = !newer || isAccessExpiring(newer);
-      const session = fromServer ? await this.api.refreshSession(newer?.refreshToken ?? refreshToken) : newer;
+      const session = fromServer ? await this.refreshFromServer(newer?.refreshToken ?? refreshToken) : newer;
       if (this.session()?.refreshToken === refreshToken) this.session.set(session);
       await this.hooks.renewed({ previousRefreshToken: refreshToken, session, fromServer });
       return session;
     })().finally(() => this.inFlight.delete(refreshToken));
     this.inFlight.set(refreshToken, request);
     return request;
+  }
+
+  /**
+   * Browsers share one refresh cookie between tabs. When two tabs renew at once, the second sends the cookie the
+   * first has just replaced and is refused; by then the browser holds the new cookie, so one retry succeeds.
+   */
+  private async refreshFromServer(refreshToken: string): Promise<MobileSession> {
+    try {
+      return await this.api.refreshSession(refreshToken);
+    } catch (error) {
+      if (!isWebSessionHandle(refreshToken) || !(error instanceof HttpErrorResponse) || error.status !== 401) throw error;
+      await new Promise((resolve) => setTimeout(resolve, WEB_REFRESH_RETRY_MS));
+      return this.api.refreshSession(refreshToken);
+    }
   }
 
   private async newerStoredSession(refreshToken: string): Promise<MobileSession | null> {
@@ -84,6 +99,8 @@ export class SessionManager {
     return stored && stored.refreshToken !== refreshToken ? stored : null;
   }
 }
+
+const WEB_REFRESH_RETRY_MS = 400;
 
 export function isAccessExpiring(session: MobileSession): boolean {
   const expiresAt = Date.parse(session.accessExpiresAt);

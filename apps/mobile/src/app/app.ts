@@ -65,6 +65,8 @@ export class App implements OnInit, OnDestroy {
   protected readonly rememberDevice = signal(true);
   protected readonly resendSeconds = signal(0);
   protected readonly storedSecurely = signal(false);
+  /** Browsers save only the trip itself, in this browser's storage; the installed app uses the device's secure storage. */
+  protected readonly savedInBrowser = !this.savedTrips.native;
   protected readonly activeView = signal<AppView>('home');
   protected readonly acceptanceName = signal('');
   protected readonly acceptanceEmail = signal('');
@@ -781,6 +783,7 @@ export class App implements OnInit, OnDestroy {
     for (const trip of saved) { await this.savedTrips.remove(trip.snapshot.tripId); await this.brandAssets.remove(trip.snapshot.tripId); this.customerNotifications.clear(trip.snapshot.tripId); }
     await this.documentWallet.remove();
     await this.savedTrips.clearDeviceTrust();
+    if (!this.savedTrips.native) await this.api.forgetDeviceTrust().catch(() => undefined);
     this.clearOpenTrip(); this.savedTripList.set([]); this.showTripLibrary.set(false); this.storedSecurely.set(false);
   }
 

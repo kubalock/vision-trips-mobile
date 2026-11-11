@@ -2,6 +2,8 @@ import { Injectable } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
 import { SecureStorage } from '@aparajita/capacitor-secure-storage';
 import type { MobileSession, TripSnapshot } from '@vision-trips/contracts';
+import { isWebSessionHandle } from '../api/web-client.interceptor';
+import { BrowserTripDb } from './browser-trip-db';
 
 export interface SavedTrip {
   snapshot: TripSnapshot;
@@ -9,48 +11,67 @@ export interface SavedTrip {
   savedAt: string;
 }
 
-const WEB_INDEX_KEY = 'vision-trips:trip:index';
 const MAX_TRUSTED_BOOKINGS = 20;
+/** Keys an older version kept in localStorage, tokens included; removed on first use. */
+const LEGACY_WEB_KEY = /^vision-trips:(trip:|device-trust$)/;
 
+/**
+ * Trips saved for offline use.
+ * - Installed app: the snapshot and its session (refresh and trusted-device tokens included) go into the device's
+ *   secure storage.
+ * - Browser: only the snapshot goes into IndexedDB, labelled "saved in this browser". The refresh and
+ *   trusted-device tokens live in the API's HttpOnly cookies (the session holds a `web:` handle in their place),
+ *   and the access token is never written down.
+ */
 @Injectable({ providedIn: 'root' })
 export class SavedTripsStore {
-  /** Trusted-device tokens, one per booking, so remembering a second booking does not forget the first. */
+  readonly native = Capacitor.isNativePlatform();
+  private readonly browserDb = new BrowserTripDb();
+  /** The installed app's secure storage (replaceable in tests: the plugin proxy cannot be spied on). */
+  private readonly secure: Pick<typeof SecureStorage, 'get' | 'set' | 'remove'> = SecureStorage;
+  private legacyCleared = false;
+
+  /** Trusted-device tokens, one per booking, so remembering a second booking does not forget the first. Browsers keep these in cookies. */
   async deviceTrusts(now = Date.now()): Promise<string[]> {
-    const value = Capacitor.isNativePlatform() ? await SecureStorage.get('device:trust') : parseJson(localStorage.getItem('vision-trips:device-trust')) ?? localStorage.getItem('vision-trips:device-trust');
+    if (!this.native) { this.clearLegacyWebStorage(); return []; }
+    const value = await this.secure.get('device:trust');
     const tokens = Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : typeof value === 'string' ? [value] : [];
     return tokens.filter((token) => { const payload = trustPayload(token); return !payload || payload.e > now; });
   }
 
   async saveDeviceTrust(token: string): Promise<void> {
+    if (!this.native) return;
     const payload = trustPayload(token);
     const others = (await this.deviceTrusts()).filter((existing) => {
       const current = trustPayload(existing);
       return existing !== token && !(payload && current && current.b === payload.b && current.r === payload.r);
     });
-    const tokens = [token, ...others].slice(0, MAX_TRUSTED_BOOKINGS);
-    if (Capacitor.isNativePlatform()) await SecureStorage.set('device:trust', tokens);
-    else localStorage.setItem('vision-trips:device-trust', JSON.stringify(tokens));
+    await this.secure.set('device:trust', [token, ...others].slice(0, MAX_TRUSTED_BOOKINGS));
   }
 
   async clearDeviceTrust(): Promise<void> {
-    if (Capacitor.isNativePlatform()) await SecureStorage.remove('device:trust');
-    else localStorage.removeItem('vision-trips:device-trust');
+    if (this.native) await this.secure.remove('device:trust');
   }
 
   async save(snapshot: TripSnapshot, session: MobileSession): Promise<boolean> {
-    const key = `trip:${snapshot.tripId}`;
-    const saved: SavedTrip = { snapshot, session, savedAt: new Date().toISOString() };
-    if (Capacitor.isNativePlatform()) await SecureStorage.set(key, saved as unknown as Record<string, unknown>);
-    else localStorage.setItem(`vision-trips:${key}`, JSON.stringify(saved));
-    const ids = await this.ids();
-    if (!ids.includes(snapshot.tripId)) await this.saveIds([...ids, snapshot.tripId]);
+    const savedAt = new Date().toISOString();
+    if (this.native) {
+      const key = `trip:${snapshot.tripId}`;
+      await this.secure.set(key, { snapshot, session, savedAt } as unknown as Record<string, unknown>);
+      const ids = await this.ids();
+      if (!ids.includes(snapshot.tripId)) await this.secure.set('trip:index', [...ids, snapshot.tripId]);
+    } else {
+      // A raw refresh token must never reach browser storage; only the cookie handle may.
+      if (!isWebSessionHandle(session.refreshToken)) return false;
+      await this.browserDb.set(snapshot.tripId, { snapshot, session: withoutAccessToken(session), savedAt });
+    }
     return true;
   }
 
   async all(): Promise<SavedTrip[]> {
-    const saved = Capacitor.isNativePlatform()
-      ? await Promise.all((await this.ids()).map((id) => SecureStorage.get(`trip:${id}`)))
-      : (await this.ids()).map((id) => parseJson(localStorage.getItem(`vision-trips:trip:${id}`)));
+    const saved = this.native
+      ? await Promise.all((await this.ids()).map((id) => this.secure.get(`trip:${id}`)))
+      : await Promise.all((await this.ids()).map((id) => this.browserDb.get(id)));
     return saved.flatMap((value) => isSavedTrip(value) ? [value as unknown as SavedTrip] : []);
   }
 
@@ -65,32 +86,36 @@ export class SavedTripsStore {
   }
 
   async remove(tripId: string): Promise<void> {
-    if (Capacitor.isNativePlatform()) await SecureStorage.remove(`trip:${tripId}`);
-    else localStorage.removeItem(`vision-trips:trip:${tripId}`);
-    await this.saveIds((await this.ids()).filter((id) => id !== tripId));
+    if (!this.native) { await this.browserDb.delete(tripId); return; }
+    await this.secure.remove(`trip:${tripId}`);
+    await this.secure.set('trip:index', (await this.ids()).filter((id) => id !== tripId));
   }
 
   private async ids(): Promise<string[]> {
-    const value = Capacitor.isNativePlatform()
-      ? await SecureStorage.get('trip:index')
-      : parseJson(localStorage.getItem(WEB_INDEX_KEY));
+    if (!this.native) { this.clearLegacyWebStorage(); return this.browserDb.keys(); }
+    const value = await this.secure.get('trip:index');
     return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
   }
 
-  private async saveIds(ids: string[]): Promise<void> {
-    if (Capacitor.isNativePlatform()) await SecureStorage.set('trip:index', ids);
-    else localStorage.setItem(WEB_INDEX_KEY, JSON.stringify(ids));
+  /** Older versions kept whole sessions in localStorage. Those tokens cannot be moved into cookies, so they are dropped. */
+  private clearLegacyWebStorage(): void {
+    if (this.legacyCleared) return;
+    this.legacyCleared = true;
+    try {
+      const keys = Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index)).filter((key): key is string => Boolean(key && LEGACY_WEB_KEY.test(key)));
+      for (const key of keys) localStorage.removeItem(key);
+    } catch { /* storage unavailable */ }
   }
+}
+
+/** Browsers keep the access token in memory only; a saved trip renews it through the refresh cookie when reopened. */
+function withoutAccessToken(session: MobileSession): MobileSession {
+  return { ...session, accessToken: '', accessExpiresAt: new Date(0).toISOString() };
 }
 
 export function isSessionExpired(session: MobileSession, now = Date.now()): boolean {
   const expiresAt = Date.parse(session.refreshExpiresAt);
   return !Number.isFinite(expiresAt) || expiresAt <= now;
-}
-
-function parseJson(value: string | null): unknown {
-  if (!value) return null;
-  try { return JSON.parse(value) as unknown; } catch { return null; }
 }
 
 function isSavedTrip(value: unknown): boolean {

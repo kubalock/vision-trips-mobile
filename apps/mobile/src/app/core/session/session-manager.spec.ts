@@ -35,4 +35,21 @@ describe('SessionManager', () => {
     await expect(manager.run(session('old'), request)).rejects.toMatchObject({ status: 401 });
     expect(request).toHaveBeenCalledTimes(2);
   });
+
+  it('retries a refused browser renewal once, since another tab may have just replaced the shared cookie', async () => {
+    const manager = TestBed.inject(SessionManager);
+    const fresh = { ...session('new'), refreshToken: 'web:handle' };
+    const refresh = vi.spyOn(TestBed.inject(VisionApiService), 'refreshSession').mockRejectedValueOnce(new HttpErrorResponse({ status: 401 })).mockResolvedValueOnce(fresh);
+
+    await expect(manager.renew({ ...session('old'), refreshToken: 'web:handle' })).resolves.toEqual(fresh);
+    expect(refresh).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry a refused renewal of an installed-app token', async () => {
+    const manager = TestBed.inject(SessionManager);
+    const refresh = vi.spyOn(TestBed.inject(VisionApiService), 'refreshSession').mockRejectedValue(new HttpErrorResponse({ status: 401 }));
+
+    await expect(manager.renew(session('old'))).rejects.toMatchObject({ status: 401 });
+    expect(refresh).toHaveBeenCalledOnce();
+  });
 });

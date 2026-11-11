@@ -59,7 +59,7 @@
           @if (currentTrip.summary.heroImageUrl) { <img class="vt-hero__img" [src]="currentTrip.summary.heroImageUrl" alt="" /> }
           <div class="vt-hero__body"><p class="vt-hero__kicker">{{ stageLabel(currentTrip.stage) }}</p><h1 class="vt-hero__title">{{ currentTrip.summary.name }}</h1><p class="vt-hero__sub">{{ currentTrip.summary.reference }} · {{ (currentTrip.summary.departureDate | europeanDate) || 'Dates to be confirmed' }}@if (currentTrip.summary.returnDate) { — {{ currentTrip.summary.returnDate | europeanDate }} }</p>
             <ul class="vt-hero__facts" role="list">@for (type of currentTrip.summary.holidayTypes; track type) { <li>{{ type }}</li> }@if (currentTrip.summary.durationDays !== null) { <li>{{ currentTrip.summary.durationDays }} nights</li> }</ul>
-            <p class="vt-small">{{ storedSecurely() ? 'Saved securely on this device.' : 'Web preview: this trip has not been stored on this device.' }}</p>
+            <p class="vt-small">{{ storedSecurely() ? (savedInBrowser ? 'Saved in this browser for offline viewing.' : 'Saved securely on this device.') : 'This trip has not been saved for offline viewing.' }}</p>
             <div class="vt-hero__actions"><button type="button" class="vt-hero__calendar" (click)="downloadCalendar()"><vt-icon name="calendar" [size]="18" /> Add to calendar</button></div>
           </div>
         </article>
