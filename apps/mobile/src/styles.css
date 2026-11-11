@@ -1,9 +1,48 @@
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
+/* Map Tailwind's radius scale onto the design tokens below so utility classes stay on-system. */
+@theme inline {
+  --radius-xl: var(--r-s);
+  --radius-2xl: var(--r);
+  --radius-3xl: var(--r-l);
+}
+
 :root { --vt-accent: #0f766e; --vt-accent-2: #115e59; --vt-accent-text: #0f766e; --vt-accent-text-dark: #5eead4; --accent-ink: #fff; --vt-font-family: 'Montserrat', system-ui, -apple-system, 'Segoe UI', sans-serif; --vt-display: var(--vt-font-family); --vt-display-weight: 600; --vt-body: var(--vt-font-family); --vt-wash: #0f766e; --vt-hero-a: #134e4a; --vt-hero-b: #0f766e; --vt-soft: 0; }
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
+
+/* ---------- Design tokens (mobile) ----------
+   Overrides the base tokens from php-plugin/assets/css/vision.css (kept unchanged as the upstream reference).
+   Use these instead of literal radius / shadow / spacing values. */
+:root {
+  --r: 16px;          /* cards and card-level surfaces */
+  --r-l: 16px;        /* hero / large surfaces (same as cards on mobile) */
+  --r-s: 12px;        /* inner rows, inputs, icon tiles */
+  --r-xs: 8px;        /* chips, small badges */
+  --r-pill: 999px;    /* pills and fully rounded buttons */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 20px; --sp-6: 24px;
+  --card-pad: 16px;
+  --card-gap: 12px;
+  --card-border: var(--line);
+  --shadow-card: 0 4px 20px rgba(20, 22, 24, .04);
+  --shadow-card-sm: 0 4px 14px rgba(20, 22, 24, .03);
+  --shadow-raised: 0 12px 36px rgba(20, 22, 24, .09);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --card-border: rgba(255, 255, 255, .09);
+    --shadow-card: 0 8px 28px rgba(0, 0, 0, .22);
+    --shadow-card-sm: inset 0 1px 0 rgba(255, 255, 255, .025);
+    --shadow-raised: 0 10px 32px rgba(0, 0, 0, .25);
+  }
+}
+:root[data-theme="dark"] {
+  --card-border: rgba(255, 255, 255, .09);
+  --shadow-card: 0 8px 28px rgba(0, 0, 0, .22);
+  --shadow-card-sm: inset 0 1px 0 rgba(255, 255, 255, .025);
+  --shadow-raised: 0 10px 32px rgba(0, 0, 0, .25);
+}
 
 * {
   box-sizing: border-box;
@@ -26,25 +65,25 @@ button { font: inherit; }
 .vt-app #main-content:focus { outline: none; }
 .vt-app .vt-top__brand { gap: 10px; }
 .vt-app .vt-top__logo { max-width: 150px; }
-.vt-app .vt-top__mark { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 10px; background: var(--vt-accent); color: var(--accent-ink); font-weight: 700; }
+.vt-app .vt-top__mark { width: 38px; height: 38px; display: grid; place-items: center; border-radius: var(--r-s); background: var(--vt-accent); color: var(--accent-ink); font-weight: 700; }
 .vt-app .vt-top__brand:has(.vt-top__mark) { background: transparent; padding: 0; }
 .vt-app .vt-top__meta { flex: 1; margin-left: 0; }
 .vt-app .vt-top__booking { display: grid; justify-items: start; gap: 5px; min-width: 0; }
 .vt-app .vt-top__booking .vt-ref { line-height: 1.15; }
 .vt-app .vt-top__booking .vt-status { line-height: 1; }
-.vt-app .vt-top__actions { gap: 4px; margin-left: auto; padding: 4px; border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--surface-2) 88%, transparent); box-shadow: 0 4px 18px rgba(0, 0, 0, .025); }
+.vt-app .vt-top__actions { gap: 4px; margin-left: auto; padding: 4px; border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent); border-radius: var(--r-pill); background: color-mix(in srgb, var(--surface-2) 88%, transparent); box-shadow: var(--shadow-card-sm); }
 .vt-app .vt-top__actions .vt-iconbtn { position: relative; display: grid; place-items: center; flex: 0 0 auto; width: 40px; height: 40px; min-width: 40px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--ink-2); box-shadow: none; transition: color .18s ease, background-color .18s ease, transform .12s ease; }
 .vt-app .vt-top__actions .vt-iconbtn:hover { background: color-mix(in srgb, var(--vt-accent) 8%, var(--surface)); color: var(--vt-accent-text); }
 .vt-app .vt-top__actions .vt-iconbtn:active { background: color-mix(in srgb, var(--vt-accent) 13%, var(--surface)); transform: scale(.94); }
 .vt-app .vt-top__actions .vt-iconbtn:focus-visible { outline: 3px solid var(--tint-2); outline-offset: 1px; }
 .vt-app .vt-top__meta .vt-iconbtn.is-active { color: var(--vt-accent-text); background: var(--tint); }
-.vt-app .vt-notification-count { position: absolute; top: -2px; right: -2px; display: grid; place-items: center; min-width: 17px; height: 17px; padding: 0 4px; border: 2px solid var(--surface); border-radius: 999px; background: var(--bad); color: white; font-size: .6rem; font-weight: 800; line-height: 1; }
+.vt-app .vt-notification-count { position: absolute; top: -2px; right: -2px; display: grid; place-items: center; min-width: 17px; height: 17px; padding: 0 4px; border: 2px solid var(--surface); border-radius: var(--r-pill); background: var(--bad); color: white; font-size: .6rem; font-weight: 800; line-height: 1; }
 .vt-app .vt-action-icon { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .vt-app .vt-hero__img { width: 100%; height: 100%; object-fit: cover; }
 .vt-app .vt-nav { padding-left: max(4px, env(safe-area-inset-left)); padding-right: max(4px, env(safe-area-inset-right)); }
-.vt-app .vt-nav button { position: relative; flex: 1; display: grid; justify-items: center; align-content: center; gap: 3px; min-height: 48px; padding: 6px 2px; border: 0; background: transparent; color: var(--ink-3); font-size: .68rem; font-weight: 600; border-radius: 12px; min-width: 0; cursor: pointer; }
+.vt-app .vt-nav button { position: relative; flex: 1; display: grid; justify-items: center; align-content: center; gap: 3px; min-height: 48px; padding: 6px 2px; border: 0; background: transparent; color: var(--ink-3); font-size: .68rem; font-weight: 600; border-radius: var(--r-s); min-width: 0; cursor: pointer; }
 .vt-app .vt-nav button.is-active { color: var(--vt-accent-text); background: var(--tint); font-weight: 800; }
-.vt-app .vt-nav button.is-active::after { content: ""; position: absolute; bottom: 3px; width: 24px; height: 3px; border-radius: 999px; background: var(--accent-action); }
+.vt-app .vt-nav button.is-active::after { content: ""; position: absolute; bottom: 3px; width: 24px; height: 3px; border-radius: var(--r-pill); background: var(--accent-action); }
 .vt-app .vt-nav__icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; font-size: 1.25rem; line-height: 1; transition: color .15s ease, background-color .15s ease, transform .15s ease; }
 .vt-app .vt-nav button.is-active .vt-nav__icon { background: transparent; color: var(--vt-accent-text); transform: scale(1.06); }
 @media (max-width: 759px) {
@@ -68,7 +107,7 @@ button { font: inherit; }
 .vt-app .vt-freshness--fresh { color: var(--ok); }
 .vt-app .vt-freshness--stale { color: var(--warn); }
 .vt-app .vt-freshness--offline { color: var(--ink-2); }
-.vt-app .vt-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; box-shadow: var(--shadow-s); }
+.vt-app .vt-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: var(--card-pad); box-shadow: var(--shadow-s); }
 .vt-app .vt-stack { display: grid; gap: 12px; }
 .vt-app .vt-form { display: grid; gap: 14px; }
 .vt-app .vt-form label { display: grid; gap: 6px; font-size: var(--fs-0); font-weight: 500; color: var(--ink-2); }
@@ -140,7 +179,7 @@ button { font: inherit; }
   .vt-app .vt-top__mark { width: 36px; height: 36px; }
   .vt-app .vt-top__name { font-size: 1rem; }
   .vt-app .vt-main { padding-top: 12px; }
-  .vt-app .vt-hero { min-height: 360px; border-radius: 20px; }
+  .vt-app .vt-hero { min-height: 360px; border-radius: var(--r-l); }
   .vt-app .vt-hero__body { padding: 22px 20px; gap: 8px; }
   .vt-app .vt-hero__title { max-width: 13ch; }
   .vt-app .vt-hero__facts { gap: 6px; }
@@ -189,21 +228,21 @@ button { font: inherit; }
   margin: 16px var(--vt-flat-gutter) 0;
   padding: 13px 14px;
   border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent);
-  border-radius: 16px;
+  border-radius: var(--r);
   background: var(--surface);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, .03);
+  box-shadow: var(--shadow-card);
 }
 .vt-app .vt-trip-status-card__copy { display: flex; align-items: center; gap: 11px; min-width: 0; }
 .vt-app .vt-trip-status-card__copy > div { display: grid; gap: 3px; min-width: 0; }
 .vt-app .vt-trip-status-card__copy strong { color: currentColor; font-size: .86rem; line-height: 1.3; }
 .vt-app .vt-trip-status-card__copy > div > div { color: var(--ink-2); font-size: .73rem; font-weight: 550; line-height: 1.35; }
 .vt-app .vt-trip-status-card__indicator { flex: 0 0 auto; width: 10px; height: 10px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 5px color-mix(in srgb, currentColor 12%, transparent); }
-.vt-app .vt-trip-status-card__refresh { flex: 0 0 auto; min-width: 88px; min-height: 40px; padding: 8px 15px; border: 1px solid color-mix(in srgb, var(--vt-accent) 28%, transparent); border-radius: 999px; background: var(--tint); color: var(--vt-accent-text); font-size: .78rem; font-weight: 800; cursor: pointer; transition: background-color .18s ease, border-color .18s ease, color .18s ease, transform .12s ease; }
+.vt-app .vt-trip-status-card__refresh { flex: 0 0 auto; min-width: 88px; min-height: 40px; padding: 8px 15px; border: 1px solid color-mix(in srgb, var(--vt-accent) 28%, transparent); border-radius: var(--r-pill); background: var(--tint); color: var(--vt-accent-text); font-size: .78rem; font-weight: 800; cursor: pointer; transition: background-color .18s ease, border-color .18s ease, color .18s ease, transform .12s ease; }
 .vt-app .vt-trip-status-card__refresh:hover { border-color: var(--vt-accent); background: color-mix(in srgb, var(--vt-accent) 14%, var(--surface)); }
 .vt-app .vt-trip-status-card__refresh:active { transform: scale(.97); }
 .vt-app .vt-trip-status-card__refresh:focus-visible { outline: 3px solid var(--tint-2); outline-offset: 2px; }
 .vt-app .vt-trip-status-card__refresh:disabled { border-color: var(--line-2); background: var(--surface-2); color: var(--ink-3); cursor: not-allowed; opacity: 1; }
-.vt-app .vt-notifications { position: relative; margin: 12px var(--vt-flat-gutter) 24px; padding: 20px; border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent); border-radius: 16px; background: var(--surface); box-shadow: 0 12px 36px rgba(0, 0, 0, .09); }
+.vt-app .vt-notifications { position: relative; margin: 12px var(--vt-flat-gutter) 24px; padding: 20px; border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-raised); }
 .vt-app .vt-notifications__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; min-height: 40px; padding: 0 52px 14px 0; }
 .vt-app .vt-notifications__header h2 { color: var(--ink); font-size: 1.22rem; }
 .vt-app .vt-notifications__header p { margin-top: 4px; color: var(--ink-2); font-size: .78rem; line-height: 1.4; }
@@ -211,9 +250,9 @@ button { font: inherit; }
 .vt-app .vt-notifications__close:hover { background: var(--tint); color: var(--vt-accent-text); }
 .vt-app .vt-notifications__close:active { transform: scale(.94); }
 .vt-app .vt-notifications__close:focus-visible { outline: 3px solid var(--tint-2); outline-offset: 2px; }
-.vt-app .vt-notifications__device { display: flex; align-items: center; gap: 14px; padding: 14px; border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent); border-left: 4px solid var(--vt-accent); border-radius: 14px; background: var(--surface-2); cursor: pointer; }
+.vt-app .vt-notifications__device { display: flex; align-items: center; gap: 14px; padding: 14px; border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent); border-left: 4px solid var(--vt-accent); border-radius: var(--r); background: var(--surface-2); cursor: pointer; }
 .vt-app .vt-notifications__device > input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
-.vt-app .vt-notifications__switch { display: block; position: relative; flex: 0 0 auto; width: 46px; height: 28px; border: 1px solid var(--line-2); border-radius: 999px; background: color-mix(in srgb, var(--ink-3) 22%, var(--surface)); transition: border-color .2s ease, background-color .2s ease, box-shadow .2s ease; }
+.vt-app .vt-notifications__switch { display: block; position: relative; flex: 0 0 auto; width: 46px; height: 28px; border: 1px solid var(--line-2); border-radius: var(--r-pill); background: color-mix(in srgb, var(--ink-3) 22%, var(--surface)); transition: border-color .2s ease, background-color .2s ease, box-shadow .2s ease; }
 .vt-app .vt-notifications__switch > span { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: white; box-shadow: 0 2px 6px rgba(0, 0, 0, .2); transition: transform .2s ease; }
 .vt-app .vt-notifications__device > input:checked + .vt-notifications__switch { border-color: var(--accent-action); background: var(--accent-action); }
 .vt-app .vt-notifications__device > input:checked + .vt-notifications__switch > span { transform: translateX(18px); }
@@ -222,17 +261,17 @@ button { font: inherit; }
 .vt-app .vt-notifications__device-copy strong { color: var(--ink); font-size: .86rem; }
 .vt-app .vt-notifications__device-copy > span { color: var(--ink-2); font-size: .76rem; line-height: 1.45; }
 .vt-app .vt-notifications__list { display: grid; gap: 10px; max-height: min(28rem, 52dvh); margin-top: 12px; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
-.vt-app .vt-notification-row { display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: 16px; padding: 15px 16px 15px 13px; border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent); border-left: 4px solid var(--vt-accent); border-radius: 14px; background: var(--surface-2); }
+.vt-app .vt-notification-row { display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: 16px; padding: 15px 16px 15px 13px; border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent); border-left: 4px solid var(--vt-accent); border-radius: var(--r); background: var(--surface-2); }
 .vt-app .vt-notification-row--alert { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 5%, var(--surface)); }
 .vt-app .vt-notification-row--success { border-left-color: var(--ok); }
-.vt-app .vt-notification-row__icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; background: var(--tint); color: var(--vt-accent-text); }
+.vt-app .vt-notification-row__icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: var(--r-s); background: var(--tint); color: var(--vt-accent-text); }
 .vt-app .vt-notification-row--alert .vt-notification-row__icon { background: color-mix(in srgb, var(--warn) 13%, var(--surface)); color: var(--warn); }
 .vt-app .vt-notification-row--success .vt-notification-row__icon { background: color-mix(in srgb, var(--ok) 12%, var(--surface)); color: var(--ok); }
 .vt-app .vt-notification-row__icon vt-icon { width: 20px; height: 20px; }
 .vt-app .vt-notification-row h3 { color: var(--ink); font-size: .86rem; line-height: 1.35; }
 .vt-app .vt-notification-row p { margin-top: 4px; color: var(--ink-2); font-size: .78rem; line-height: 1.45; }
 .vt-app .vt-notification-row time { display: block; margin-top: 7px; color: var(--ink-3); font-size: .69rem; font-weight: 600; }
-.vt-app .vt-notifications__empty { margin-top: 12px; padding: 28px 18px; border: 1px dashed var(--line-2); border-radius: 14px; color: var(--ink-2); font-size: .82rem; line-height: 1.5; text-align: center; }
+.vt-app .vt-notifications__empty { margin-top: 12px; padding: 28px 18px; border: 1px dashed var(--line-2); border-radius: var(--r); color: var(--ink-2); font-size: .82rem; line-height: 1.5; text-align: center; }
 @media (max-width: 520px) {
   .vt-app :is(.vt-main--home, .vt-main--itinerary, .vt-main--payments, .vt-main--documents, .vt-main--help, .vt-main--account) .vt-trip-status-card { align-items: stretch; }
   .vt-app .vt-trip-status-card__refresh { min-width: 80px; }
@@ -247,8 +286,8 @@ button { font: inherit; }
 :root[data-theme="dark"] .vt-app .vt-top__actions .vt-iconbtn,
 :root[data-theme="dark"] .vt-app .vt-top__actions .vt-iconbtn:is(:hover, :active),
 :root[data-theme="dark"] .vt-app .vt-top__meta .vt-iconbtn.is-active { box-shadow: none; }
-:root[data-theme="dark"] .vt-app :is(.vt-trip-status-card, .vt-notifications) { border-color: rgba(255, 255, 255, .08); box-shadow: 0 10px 32px rgba(0, 0, 0, .25); }
-:root[data-theme="dark"] .vt-app :is(.vt-notifications__device, .vt-notification-row, .vt-notifications__close) { border-color: rgba(255, 255, 255, .09); }
+:root[data-theme="dark"] .vt-app :is(.vt-trip-status-card, .vt-notifications) { border-color: rgba(255, 255, 255, .08); }
+:root[data-theme="dark"] .vt-app :is(.vt-notifications__device, .vt-notification-row, .vt-notifications__close) { border-color: var(--card-border); }
 
 /* Home-specific full-bleed feature areas. */
 .vt-app :is(.vt-main--home, .vt-main--itinerary, .vt-main--payments, .vt-main--documents, .vt-main--help, .vt-main--account, .vt-main--trips) .vt-freshness:not(.vt-trip-status-card) {
@@ -262,7 +301,7 @@ button { font: inherit; }
     min-height: min(72dvh, 620px);
     margin: 16px var(--vt-flat-gutter) 0;
     border: 1px solid rgba(255, 255, 255, .12);
-    border-radius: 20px;
+    border-radius: var(--r-l);
     box-shadow: 0 10px 30px rgba(0, 0, 0, .1);
   }
   .vt-app .vt-main--home .vt-hero.has-image::after { background: linear-gradient(to top, rgba(0, 0, 0, .85) 0%, rgba(0, 0, 0, .4) 50%, transparent 100%); opacity: 1; }
@@ -270,13 +309,13 @@ button { font: inherit; }
   .vt-app .vt-main--home .vt-hero:not(.has-image)::before { content: ""; position: absolute; inset: 0; z-index: 0; width: auto; height: auto; background: radial-gradient(circle at 18% 26%, color-mix(in srgb, var(--vt-accent-text) 17%, transparent) 0 2px, transparent 3px) 0 0 / 26px 26px, linear-gradient(145deg, transparent 40%, color-mix(in srgb, var(--vt-accent) 12%, transparent)); opacity: .72; pointer-events: none; }
   .vt-app .vt-main--home .vt-hero:not(.has-image)::after { content: ""; position: absolute; right: -42px; bottom: -78px; z-index: 0; width: 230px; height: 230px; border: 1px solid color-mix(in srgb, var(--vt-accent-text) 20%, transparent); border-radius: 50%; box-shadow: 0 0 0 34px color-mix(in srgb, var(--vt-accent-text) 6%, transparent), 0 0 0 68px color-mix(in srgb, var(--vt-accent-text) 3%, transparent); pointer-events: none; }
   .vt-app .vt-main--home .vt-hero__body { z-index: 1; gap: 10px; padding: clamp(22px, 4vw, 36px); }
-  .vt-app .vt-main--home .vt-hero__kicker { justify-self: start; margin: 0 0 2px; padding: 6px 11px; border: 1px solid rgba(115, 208, 194, .55); border-radius: 999px; background: rgba(67, 183, 167, .25); color: #c4fff4; font-size: .68rem; font-weight: 850; letter-spacing: .09em; line-height: 1; text-transform: uppercase; opacity: 1; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  .vt-app .vt-main--home .vt-hero__kicker { justify-self: start; margin: 0 0 2px; padding: 6px 11px; border: 1px solid rgba(115, 208, 194, .55); border-radius: var(--r-pill); background: rgba(67, 183, 167, .25); color: #c4fff4; font-size: .68rem; font-weight: 850; letter-spacing: .09em; line-height: 1; text-transform: uppercase; opacity: 1; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
   .vt-app .vt-main--home .vt-hero__title { color: #fff; text-shadow: 0 2px 12px rgba(0, 0, 0, .48); }
   .vt-app .vt-main--home .vt-hero__sub { color: rgba(255, 255, 255, .88); opacity: 1; text-shadow: 0 1px 5px rgba(0, 0, 0, .45); }
   .vt-app .vt-main--home .vt-hero__facts li { border: 1px solid rgba(255, 255, 255, .3); background: rgba(255, 255, 255, .2); color: #fff; font-weight: 650; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08); }
   .vt-app .vt-main--home .vt-hero__body > .vt-small { margin: 4px 0 3px; color: rgba(255, 255, 255, .82); text-shadow: 0 1px 5px rgba(0, 0, 0, .45); }
   .vt-app .vt-main--home .vt-hero__actions { align-items: center; margin-top: 8px; }
-  .vt-app .vt-main--home .vt-hero__calendar { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 48px; padding: 10px 19px; border: 1px solid rgba(255, 255, 255, .82); border-radius: 999px; background: rgba(255, 255, 255, .94); color: #10221e; box-shadow: 0 7px 20px rgba(0, 0, 0, .2); font-size: .9rem; font-weight: 800; cursor: pointer; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); transition: background-color .18s ease, box-shadow .18s ease, transform .12s ease; }
+  .vt-app .vt-main--home .vt-hero__calendar { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 48px; padding: 10px 19px; border: 1px solid rgba(255, 255, 255, .82); border-radius: var(--r-pill); background: rgba(255, 255, 255, .94); color: #10221e; box-shadow: 0 7px 20px rgba(0, 0, 0, .2); font-size: .9rem; font-weight: 800; cursor: pointer; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); transition: background-color .18s ease, box-shadow .18s ease, transform .12s ease; }
   .vt-app .vt-main--home .vt-hero__calendar vt-icon { align-self: center; width: 18px; height: 18px; }
   .vt-app .vt-main--home .vt-hero__calendar:hover { background: #fff; box-shadow: 0 9px 24px rgba(0, 0, 0, .25); }
   .vt-app .vt-main--home .vt-hero__calendar:active { background: rgba(235, 245, 242, .96); box-shadow: 0 4px 12px rgba(0, 0, 0, .2); transform: scale(.97); }
@@ -313,19 +352,19 @@ button { font: inherit; }
   }
 
 /* Home countdown and booking journey cards. */
-.vt-app .vt-countdown-card { margin: 24px var(--vt-flat-gutter) 0; padding: clamp(20px, 4vw, 26px); border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .04); text-align: center; }
+.vt-app .vt-countdown-card { margin: 24px var(--vt-flat-gutter) 0; padding: var(--card-pad); border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-card); text-align: center; }
 .vt-app .vt-countdown-card__kicker { margin: 0; color: var(--vt-accent-text); font-size: .7rem; font-weight: 850; letter-spacing: .15em; line-height: 1.2; text-transform: uppercase; }
 .vt-app .vt-countdown-card__units { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(8px, 2.5vw, 14px); width: min(100%, 560px); margin: 17px auto 0; }
-.vt-app .vt-countdown-card__unit { display: grid; place-items: center; gap: 4px; min-width: 0; padding: clamp(13px, 3vw, 18px) 8px; border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent); border-radius: 14px; background: var(--surface-2); box-shadow: 0 4px 14px rgba(0, 0, 0, .035); }
+.vt-app .vt-countdown-card__unit { display: grid; place-items: center; gap: 4px; min-width: 0; padding: clamp(13px, 3vw, 18px) 8px; border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent); border-radius: var(--r); background: var(--surface-2); box-shadow: var(--shadow-card-sm); }
 .vt-app .vt-countdown-card__unit strong { color: var(--ink); font-family: var(--vt-display); font-size: clamp(1.65rem, 7vw, 2.45rem); font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
 .vt-app .vt-countdown-card__unit span { color: var(--ink-2); font-size: .7rem; font-weight: 700; letter-spacing: .03em; text-transform: lowercase; }
-.vt-app .vt-booking-journey-card { margin: 24px var(--vt-flat-gutter) 0; padding: clamp(20px, 4vw, 24px); border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .04); }
+.vt-app .vt-booking-journey-card { margin: 24px var(--vt-flat-gutter) 0; padding: var(--card-pad); border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-card); }
 .vt-app .vt-booking-journey-card__header > p { margin: 0; color: var(--vt-accent-text); font-size: .7rem; font-weight: 850; letter-spacing: .14em; line-height: 1.2; text-transform: uppercase; }
 .vt-app .vt-booking-journey-card__header h2 { margin: 6px 0 0; color: var(--ink); font-size: clamp(1.45rem, 5vw, 1.8rem); font-weight: 700; line-height: 1.15; }
 .vt-app .vt-booking-timeline { display: grid; gap: 0; margin: 24px 0 0; padding: 0; list-style: none; }
 .vt-app .vt-booking-step { position: relative; display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: start; gap: 16px; min-width: 0; padding: 0 0 27px; }
 .vt-app .vt-booking-step:last-child { padding-bottom: 0; }
-.vt-app .vt-booking-step:not(:last-child)::before { content: ""; position: absolute; top: 20px; left: 19px; z-index: 0; width: 2px; height: 100%; border-radius: 999px; background: var(--line-2); }
+.vt-app .vt-booking-step:not(:last-child)::before { content: ""; position: absolute; top: 20px; left: 19px; z-index: 0; width: 2px; height: 100%; border-radius: var(--r-pill); background: var(--line-2); }
 .vt-app .vt-booking-step.is-complete:not(:last-child)::before { background: color-mix(in srgb, var(--accent-action) 58%, var(--line-2)); }
 .vt-app .vt-booking-step__node { position: relative; z-index: 1; display: grid; place-items: center; width: 40px; height: 40px; border: 2px solid var(--line-2); border-radius: 50%; background: var(--surface); color: var(--ink-2); font-size: .8rem; font-weight: 850; line-height: 1; box-shadow: 0 0 0 4px var(--surface); }
 .vt-app .vt-booking-step.is-complete .vt-booking-step__node { border-color: var(--accent-action); background: var(--accent-action); color: var(--accent-action-ink); }
@@ -334,24 +373,24 @@ button { font: inherit; }
 .vt-app .vt-booking-step__content { min-width: 0; padding-top: 1px; }
 .vt-app .vt-booking-step__title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px 12px; }
 .vt-app .vt-booking-step__title h3 { margin: 0; color: var(--ink); font-size: .93rem; font-weight: 750; line-height: 1.35; }
-.vt-app .vt-booking-step__title time { padding: 3px 7px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); font-size: .68rem; font-weight: 700; line-height: 1.2; }
+.vt-app .vt-booking-step__title time { padding: 3px 7px; border-radius: var(--r-pill); background: var(--surface-2); color: var(--ink-2); font-size: .68rem; font-weight: 700; line-height: 1.2; }
 .vt-app .vt-booking-step__content > p { margin: 5px 0 0; color: var(--ink-2); font-size: .8rem; line-height: 1.55; }
-:root[data-theme="dark"] .vt-app :is(.vt-countdown-card, .vt-booking-journey-card) { border-color: rgba(255, 255, 255, .09); box-shadow: 0 8px 28px rgba(0, 0, 0, .22); }
-:root[data-theme="dark"] .vt-app .vt-countdown-card__unit { border-color: rgba(255, 255, 255, .08); background: color-mix(in srgb, var(--surface-2) 92%, #000); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .025); }
+:root[data-theme="dark"] .vt-app :is(.vt-countdown-card, .vt-booking-journey-card) { border-color: var(--card-border); box-shadow: var(--shadow-card); }
+:root[data-theme="dark"] .vt-app .vt-countdown-card__unit { border-color: rgba(255, 255, 255, .08); background: color-mix(in srgb, var(--surface-2) 92%, #000); box-shadow: var(--shadow-card-sm); }
 
 /* Home lower-page cards: recommendations, FAQs and trip information. */
 .vt-app .vt-tailor-section { margin: 24px var(--vt-flat-gutter) 0; }
 .vt-app .vt-lower-section__header > p { margin: 0; color: var(--vt-accent-text); font-size: .7rem; font-weight: 850; letter-spacing: .14em; line-height: 1.2; text-transform: uppercase; }
 .vt-app .vt-lower-section__header h2 { margin: 10px 0 0; color: var(--ink); font-size: clamp(1.45rem, 5vw, 1.8rem); font-weight: 700; line-height: 1.15; }
 .vt-app .vt-tailor-grid { display: grid; gap: 12px; margin-top: 18px; }
-.vt-app .vt-tailor-card { display: flex; flex-direction: column; min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .035); transition: border-color .18s ease, box-shadow .18s ease, transform .14s ease; }
+.vt-app .vt-tailor-card { display: flex; flex-direction: column; min-width: 0; padding: var(--card-pad); border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-card); transition: border-color .18s ease, box-shadow .18s ease, transform .14s ease; }
 .vt-app .vt-tailor-card:hover { border-color: color-mix(in srgb, var(--vt-accent-text) 30%, var(--line)); box-shadow: 0 7px 24px rgba(0, 0, 0, .06); transform: translateY(-1px); }
 .vt-app .vt-tailor-card h3 { margin: 0; color: var(--ink); font-size: 1rem; font-weight: 750; line-height: 1.35; }
 .vt-app .vt-tailor-card > p { flex: 1; margin: 8px 0 0; color: var(--ink-2); font-size: .82rem; line-height: 1.55; }
-.vt-app .vt-tailor-card button { display: inline-flex; align-items: center; justify-content: flex-start; align-self: flex-start; gap: 7px; min-height: 42px; margin: 13px 0 -9px -8px; padding: 8px; border: 0; border-radius: 8px; background: transparent; color: var(--vt-accent-text); font-size: .78rem; font-weight: 800; cursor: pointer; transition: background-color .18s ease, color .18s ease, transform .12s ease; }
+.vt-app .vt-tailor-card button { display: inline-flex; align-items: center; justify-content: flex-start; align-self: flex-start; gap: 7px; min-height: 42px; margin: 13px 0 -9px -8px; padding: 8px; border: 0; border-radius: var(--r-xs); background: transparent; color: var(--vt-accent-text); font-size: .78rem; font-weight: 800; cursor: pointer; transition: background-color .18s ease, color .18s ease, transform .12s ease; }
 .vt-app .vt-tailor-card button:hover { background: var(--tint); }
 .vt-app .vt-tailor-card button:active { transform: scale(.97); }
-.vt-app .vt-faq-card { margin: 24px var(--vt-flat-gutter) 0; padding: clamp(20px, 4vw, 24px); border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .04); }
+.vt-app .vt-faq-card { margin: 24px var(--vt-flat-gutter) 0; padding: var(--card-pad); border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-card); }
 .vt-app .vt-faq-list { margin-top: 17px; border-top: 1px solid var(--line); }
 .vt-app .vt-faq-item { border-bottom: 1px solid var(--line); }
 .vt-app .vt-faq-item summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 14px; min-height: 60px; padding: 12px 0; color: var(--ink); font-size: .87rem; font-weight: 720; line-height: 1.4; list-style: none; cursor: pointer; }
@@ -361,11 +400,11 @@ button { font: inherit; }
 .vt-app .vt-faq-item[open] .vt-faq-item__chevron { background: var(--tint); transform: rotate(180deg); }
 .vt-app .vt-faq-item__answer { padding: 0 48px 17px 0; }
 .vt-app .vt-faq-item__answer p { margin: 0; color: var(--ink-2); font-size: .8rem; line-height: 1.6; }
-.vt-app .vt-home-info-card { margin: 24px var(--vt-flat-gutter) 0; padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .04); }
+.vt-app .vt-home-info-card { margin: 24px var(--vt-flat-gutter) 0; padding: var(--card-pad); border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-card); }
 .vt-app .vt-home-info-card__kicker { margin: 0; color: var(--vt-accent-text); font-size: .7rem; font-weight: 850; letter-spacing: .15em; line-height: 1.2; text-transform: uppercase; }
 .vt-app .vt-home-info-card h2 { margin: 10px 0 0; color: var(--ink); font-size: 1.2rem; font-weight: 750; line-height: 1.3; }
 .vt-app .vt-home-up-next__date { margin: 10px 0 0; color: var(--ink-2); font-size: .84rem; font-weight: 650; }
-.vt-app .vt-home-up-next__countdown { display: inline-flex; margin: 12px 0 0; padding: 5px 9px; border-radius: 999px; background: var(--accent-status-bg); color: var(--vt-accent-text); font-size: .7rem; font-weight: 800; }
+.vt-app .vt-home-up-next__countdown { display: inline-flex; margin: 12px 0 0; padding: 5px 9px; border-radius: var(--r-pill); background: var(--accent-status-bg); color: var(--vt-accent-text); font-size: .7rem; font-weight: 800; }
 .vt-app .vt-home-about > p:not(.vt-home-info-card__kicker) { margin: 11px 0 0; color: var(--ink-2); font-size: .88rem; line-height: 1.65; }
 .vt-app .vt-home-about .vt-home-about__agent { color: var(--vt-accent-text); font-size: .78rem; font-weight: 800; }
 @media (min-width: 640px) {
@@ -381,23 +420,23 @@ button { font: inherit; }
   .vt-app .vt-tailor-grid:has(> .vt-tailor-card:nth-child(4):last-child) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .vt-app .vt-tailor-grid:has(> .vt-tailor-card:nth-child(4):last-child) .vt-tailor-card { grid-column: auto; }
 }
-:root[data-theme="dark"] .vt-app :is(.vt-tailor-card, .vt-faq-card, .vt-home-info-card) { border-color: rgba(255, 255, 255, .09); box-shadow: 0 8px 28px rgba(0, 0, 0, .22); }
+:root[data-theme="dark"] .vt-app :is(.vt-tailor-card, .vt-faq-card, .vt-home-info-card) { border-color: var(--card-border); box-shadow: var(--shadow-card); }
 :root[data-theme="dark"] .vt-app .vt-faq-item__chevron { background: color-mix(in srgb, var(--surface-2) 92%, #000); }
 :root[data-theme="dark"] .vt-app .vt-home-up-next__countdown { background: rgba(115, 208, 194, .16); color: #73d0c2; }
 
 /* Home travellers, weather, practical guides and destination cards. */
 .vt-app :is(.vt-travellers-card, .vt-weather-section, .vt-guide-section, .vt-destination-section) { margin: 24px var(--vt-flat-gutter) 0; }
-.vt-app .vt-travellers-card { padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .04); }
+.vt-app .vt-travellers-card { padding: var(--card-pad); border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-card); }
 .vt-app .vt-traveller-list { display: flex; flex-wrap: wrap; gap: 9px; margin: 18px 0 0; padding: 0; list-style: none; }
-.vt-app .vt-traveller-list li { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 5px 13px 5px 6px; border: 1px solid color-mix(in srgb, var(--vt-accent-text) 22%, var(--line)); border-radius: 999px; background: var(--tint); color: var(--ink); font-size: .8rem; font-weight: 700; }
+.vt-app .vt-traveller-list li { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 5px 13px 5px 6px; border: 1px solid color-mix(in srgb, var(--vt-accent-text) 22%, var(--line)); border-radius: var(--r-pill); background: var(--tint); color: var(--ink); font-size: .8rem; font-weight: 700; }
 .vt-app .vt-traveller-list__icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--surface); color: var(--vt-accent-text); box-shadow: 0 1px 5px rgba(0, 0, 0, .06); }
 .vt-app :is(.vt-weather-grid, .vt-guide-grid, .vt-destination-grid) { display: grid; gap: 14px; margin-top: 18px; }
-.vt-app .vt-weather-card { overflow: hidden; padding: 20px; border: 1px solid color-mix(in srgb, #388da0 18%, var(--line)); border-radius: 16px; background: linear-gradient(145deg, color-mix(in srgb, #dff5f7 58%, var(--surface)), var(--surface)); color: var(--ink); box-shadow: 0 4px 20px rgba(0, 0, 0, .04); }
+.vt-app .vt-weather-card { overflow: hidden; padding: var(--card-pad); border: 1px solid color-mix(in srgb, #388da0 18%, var(--line)); border-radius: var(--r); background: linear-gradient(145deg, color-mix(in srgb, #dff5f7 58%, var(--surface)), var(--surface)); color: var(--ink); box-shadow: var(--shadow-card); }
 .vt-app .vt-weather-card__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .vt-app .vt-weather-card__top p { margin: 0; color: var(--ink-2); font-size: .8rem; font-weight: 750; }
 .vt-app .vt-weather-card__top strong { display: block; margin-top: 7px; font-family: var(--vt-display); font-size: 2.7rem; line-height: 1; }
 .vt-app .vt-weather-card__top span:not(.vt-weather-card__icon) { display: block; margin-top: 7px; color: var(--ink-2); font-size: .78rem; }
-.vt-app .vt-weather-card__icon { display: grid; place-items: center; flex: 0 0 auto; width: 54px; height: 54px; border-radius: 15px; background: color-mix(in srgb, #8dd9df 24%, var(--surface)); color: #287b8c; }
+.vt-app .vt-weather-card__icon { display: grid; place-items: center; flex: 0 0 auto; width: 54px; height: 54px; border-radius: var(--r); background: color-mix(in srgb, #8dd9df 24%, var(--surface)); color: #287b8c; }
 .vt-app .vt-weather-card__forecast { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 18px; padding-top: 15px; border-top: 1px solid color-mix(in srgb, var(--ink) 10%, transparent); }
 .vt-app .vt-weather-card__forecast div { min-width: 0; }
 .vt-app .vt-weather-card__forecast p { margin: 0; color: var(--ink-2); font-size: .68rem; }
@@ -405,47 +444,47 @@ button { font: inherit; }
 .vt-app .vt-weather-skeleton__card { --weather-sk: linear-gradient(90deg, color-mix(in srgb, var(--ink-3) 11%, var(--surface)) 25%, color-mix(in srgb, var(--ink-3) 20%, var(--surface)) 50%, color-mix(in srgb, var(--ink-3) 11%, var(--surface)) 75%); min-height: 190px; }
 .vt-app .vt-weather-skeleton__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .vt-app .vt-weather-skeleton__top > div { display: grid; gap: 10px; flex: 1; }
-.vt-app .vt-weather-skeleton__line, .vt-app .vt-weather-skeleton__icon, .vt-app .vt-weather-skeleton__forecast span, .vt-app .vt-weather-skeleton__forecast strong { display: block; border-radius: 999px; background: var(--weather-sk); background-size: 200% 100%; animation: vt-shimmer 1.3s linear infinite; }
+.vt-app .vt-weather-skeleton__line, .vt-app .vt-weather-skeleton__icon, .vt-app .vt-weather-skeleton__forecast span, .vt-app .vt-weather-skeleton__forecast strong { display: block; border-radius: var(--r-pill); background: var(--weather-sk); background-size: 200% 100%; animation: vt-shimmer 1.3s linear infinite; }
 .vt-app .vt-weather-skeleton__line--place { width: 42%; height: 10px; }
-.vt-app .vt-weather-skeleton__line--temp { width: 38%; height: 42px; margin-top: 1px; border-radius: 10px; }
+.vt-app .vt-weather-skeleton__line--temp { width: 38%; height: 42px; margin-top: 1px; border-radius: var(--r-s); }
 .vt-app .vt-weather-skeleton__line--label { width: 70%; height: 10px; }
-.vt-app .vt-weather-skeleton__icon { flex: 0 0 auto; width: 54px; height: 54px; border-radius: 15px; }
+.vt-app .vt-weather-skeleton__icon { flex: 0 0 auto; width: 54px; height: 54px; border-radius: var(--r); }
 .vt-app .vt-weather-skeleton__forecast { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 18px; padding-top: 15px; border-top: 1px solid color-mix(in srgb, var(--ink) 8%, transparent); }
 .vt-app .vt-weather-skeleton__forecast div { display: grid; gap: 7px; }
 .vt-app .vt-weather-skeleton__forecast span { width: 62%; height: 8px; }
 .vt-app .vt-weather-skeleton__forecast strong { width: 75%; height: 11px; }
-.vt-app .vt-guide-card { padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .04); }
+.vt-app .vt-guide-card { padding: var(--card-pad); border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-card); }
 .vt-app .vt-guide-card__header { display: flex; align-items: center; gap: 12px; }
-.vt-app .vt-guide-card__icon { display: grid; place-items: center; flex: 0 0 auto; width: 44px; height: 44px; overflow: hidden; border-radius: 12px; background: var(--tint); color: var(--vt-accent-text); }
+.vt-app .vt-guide-card__icon { display: grid; place-items: center; flex: 0 0 auto; width: 44px; height: 44px; overflow: hidden; border-radius: var(--r-s); background: var(--tint); color: var(--vt-accent-text); }
 .vt-app .vt-guide-card__icon img { width: 34px; height: 28px; object-fit: contain; }
 .vt-app .vt-guide-card__header p { margin: 0 0 3px; color: var(--vt-accent-text); font-size: .66rem; font-weight: 850; letter-spacing: .11em; text-transform: uppercase; }
 .vt-app .vt-guide-card__header h3 { margin: 0; color: var(--ink); font-size: 1rem; font-weight: 750; line-height: 1.3; }
 .vt-app .vt-guide-card__details { display: grid; gap: 10px; margin: 16px 0 0; }
-.vt-app .vt-guide-card__details > div { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface-2); }
-.vt-app .vt-guide-card__detail-icon { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; background: var(--tint); color: var(--vt-accent-text); }
+.vt-app .vt-guide-card__details > div { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: var(--r-s); background: var(--surface-2); }
+.vt-app .vt-guide-card__detail-icon { display: grid; place-items: center; width: 38px; height: 38px; border-radius: var(--r-s); background: var(--tint); color: var(--vt-accent-text); }
 .vt-app .vt-guide-card__details dt { color: var(--ink); font-size: .82rem; font-weight: 800; line-height: 1.35; }
 .vt-app .vt-guide-card__details dd { margin: 4px 0 0; color: var(--ink-2); font-size: .77rem; line-height: 1.55; }
 .vt-app .vt-guide-card__pending, .vt-app .vt-destination-card__pending { margin: 16px 0 0; color: var(--ink-3); font-size: .78rem; }
-.vt-app .vt-destination-card { overflow: hidden; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .045); }
+.vt-app .vt-destination-card { overflow: hidden; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-card); }
 .vt-app .vt-destination-card__media { height: 210px; overflow: hidden; background: var(--surface-2); }
 .vt-app .vt-destination-card__media app-photo-gallery { display: block; height: 100%; }
 .vt-app .vt-destination-card__media app-photo-gallery > .vt-photo-grid { display: block; height: 100%; border-radius: 0; }
 .vt-app .vt-destination-card__media app-photo-gallery > .vt-photo-grid > button { display: block; width: 100%; height: 100%; min-height: 0; }
 .vt-app .vt-destination-card__media app-photo-gallery img { width: 100%; height: 100%; min-height: 0; object-fit: cover; }
-.vt-app .vt-destination-card__body { display: grid; gap: 16px; padding: 20px; }
+.vt-app .vt-destination-card__body { display: grid; gap: 16px; padding: var(--card-pad); }
 .vt-app .vt-destination-card__header { display: flex; align-items: center; gap: 12px; }
-.vt-app .vt-destination-card__icon { display: grid; place-items: center; flex: 0 0 auto; width: 42px; height: 42px; border-radius: 12px; background: var(--tint); color: var(--vt-accent-text); }
+.vt-app .vt-destination-card__icon { display: grid; place-items: center; flex: 0 0 auto; width: 42px; height: 42px; border-radius: var(--r-s); background: var(--tint); color: var(--vt-accent-text); }
 .vt-app .vt-destination-card__header p { margin: 0 0 2px; color: var(--ink-2); font-size: .7rem; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
 .vt-app .vt-destination-card__header h3 { margin: 0; color: var(--ink); font-size: 1.3rem; font-weight: 760; line-height: 1.2; }
 .vt-app .vt-destination-card__overview-wrap { position: relative; overflow: hidden; }
 .vt-app .vt-destination-card__overview { margin: 0; color: var(--ink-2); font-size: .84rem; line-height: 1.65; }
 .vt-app .vt-destination-card__overview-wrap.is-truncated .vt-destination-card__overview { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
 .vt-app .vt-destination-card__overview-wrap.is-truncated::after { content: ""; position: absolute; right: 0; bottom: 0; left: 0; height: 2.4em; background: linear-gradient(to bottom, transparent, var(--surface)); pointer-events: none; }
-.vt-app .vt-destination-card__read-more { display: inline-flex; align-items: center; justify-self: start; gap: 5px; min-height: 38px; margin-top: -12px; padding: 7px 4px; border: 0; border-radius: 7px; background: transparent; color: var(--vt-accent-text); font-size: .75rem; font-weight: 800; cursor: pointer; }
+.vt-app .vt-destination-card__read-more { display: inline-flex; align-items: center; justify-self: start; gap: 5px; min-height: 38px; margin-top: -12px; padding: 7px 4px; border: 0; border-radius: var(--r-xs); background: transparent; color: var(--vt-accent-text); font-size: .75rem; font-weight: 800; cursor: pointer; }
 .vt-app .vt-destination-card__read-more vt-icon { transition: transform .2s ease; }
 .vt-app .vt-destination-card__read-more[aria-expanded="true"] vt-icon { transform: rotate(180deg); }
 .vt-app .vt-destination-card__read-more:hover { text-decoration: underline; text-underline-offset: 3px; }
-.vt-app .vt-destination-fold { border: 1px solid var(--line); border-radius: 13px; background: var(--surface-2); }
+.vt-app .vt-destination-fold { border: 1px solid var(--line); border-radius: var(--r-s); background: var(--surface-2); }
 .vt-app .vt-destination-fold summary, .vt-app .vt-destination-map summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 11px 16px; color: var(--ink); font-size: .82rem; font-weight: 800; line-height: 1.35; list-style: none; cursor: pointer; }
 .vt-app .vt-destination-fold summary::-webkit-details-marker, .vt-app .vt-destination-map summary::-webkit-details-marker { display: none; }
 .vt-app .vt-destination-fold summary vt-icon:last-child, .vt-app .vt-destination-map summary > vt-icon { display: grid; place-items: center; align-self: center; color: var(--vt-accent-text); transition: transform .2s ease; }
@@ -455,41 +494,41 @@ button { font: inherit; }
 .vt-app .vt-destination-fold li::marker { color: var(--vt-accent-text); }
 .vt-app .vt-destination-fold li strong { display: block; color: var(--ink); font-size: .8rem; }
 .vt-app .vt-destination-fold li span { display: block; margin-top: 2px; }
-.vt-app .vt-destination-empty { display: inline-flex; align-items: center; justify-self: start; gap: 7px; margin: 0; padding: 7px 11px; border: 1px solid color-mix(in srgb, var(--ink-3) 15%, var(--line)); border-radius: 999px; background: color-mix(in srgb, var(--ink-3) 7%, var(--surface)); color: var(--ink-2); font-size: .74rem; font-weight: 750; }
+.vt-app .vt-destination-empty { display: inline-flex; align-items: center; justify-self: start; gap: 7px; margin: 0; padding: 7px 11px; border: 1px solid color-mix(in srgb, var(--ink-3) 15%, var(--line)); border-radius: var(--r-pill); background: color-mix(in srgb, var(--ink-3) 7%, var(--surface)); color: var(--ink-2); font-size: .74rem; font-weight: 750; }
 .vt-app .vt-destination-empty vt-icon { color: var(--ink-3); }
 .vt-app .vt-destination-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.vt-app .vt-destination-actions a, .vt-app .vt-destination-map__actions a { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 8px 13px; border: 1px solid color-mix(in srgb, var(--vt-accent-text) 35%, var(--line)); border-radius: 999px; background: var(--tint); color: var(--vt-accent-text); font-size: .75rem; font-weight: 800; text-decoration: none; transition: background-color .18s ease, transform .12s ease; }
+.vt-app .vt-destination-actions a, .vt-app .vt-destination-map__actions a { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 8px 13px; border: 1px solid color-mix(in srgb, var(--vt-accent-text) 35%, var(--line)); border-radius: var(--r-pill); background: var(--tint); color: var(--vt-accent-text); font-size: .75rem; font-weight: 800; text-decoration: none; transition: background-color .18s ease, transform .12s ease; }
 .vt-app .vt-destination-actions a:hover, .vt-app .vt-destination-map__actions a:hover { background: var(--tint-2); }
 .vt-app .vt-destination-actions a:active, .vt-app .vt-destination-map__actions a:active { transform: scale(.97); }
-.vt-app .vt-destination-map { overflow: hidden; border: 1px solid var(--line); border-radius: 14px 14px 16px 16px; background: var(--surface); }
+.vt-app .vt-destination-map { overflow: hidden; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); }
 .vt-app .vt-destination-map summary span { display: inline-flex; align-items: center; gap: 8px; }
 .vt-app .vt-destination-map__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding: 0 12px 12px; border-top: 1px solid var(--line); padding-top: 12px; }
-.vt-app .vt-destination-map__frame { height: 250px; overflow: hidden; border-top: 1px solid var(--line); border-radius: 0 0 15px 15px; background: var(--surface-2); }
+.vt-app .vt-destination-map__frame { height: 250px; overflow: hidden; border-top: 1px solid var(--line); border-radius: 0 0 var(--r) var(--r); background: var(--surface-2); }
 .vt-app .vt-destination-map__frame iframe { width: 100%; height: 100%; border: 0; }
 @media (min-width: 640px) {
   .vt-app :is(.vt-weather-grid, .vt-guide-grid, .vt-destination-grid) { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
   .vt-app .vt-destination-card__media { height: 230px; }
 }
-:root[data-theme="dark"] .vt-app :is(.vt-travellers-card, .vt-weather-card, .vt-guide-card, .vt-destination-card) { border-color: rgba(255, 255, 255, .09); box-shadow: 0 8px 28px rgba(0, 0, 0, .22); }
+:root[data-theme="dark"] .vt-app :is(.vt-travellers-card, .vt-weather-card, .vt-guide-card, .vt-destination-card) { border-color: var(--card-border); box-shadow: var(--shadow-card); }
 :root[data-theme="dark"] .vt-app .vt-weather-card { background: linear-gradient(145deg, color-mix(in srgb, #164e58 34%, var(--surface)), var(--surface)); }
 :root[data-theme="dark"] .vt-app .vt-weather-card__icon { background: rgba(115, 208, 194, .13); color: #8adbd0; }
 :root[data-theme="dark"] .vt-app .vt-weather-skeleton__card { --weather-sk: linear-gradient(90deg, rgba(255, 255, 255, .055) 25%, rgba(255, 255, 255, .115) 50%, rgba(255, 255, 255, .055) 75%); }
-:root[data-theme="dark"] .vt-app :is(.vt-guide-card__details > div, .vt-destination-fold, .vt-destination-map) { border-color: rgba(255, 255, 255, .09); }
-:root[data-theme="dark"] .vt-app .vt-destination-fold__content, :root[data-theme="dark"] .vt-app .vt-destination-map__actions { border-color: rgba(255, 255, 255, .09); }
+:root[data-theme="dark"] .vt-app :is(.vt-guide-card__details > div, .vt-destination-fold, .vt-destination-map) { border-color: var(--card-border); }
+:root[data-theme="dark"] .vt-app .vt-destination-fold__content, :root[data-theme="dark"] .vt-app .vt-destination-map__actions { border-color: var(--card-border); }
 :root[data-theme="dark"] .vt-app .vt-destination-actions a, :root[data-theme="dark"] .vt-app .vt-destination-map__actions a { border-color: rgba(115, 208, 194, .38); color: #8adbd0; }
 
 /* Home value props, inspiration gallery and supporting footer. */
 .vt-app :is(.vt-value-props, .vt-inspiration) { margin: 24px var(--vt-flat-gutter) 0; }
-.vt-app .vt-value-props { padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .04); }
+.vt-app .vt-value-props { padding: 20px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-card); }
 .vt-app .vt-value-props__grid { display: grid; gap: 10px; margin: 18px 0 0; padding: 0; list-style: none; }
-.vt-app .vt-value-props__grid li { display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: center; gap: 12px; min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-2); }
+.vt-app .vt-value-props__grid li { display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: center; gap: 12px; min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface-2); }
 .vt-app .vt-value-props__icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--tint); color: var(--vt-accent-text); }
 .vt-app .vt-value-props__grid li > span:last-child { display: grid; gap: 3px; min-width: 0; }
 .vt-app .vt-value-props__grid strong { color: var(--ink); font-size: .84rem; font-weight: 800; line-height: 1.35; }
 .vt-app .vt-value-props__grid small { color: var(--ink-2); font-size: .74rem; line-height: 1.5; }
 .vt-app .vt-inspiration-gallery { margin-top: 18px; }
 .vt-app .vt-inspiration-gallery app-photo-gallery > .vt-photo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; overflow: visible; border-radius: 0; }
-.vt-app .vt-inspiration-gallery app-photo-gallery > .vt-photo-grid > button { grid-column: auto !important; min-height: 0; aspect-ratio: 4 / 3; border: 0; border-radius: 16px; background: var(--surface-2); box-shadow: 0 4px 20px rgba(0, 0, 0, .08); cursor: pointer; transform: translateZ(0); transition: box-shadow .2s ease, transform .16s ease; }
+.vt-app .vt-inspiration-gallery app-photo-gallery > .vt-photo-grid > button { grid-column: auto !important; min-height: 0; aspect-ratio: 4 / 3; border: 0; border-radius: var(--r); background: var(--surface-2); box-shadow: 0 4px 20px rgba(0, 0, 0, .08); cursor: pointer; transform: translateZ(0); transition: box-shadow .2s ease, transform .16s ease; }
 .vt-app .vt-inspiration-gallery app-photo-gallery > .vt-photo-grid > button:hover { box-shadow: 0 9px 26px rgba(0, 0, 0, .13); transform: translateY(-2px); }
 .vt-app .vt-inspiration-gallery app-photo-gallery > .vt-photo-grid > button:active { transform: scale(.98); }
 .vt-app .vt-inspiration-gallery app-photo-gallery img { min-height: 0; transition: transform .35s ease; }
@@ -503,7 +542,7 @@ button { font: inherit; }
 .vt-app .vt-photo-lightbox__nav:hover, .vt-app .vt-photo-lightbox__close:hover { border-color: rgba(255, 255, 255, .7); background: rgba(67, 183, 167, .78); }
 .vt-app .vt-photo-lightbox__nav:active { transform: translateY(-50%) scale(.93); }
 .vt-app .vt-photo-lightbox__close:active { transform: scale(.9); }
-.vt-app .vt-home-footer { margin: 24px var(--vt-flat-gutter) 32px; padding: clamp(20px, 4vw, 26px); border: 1px solid var(--line); border-radius: 16px; background: color-mix(in srgb, var(--surface-2) 72%, var(--surface)); color: var(--ink); box-shadow: 0 7px 26px rgba(0, 0, 0, .06); }
+.vt-app .vt-home-footer { margin: 24px var(--vt-flat-gutter) 32px; padding: clamp(20px, 4vw, 26px); border: 1px solid var(--line); border-radius: var(--r); background: color-mix(in srgb, var(--surface-2) 72%, var(--surface)); color: var(--ink); box-shadow: 0 7px 26px rgba(0, 0, 0, .06); }
 .vt-app .vt-home-footer__grid { display: grid; gap: 24px; }
 .vt-app .vt-home-footer__eyebrow { margin: 0; color: var(--vt-accent-text); font-size: .68rem; font-weight: 850; letter-spacing: .13em; text-transform: uppercase; }
 .vt-app .vt-home-footer__brand h2 { margin: 8px 0 0; color: var(--ink); font-size: 1.45rem; font-weight: 760; }
@@ -513,13 +552,13 @@ button { font: inherit; }
 .vt-app .vt-home-footer__socials > a:not(.vt-home-footer__review) svg { width: 19px; height: 19px; fill: currentColor; }
 .vt-app .vt-home-footer__socials > a:not(.vt-home-footer__review):hover { border-color: color-mix(in srgb, var(--vt-accent-text) 45%, var(--line)); background: var(--tint); color: var(--vt-accent-text); }
 .vt-app .vt-home-footer__socials > a:not(.vt-home-footer__review):active { transform: scale(.94); }
-.vt-app .vt-home-footer__review { display: inline-flex; align-items: center; gap: 6px; min-height: 42px; padding: 8px 12px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--surface); color: var(--ink-2); font-size: .72rem; font-weight: 750; text-decoration: none; text-transform: capitalize; }
+.vt-app .vt-home-footer__review { display: inline-flex; align-items: center; gap: 6px; min-height: 42px; padding: 8px 12px; border: 1px solid var(--line-2); border-radius: var(--r-pill); background: var(--surface); color: var(--ink-2); font-size: .72rem; font-weight: 750; text-decoration: none; text-transform: capitalize; }
 .vt-app .vt-home-footer__review vt-icon { color: var(--warn); }
 .vt-app .vt-home-footer__contacts { display: grid; gap: 8px; }
-.vt-app .vt-home-footer__contacts > :is(a, div) { display: grid; grid-template-columns: 38px minmax(0, 1fr); align-items: center; gap: 11px; min-width: 0; min-height: 60px; padding: 10px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); color: var(--ink); text-decoration: none; transition: border-color .18s ease, background-color .18s ease, transform .12s ease; }
+.vt-app .vt-home-footer__contacts > :is(a, div) { display: grid; grid-template-columns: 38px minmax(0, 1fr); align-items: center; gap: 11px; min-width: 0; min-height: 60px; padding: 10px; border: 1px solid var(--line); border-radius: var(--r-s); background: var(--surface); color: var(--ink); text-decoration: none; transition: border-color .18s ease, background-color .18s ease, transform .12s ease; }
 .vt-app .vt-home-footer__contacts > a:hover { border-color: color-mix(in srgb, var(--vt-accent-text) 38%, var(--line)); background: var(--tint); }
 .vt-app .vt-home-footer__contacts > a:active { transform: scale(.99); }
-.vt-app .vt-home-footer__contacts > :is(a, div) > span:first-child { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 11px; background: var(--tint); color: var(--vt-accent-text); }
+.vt-app .vt-home-footer__contacts > :is(a, div) > span:first-child { display: grid; place-items: center; width: 38px; height: 38px; border-radius: var(--r-s); background: var(--tint); color: var(--vt-accent-text); }
 .vt-app .vt-home-footer__contacts > :is(a, div) > span:last-child { display: grid; gap: 2px; min-width: 0; }
 .vt-app .vt-home-footer__contacts small { color: var(--ink-3); font-size: .66rem; font-weight: 750; text-transform: uppercase; letter-spacing: .06em; }
 .vt-app .vt-home-footer__contacts strong { overflow: hidden; color: var(--ink); font-size: .78rem; font-weight: 720; line-height: 1.35; overflow-wrap: anywhere; }
@@ -529,7 +568,7 @@ button { font: inherit; }
 .vt-app .vt-home-footer__hours { display: grid; gap: 9px; }
 .vt-app .vt-home-footer__hours h3 { color: var(--ink); font-size: .75rem; font-weight: 800; }
 .vt-app .vt-home-footer__hours dl { display: grid; gap: 6px; margin: 0; }
-.vt-app .vt-home-footer__hours dl > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 14px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); font-size: .7rem; line-height: 1.4; }
+.vt-app .vt-home-footer__hours dl > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 14px; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--r-s); background: var(--surface-2); font-size: .7rem; line-height: 1.4; }
 .vt-app .vt-home-footer__hours dt { color: var(--ink); font-weight: 780; }
 .vt-app .vt-home-footer__hours dd { margin: 0; color: var(--ink-2); font-weight: 650; text-align: right; }
 @media (min-width: 640px) {
@@ -537,55 +576,55 @@ button { font: inherit; }
   .vt-app .vt-inspiration-gallery app-photo-gallery > .vt-photo-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .vt-app .vt-home-footer__grid { grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); align-items: start; }
 }
-:root[data-theme="dark"] .vt-app :is(.vt-value-props, .vt-home-footer) { border-color: rgba(255, 255, 255, .09); box-shadow: 0 8px 28px rgba(0, 0, 0, .22); }
+:root[data-theme="dark"] .vt-app :is(.vt-value-props, .vt-home-footer) { border-color: var(--card-border); box-shadow: var(--shadow-card); }
 :root[data-theme="dark"] .vt-app .vt-home-footer { border-color: var(--line-2); background: var(--surface); color: var(--ink); }
 :root[data-theme="dark"] .vt-app .vt-home-footer__contacts > :is(a, div), :root[data-theme="dark"] .vt-app .vt-home-footer__socials > a { background: var(--surface-2); color: var(--ink); }
 :root[data-theme="dark"] .vt-app .vt-home-footer__contacts > :is(a, div) > span:first-child { background: rgba(115, 208, 194, .15); color: #8adbd0; }
 :root[data-theme="dark"] .vt-app .vt-home-footer__fine-print p { color: var(--ink-2); }
-:root[data-theme="dark"] .vt-app .vt-home-footer__hours dl > div { border-color: rgba(255, 255, 255, .09); background: var(--surface-2); }
-:root[data-theme="dark"] .vt-app :is(.vt-value-props__grid li, .vt-home-footer__contacts > a, .vt-home-footer__contacts > div, .vt-home-footer__socials > a) { border-color: rgba(255, 255, 255, .09); }
+:root[data-theme="dark"] .vt-app .vt-home-footer__hours dl > div { border-color: var(--card-border); background: var(--surface-2); }
+:root[data-theme="dark"] .vt-app :is(.vt-value-props__grid li, .vt-home-footer__contacts > a, .vt-home-footer__contacts > div, .vt-home-footer__socials > a) { border-color: var(--card-border); }
 :root[data-theme="dark"] .vt-app .vt-inspiration-gallery app-photo-gallery > .vt-photo-grid > button { box-shadow: 0 7px 24px rgba(0, 0, 0, .25); }
 
 /* Home upsells, communication updates and agency story. */
 .vt-app :is(.vt-upsell-section, .vt-updates-section, .vt-why-book-card) { margin: 24px var(--vt-flat-gutter) 0; }
 .vt-app :is(.vt-upsell-grid, .vt-update-feed) { display: grid; gap: 12px; margin-top: 18px; }
-.vt-app .vt-upsell-card { display: grid; grid-template-columns: 112px minmax(0, 1fr); min-width: 0; min-height: 190px; overflow: hidden; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .04); }
+.vt-app .vt-upsell-card { display: grid; grid-template-columns: 112px minmax(0, 1fr); min-width: 0; min-height: 190px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-card); }
 .vt-app .vt-upsell-card.no-image { grid-template-columns: 1fr; min-height: 0; }
 .vt-app .vt-upsell-card__media { min-width: 0; min-height: 100%; overflow: hidden; background: var(--surface-2); }
 .vt-app .vt-upsell-card__media img { display: block; width: 100%; height: 100%; min-height: 190px; object-fit: cover; transition: transform .35s ease; }
 .vt-app .vt-upsell-card:hover .vt-upsell-card__media img { transform: scale(1.035); }
-.vt-app .vt-upsell-card__body { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; padding: 17px; }
+.vt-app .vt-upsell-card__body { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; padding: var(--card-pad); }
 .vt-app .vt-upsell-card__body h3 { margin: 0; color: var(--ink); font-size: .98rem; font-weight: 780; line-height: 1.35; }
 .vt-app .vt-upsell-card__body > p { margin: 7px 0 0; color: var(--ink-2); font-size: .78rem; line-height: 1.55; }
 .vt-app .vt-upsell-card__body small { margin-top: 8px; color: var(--ink-3); font-size: .68rem; line-height: 1.4; }
-.vt-app .vt-upsell-card__body button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; margin-top: auto; padding: 8px 13px; border: 1px solid color-mix(in srgb, var(--vt-accent-text) 38%, var(--line)); border-radius: 999px; background: var(--tint); color: var(--vt-accent-text); font-size: .73rem; font-weight: 800; cursor: pointer; transition: background-color .18s ease, transform .12s ease; }
+.vt-app .vt-upsell-card__body button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; margin-top: auto; padding: 8px 13px; border: 1px solid color-mix(in srgb, var(--vt-accent-text) 38%, var(--line)); border-radius: var(--r-pill); background: var(--tint); color: var(--vt-accent-text); font-size: .73rem; font-weight: 800; cursor: pointer; transition: background-color .18s ease, transform .12s ease; }
 .vt-app .vt-upsell-card__body button:hover { background: var(--tint-2); }
 .vt-app .vt-upsell-card__body button:active { transform: scale(.97); }
-.vt-app .vt-update-card { min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .045); }
+.vt-app .vt-update-card { min-width: 0; padding: var(--card-pad); border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-card); }
 .vt-app .vt-update-card > header { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: start; gap: 12px; }
-.vt-app .vt-update-card__icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; background: var(--tint); color: var(--vt-accent-text); }
+.vt-app .vt-update-card__icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: var(--r-s); background: var(--tint); color: var(--vt-accent-text); }
 .vt-app .vt-update-card header > div { min-width: 0; padding-top: 1px; }
 .vt-app .vt-update-card h3 { margin: 0; color: var(--ink); font-size: .9rem; font-weight: 800; line-height: 1.35; }
 .vt-app .vt-update-card header p { margin: 4px 0 0; color: var(--ink-3); font-size: .68rem; line-height: 1.4; text-transform: capitalize; }
-.vt-app .vt-update-card__status { display: inline-flex; align-items: center; min-height: 27px; padding: 5px 9px; border-radius: 999px; background: color-mix(in srgb, var(--ok) 13%, var(--surface)); color: var(--ok); font-size: .62rem; font-weight: 850; letter-spacing: .06em; line-height: 1; text-transform: uppercase; }
+.vt-app .vt-update-card__status { display: inline-flex; align-items: center; min-height: 27px; padding: 5px 9px; border-radius: var(--r-pill); background: color-mix(in srgb, var(--ok) 13%, var(--surface)); color: var(--ok); font-size: .62rem; font-weight: 850; letter-spacing: .06em; line-height: 1; text-transform: uppercase; }
 .vt-app .vt-update-card__status.is-pending { background: color-mix(in srgb, var(--warn) 12%, var(--surface)); color: var(--warn); }
 .vt-app .vt-update-card__preview { position: relative; margin-top: 14px; overflow: hidden; }
 .vt-app .vt-update-card__preview p { margin: 0; color: var(--ink-2); font-size: .79rem; line-height: 1.6; white-space: pre-line; }
 .vt-app .vt-update-card__preview.is-long:not(.is-expanded) p { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
 .vt-app .vt-update-card__preview.is-long:not(.is-expanded)::after { content: ""; position: absolute; right: 0; bottom: 0; left: 0; height: 2.2em; background: linear-gradient(to bottom, transparent, var(--surface)); pointer-events: none; }
-.vt-app .vt-update-card__toggle { display: inline-flex; align-items: center; gap: 5px; min-height: 38px; margin: 4px 0 -7px -4px; padding: 7px 4px; border: 0; border-radius: 7px; background: transparent; color: var(--vt-accent-text); font-size: .72rem; font-weight: 800; cursor: pointer; }
+.vt-app .vt-update-card__toggle { display: inline-flex; align-items: center; gap: 5px; min-height: 38px; margin: 4px 0 -7px -4px; padding: 7px 4px; border: 0; border-radius: var(--r-xs); background: transparent; color: var(--vt-accent-text); font-size: .72rem; font-weight: 800; cursor: pointer; }
 .vt-app .vt-update-card__toggle vt-icon { transition: transform .2s ease; }
 .vt-app .vt-update-card__toggle[aria-expanded="true"] vt-icon { transform: rotate(180deg); }
 .vt-app .vt-update-card__toggle:hover { text-decoration: underline; text-underline-offset: 3px; }
-.vt-app .vt-why-book-card { padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .04); }
-.vt-app .vt-why-book-card__bio { margin-top: 18px; padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface-2); }
+.vt-app .vt-why-book-card { padding: var(--card-pad); border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-card); }
+.vt-app .vt-why-book-card__bio { margin-top: 18px; padding: var(--card-pad); border: 1px solid var(--line); border-radius: var(--r); background: var(--surface-2); }
 .vt-app .vt-why-book-card__bio p { margin: 0; color: var(--ink-2); font-size: .84rem; line-height: 1.65; }
 .vt-app .vt-why-book-card__reasons { display: grid; gap: 9px; margin-top: 17px; }
-.vt-app .vt-why-book-card__reasons article { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 11px; padding: 13px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface-2); }
+.vt-app .vt-why-book-card__reasons article { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 11px; padding: 13px; border: 1px solid var(--line); border-radius: var(--r-s); background: var(--surface-2); }
 .vt-app .vt-why-book-card__reasons article > span { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--tint); color: var(--vt-accent-text); font-size: .72rem; font-weight: 850; }
 .vt-app .vt-why-book-card__reasons h3 { margin: 0; color: var(--ink); font-size: .82rem; font-weight: 800; line-height: 1.4; }
 .vt-app .vt-why-book-card__reasons p { margin: 4px 0 0; color: var(--ink-2); font-size: .75rem; line-height: 1.55; }
-.vt-app .vt-why-book-card__review { display: inline-flex; align-items: center; gap: 7px; min-height: 40px; margin-top: 17px; padding: 8px 13px; border: 1px solid color-mix(in srgb, var(--vt-accent-text) 35%, var(--line)); border-radius: 999px; background: var(--tint); color: var(--vt-accent-text); font-size: .74rem; font-weight: 800; text-decoration: none; }
+.vt-app .vt-why-book-card__review { display: inline-flex; align-items: center; gap: 7px; min-height: 40px; margin-top: 17px; padding: 8px 13px; border: 1px solid color-mix(in srgb, var(--vt-accent-text) 35%, var(--line)); border-radius: var(--r-pill); background: var(--tint); color: var(--vt-accent-text); font-size: .74rem; font-weight: 800; text-decoration: none; }
 @media (min-width: 640px) {
   .vt-app :is(.vt-upsell-grid, .vt-update-feed, .vt-why-book-card__reasons) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .vt-app .vt-upsell-grid > .vt-upsell-card:only-child { grid-column: 1 / -1; }
@@ -597,8 +636,8 @@ button { font: inherit; }
   .vt-app .vt-update-card__icon { width: 38px; height: 38px; }
   .vt-app .vt-update-card__status { grid-column: 2; justify-self: start; }
 }
-:root[data-theme="dark"] .vt-app :is(.vt-upsell-card, .vt-update-card, .vt-why-book-card) { border-color: rgba(255, 255, 255, .09); box-shadow: 0 8px 28px rgba(0, 0, 0, .22); }
-:root[data-theme="dark"] .vt-app :is(.vt-why-book-card__bio, .vt-why-book-card__reasons article) { border-color: rgba(255, 255, 255, .09); }
+:root[data-theme="dark"] .vt-app :is(.vt-upsell-card, .vt-update-card, .vt-why-book-card) { border-color: var(--card-border); box-shadow: var(--shadow-card); }
+:root[data-theme="dark"] .vt-app :is(.vt-why-book-card__bio, .vt-why-book-card__reasons article) { border-color: var(--card-border); }
 :root[data-theme="dark"] .vt-app .vt-update-card__status { background: rgba(74, 222, 128, .13); color: #78e8a0; }
 :root[data-theme="dark"] .vt-app .vt-update-card__status.is-pending { background: rgba(251, 191, 36, .12); color: #fbd266; }
 
@@ -608,21 +647,21 @@ button { font: inherit; }
 .vt-app .vt-main--itinerary .vt-days { display: grid; gap: 16px; }
 .vt-app .vt-main--itinerary .vt-day-card {
   min-width: 0;
-  padding: 16px;
+  padding: var(--card-pad);
   border: 1px solid color-mix(in srgb, var(--ink) 7%, transparent);
-  border-radius: 16px;
+  border-radius: var(--r);
   background: var(--surface);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, .03);
+  box-shadow: var(--shadow-card);
 }
 .vt-app .vt-main--itinerary .vt-day__head { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; }
-.vt-app .vt-main--itinerary .vt-day__n { flex: 0 0 auto; margin: 0; padding: 6px 10px; border-radius: 999px; background: var(--tint); color: var(--vt-accent-text); font-size: .7rem; font-weight: 850; letter-spacing: .06em; line-height: 1; text-transform: uppercase; }
+.vt-app .vt-main--itinerary .vt-day__n { flex: 0 0 auto; margin: 0; padding: 6px 10px; border-radius: var(--r-pill); background: var(--tint); color: var(--vt-accent-text); font-size: .7rem; font-weight: 850; letter-spacing: .06em; line-height: 1; text-transform: uppercase; }
 .vt-app .vt-main--itinerary .vt-day__label { margin: 0; color: var(--ink); font-family: var(--vt-body); font-size: 1rem; font-weight: 800; line-height: 1.3; }
 .vt-app .vt-main--itinerary .vt-day__items { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
 .vt-app .vt-main--itinerary .vt-el {
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--r);
   background: var(--surface-2);
   box-shadow: none;
 }
@@ -630,20 +669,20 @@ button { font: inherit; }
 .vt-app .vt-main--itinerary .vt-el__main { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .vt-app .vt-main--itinerary .vt-el__kind { margin: 0 0 3px; color: var(--vt-accent-text); font-size: .68rem; font-weight: 850; letter-spacing: .08em; line-height: 1.2; text-transform: uppercase; }
 .vt-app .vt-main--itinerary .vt-el__title { margin: 0; color: var(--ink); font-size: 1.05rem; line-height: 1.35; }
-.vt-app .vt-main--itinerary .vt-chip { flex: 0 0 auto; margin: 0; padding: 5px 9px; border-radius: 999px; background: var(--tint); color: var(--vt-accent-text); font-size: .72rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; }
+.vt-app .vt-main--itinerary .vt-chip { flex: 0 0 auto; margin: 0; padding: 5px 9px; border-radius: var(--r-pill); background: var(--tint); color: var(--vt-accent-text); font-size: .72rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; }
 .vt-app .vt-main--itinerary :is(.vt-el__route, .vt-el__meta) { margin: 9px 0 0; color: var(--ink-2); font-size: .8rem; line-height: 1.5; }
 .vt-app .vt-main--itinerary .vt-el__route { color: var(--ink); font-weight: 700; }
 .vt-app .vt-itinerary-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin: 14px 0 0; }
-.vt-app .vt-itinerary-meta > div { min-width: 0; padding: 10px 11px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); }
+.vt-app .vt-itinerary-meta > div { min-width: 0; padding: 10px 11px; border: 1px solid var(--line); border-radius: var(--r-s); background: var(--surface); }
 .vt-app :is(.vt-itinerary-meta, .vt-itinerary-detail, .vt-itinerary-reference) dt { color: var(--ink-3); font-size: .66rem; font-weight: 750; letter-spacing: .04em; line-height: 1.35; text-transform: uppercase; }
 .vt-app :is(.vt-itinerary-meta, .vt-itinerary-detail, .vt-itinerary-reference) dd { min-width: 0; margin: 3px 0 0; overflow-wrap: anywhere; color: var(--ink); font-size: .78rem; font-weight: 700; line-height: 1.45; }
-.vt-app .vt-itinerary-detail { margin-top: 14px; padding: 13px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.vt-app .vt-itinerary-detail { margin-top: 14px; padding: 13px; border: 1px solid var(--line); border-radius: var(--r-s); background: var(--surface); }
 .vt-app .vt-itinerary-detail h4 { margin: 0; color: var(--ink); font-family: var(--vt-body); font-size: .84rem; font-weight: 800; line-height: 1.4; }
 .vt-app .vt-itinerary-detail dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; margin: 11px 0 0; }
-.vt-app .vt-itinerary-disclosure { margin-top: 14px; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); }
+.vt-app .vt-itinerary-disclosure { margin-top: 14px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--r-s); background: var(--surface); color: var(--ink); }
 .vt-app .vt-itinerary-disclosure summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 46px; padding: 11px 13px; cursor: pointer; font-size: .8rem; font-weight: 800; list-style: none; }
 .vt-app .vt-itinerary-disclosure summary::-webkit-details-marker { display: none; }
-.vt-app .vt-itinerary-disclosure summary em { display: inline-flex; margin-left: 5px; padding: 4px 7px; border-radius: 999px; background: var(--tint); color: var(--vt-accent-text); font-size: .62rem; font-style: normal; line-height: 1; }
+.vt-app .vt-itinerary-disclosure summary em { display: inline-flex; margin-left: 5px; padding: 4px 7px; border-radius: var(--r-pill); background: var(--tint); color: var(--vt-accent-text); font-size: .62rem; font-style: normal; line-height: 1; }
 .vt-app .vt-itinerary-disclosure summary vt-icon { flex: 0 0 auto; color: var(--ink-2); transition: transform .2s ease; }
 .vt-app .vt-itinerary-disclosure[open] summary vt-icon { transform: rotate(180deg); }
 .vt-app .vt-itinerary-disclosure[open] summary { border-bottom: 1px solid var(--line); }
@@ -662,9 +701,9 @@ button { font: inherit; }
 .vt-app .vt-itinerary-reference { display: flex; flex-wrap: wrap; gap: 10px 20px; margin: 14px 0 0; padding-top: 13px; border-top: 1px solid var(--line); }
 .vt-app .vt-itinerary-reference > div { min-width: min(100%, 130px); }
 .vt-app .vt-itinerary-notes { margin: 14px 0 0; padding-top: 13px; border-top: 1px solid var(--line); color: var(--ink-2); font-size: .78rem; line-height: 1.6; white-space: pre-line; }
-:root[data-theme="dark"] .vt-app .vt-main--itinerary .vt-day-card { border-color: rgba(255, 255, 255, .09); box-shadow: 0 8px 28px rgba(0, 0, 0, .22); }
+:root[data-theme="dark"] .vt-app .vt-main--itinerary .vt-day-card { border-color: var(--card-border); box-shadow: var(--shadow-card); }
 :root[data-theme="dark"] .vt-app .vt-main--itinerary .vt-el,
-:root[data-theme="dark"] .vt-app :is(.vt-itinerary-meta > div, .vt-itinerary-detail, .vt-itinerary-disclosure) { border-color: rgba(255, 255, 255, .09); }
+:root[data-theme="dark"] .vt-app :is(.vt-itinerary-meta > div, .vt-itinerary-detail, .vt-itinerary-disclosure) { border-color: var(--card-border); }
 :root[data-theme="dark"] .vt-app .vt-main--itinerary :is(.vt-day__n, .vt-chip, .vt-itinerary-disclosure summary em) { background: rgba(115, 208, 194, .14); color: #8de3d5; }
 
 /* Payments-specific totals and transaction hierarchy. */
@@ -679,53 +718,53 @@ button { font: inherit; }
 .vt-app .vt-payments__heading { display: grid; gap: 5px; }
 .vt-app .vt-payments__heading h1 { font-size: clamp(2rem, 6vw, 2.6rem); }
 .vt-app .vt-payments__kicker { color: var(--vt-accent-text); font-size: .78rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
-.vt-app .vt-payment-card { margin-top: 24px; padding: clamp(18px, 3vw, 22px); border: 1px solid color-mix(in srgb, var(--ink) 5%, transparent); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .03); }
+.vt-app .vt-payment-card { margin-top: 24px; padding: var(--card-pad); border: 1px solid color-mix(in srgb, var(--ink) 5%, transparent); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-card); }
 .vt-app .vt-payment-summary { display: grid; gap: 18px; }
 .vt-app .vt-payment-summary__total { display: grid; gap: 4px; }
 .vt-app .vt-payment-summary__total > span { color: var(--ink-2); font-size: .82rem; font-weight: 650; }
 .vt-app .vt-payment-summary__total > strong { color: var(--ink); font-family: var(--vt-display); font-size: clamp(2rem, 7vw, 2.7rem); font-variant-numeric: tabular-nums; line-height: 1.05; }
 .vt-app .vt-payment-summary__stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.vt-app .vt-payment-summary__stats > div { display: grid; align-content: start; gap: 3px; min-height: 82px; padding: 13px 14px; border-radius: 12px; background: var(--surface-2); }
+.vt-app .vt-payment-summary__stats > div { display: grid; align-content: start; gap: 3px; min-height: 82px; padding: 13px 14px; border-radius: var(--r-s); background: var(--surface-2); }
 .vt-app .vt-payment-summary__stats span { color: var(--ink-2); font-size: .75rem; font-weight: 700; }
 .vt-app .vt-payment-summary__stats strong { color: var(--ink); font-size: 1.05rem; font-variant-numeric: tabular-nums; }
-.vt-app .vt-payment-summary__stats small { justify-self: start; margin-top: 2px; padding: 4px 8px; border-radius: 999px; background: color-mix(in srgb, var(--warn) 13%, var(--surface)); color: var(--warn); font-size: .64rem; font-weight: 800; line-height: 1; text-transform: uppercase; }
+.vt-app .vt-payment-summary__stats small { justify-self: start; margin-top: 2px; padding: 4px 8px; border-radius: var(--r-pill); background: color-mix(in srgb, var(--warn) 13%, var(--surface)); color: var(--warn); font-size: .64rem; font-weight: 800; line-height: 1; text-transform: uppercase; }
 .vt-app .vt-payment-summary__balance.is-paid small { background: color-mix(in srgb, var(--ok) 13%, var(--surface)); color: var(--ok); }
 .vt-app .vt-payment-progress__footer { display: grid; gap: 8px; padding-top: 2px; }
 .vt-app .vt-payment-progress__meta { display: flex; align-items: center; justify-content: space-between; gap: 16px; color: var(--ink-2); font-size: .72rem; }
 .vt-app .vt-payment-progress__meta span { font-weight: 650; }
 .vt-app .vt-payment-progress__meta strong { color: var(--ink); font-size: .72rem; font-variant-numeric: tabular-nums; }
-.vt-app .vt-payment-progress { height: 7px; overflow: hidden; border-radius: 999px; background: color-mix(in srgb, var(--ink-3) 14%, var(--surface)); }
+.vt-app .vt-payment-progress { height: 7px; overflow: hidden; border-radius: var(--r-pill); background: color-mix(in srgb, var(--ink-3) 14%, var(--surface)); }
 .vt-app .vt-payment-progress > span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--vt-accent), var(--ok)); transition: width .3s ease; }
 .vt-app .vt-payment-card__heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
 .vt-app .vt-payment-card__heading h2, .vt-app .vt-custom-payment h2 { color: var(--ink); font-size: 1.18rem; line-height: 1.25; }
 .vt-app .vt-payment-card__heading p, .vt-app .vt-custom-payment header p { margin-top: 4px; color: var(--ink-2); font-size: .82rem; line-height: 1.45; }
-.vt-app .vt-payment-card__heading > span { display: grid; place-items: center; flex: 0 0 auto; min-width: 28px; height: 28px; padding-inline: 8px; border-radius: 999px; background: var(--tint); color: var(--vt-accent-text); font-size: .74rem; font-weight: 800; }
+.vt-app .vt-payment-card__heading > span { display: grid; place-items: center; flex: 0 0 auto; min-width: 28px; height: 28px; padding-inline: 8px; border-radius: var(--r-pill); background: var(--tint); color: var(--vt-accent-text); font-size: .74rem; font-weight: 800; }
 .vt-app .vt-main--payments .vt-payments { display: grid; gap: 10px; margin: 0; }
-.vt-app .vt-main--payments .vt-pay { min-height: 76px; padding: 13px 14px; border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent); border-radius: 16px; background: var(--surface-2); box-shadow: 0 4px 20px rgba(0, 0, 0, .03); }
+.vt-app .vt-main--payments .vt-pay { min-height: 76px; padding: 13px 14px; border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent); border-radius: var(--r); background: var(--surface-2); box-shadow: var(--shadow-card); }
 .vt-app .vt-main--payments .vt-pay.is-paid { border-color: color-mix(in srgb, var(--ok) 22%, transparent); background: color-mix(in srgb, var(--ok) 5%, var(--surface)); }
 .vt-app .vt-main--payments .vt-pay.is-overdue { border-color: color-mix(in srgb, var(--bad) 32%, transparent); background: color-mix(in srgb, var(--bad) 5%, var(--surface)); }
 .vt-app .vt-pay__main { display: grid; gap: 3px; }
 .vt-app .vt-pay__main .vt-pay__label { color: var(--ink-2); font-size: .8rem; font-weight: 700; }
 .vt-app .vt-pay__main strong { color: var(--ink); font-size: 1.06rem; font-variant-numeric: tabular-nums; }
 .vt-app .vt-pay__date { color: var(--ink-3); font-size: .72rem; font-weight: 600; }
-.vt-app .vt-pay__status { display: inline-flex; align-items: center; justify-content: center; min-height: 30px; padding: 7px 11px; border-radius: 999px; background: color-mix(in srgb, var(--ink-3) 10%, var(--surface)); color: var(--ink-2); font-size: .68rem; font-weight: 800; line-height: 1; text-transform: uppercase; white-space: nowrap; }
+.vt-app .vt-pay__status { display: inline-flex; align-items: center; justify-content: center; min-height: 30px; padding: 7px 11px; border-radius: var(--r-pill); background: color-mix(in srgb, var(--ink-3) 10%, var(--surface)); color: var(--ink-2); font-size: .68rem; font-weight: 800; line-height: 1; text-transform: uppercase; white-space: nowrap; }
 .vt-app .vt-pay__status--paid { background: color-mix(in srgb, var(--ok) 13%, var(--surface)); color: var(--ok); }
 .vt-app .vt-pay__status--overdue { background: color-mix(in srgb, var(--bad) 12%, var(--surface)); color: var(--bad); }
-.vt-app .vt-main--payments .vt-pay__action { flex: 0 0 auto; min-width: 104px; min-height: 42px; padding: 9px 16px; border: 1px solid var(--accent-action); border-radius: 999px; background: var(--accent-action); color: var(--accent-action-ink); font-size: .82rem; font-weight: 800; box-shadow: 0 6px 16px color-mix(in srgb, var(--accent-action) 28%, transparent); cursor: pointer; transition: filter .18s ease, opacity .18s ease, transform .12s ease; }
+.vt-app .vt-main--payments .vt-pay__action { flex: 0 0 auto; min-width: 104px; min-height: 42px; padding: 9px 16px; border: 1px solid var(--accent-action); border-radius: var(--r-pill); background: var(--accent-action); color: var(--accent-action-ink); font-size: .82rem; font-weight: 800; box-shadow: 0 6px 16px color-mix(in srgb, var(--accent-action) 28%, transparent); cursor: pointer; transition: filter .18s ease, opacity .18s ease, transform .12s ease; }
 .vt-app .vt-main--payments .vt-pay__action:hover { filter: brightness(.9); }
 .vt-app .vt-main--payments .vt-pay__action:active { filter: brightness(.82); transform: scale(.97); }
 .vt-app .vt-main--payments .vt-pay__action:focus-visible { outline: 3px solid var(--tint-2); outline-offset: 2px; }
 .vt-app .vt-main--payments .vt-pay__action:disabled { border-color: var(--line-2); background: var(--surface-2); color: var(--ink-3); box-shadow: none; cursor: not-allowed; opacity: 1; }
-.vt-app .vt-payment-schedule__empty { padding: 20px; border: 1px dashed var(--line-2); border-radius: 12px; color: var(--ink-2); font-size: .86rem; text-align: center; }
+.vt-app .vt-payment-schedule__empty { padding: 20px; border: 1px dashed var(--line-2); border-radius: var(--r-s); color: var(--ink-2); font-size: .86rem; text-align: center; }
 .vt-app .vt-custom-payment { display: grid; gap: 12px; }
 .vt-app .vt-custom-payment label { margin-top: 6px; color: var(--ink); font-size: .86rem; font-weight: 750; }
-.vt-app .vt-custom-payment__field { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; min-height: 52px; overflow: hidden; border: 1.5px solid var(--line-2); border-radius: 12px; background: var(--surface-2); transition: border-color .18s ease, background-color .18s ease, box-shadow .18s ease; }
+.vt-app .vt-custom-payment__field { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; min-height: 52px; overflow: hidden; border: 1.5px solid var(--line-2); border-radius: var(--r-s); background: var(--surface-2); transition: border-color .18s ease, background-color .18s ease, box-shadow .18s ease; }
 .vt-app .vt-custom-payment__field:focus-within { border-color: var(--vt-accent); background: var(--surface); box-shadow: 0 0 0 3px var(--tint-2); }
 .vt-app .vt-custom-payment__field > span { display: grid; place-items: center; align-self: stretch; min-width: 50px; padding: 0 12px; border-right: 1px solid var(--line-2); color: var(--ink); font-weight: 800; }
 .vt-app .vt-custom-payment__field input { width: 100%; min-width: 0; min-height: 50px; padding: 12px 14px; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 1rem; font-weight: 650; font-variant-numeric: tabular-nums; }
 .vt-app .vt-custom-payment__field input::placeholder { color: var(--ink-3); opacity: 1; }
 .vt-app .vt-custom-payment__limit { margin-top: -5px; color: var(--ink-2); font-size: .75rem; }
-.vt-app .vt-custom-payment__submit { width: 100%; min-height: 50px; margin-top: 4px; padding: 10px 18px; border: 1px solid var(--accent-action); border-radius: 999px; background: var(--accent-action); color: var(--accent-action-ink); font-weight: 800; box-shadow: 0 8px 20px color-mix(in srgb, var(--accent-action) 30%, transparent); cursor: pointer; transition: filter .18s ease, opacity .18s ease, transform .12s ease; }
+.vt-app .vt-custom-payment__submit { width: 100%; min-height: 50px; margin-top: 4px; padding: 10px 18px; border: 1px solid var(--accent-action); border-radius: var(--r-pill); background: var(--accent-action); color: var(--accent-action-ink); font-weight: 800; box-shadow: 0 8px 20px color-mix(in srgb, var(--accent-action) 30%, transparent); cursor: pointer; transition: filter .18s ease, opacity .18s ease, transform .12s ease; }
 .vt-app .vt-custom-payment__submit:hover { filter: brightness(.9); }
 .vt-app .vt-custom-payment__submit:active { filter: brightness(.82); transform: scale(.99); }
 .vt-app .vt-custom-payment__submit:focus-visible { outline: 3px solid var(--tint-2); outline-offset: 2px; }
@@ -736,8 +775,8 @@ button { font: inherit; }
   .vt-app .vt-pay__status { align-self: flex-start; }
 }
 :root[data-theme="dark"] .vt-app .vt-payment-card,
-:root[data-theme="dark"] .vt-app .vt-main--payments .vt-pay { border-color: rgba(255, 255, 255, .07); box-shadow: 0 8px 28px rgba(0, 0, 0, .22); }
-:root[data-theme="dark"] .vt-app .vt-custom-payment__field { border-color: rgba(255, 255, 255, .18); background: color-mix(in srgb, var(--surface-2) 78%, #000); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .025); }
+:root[data-theme="dark"] .vt-app .vt-main--payments .vt-pay { border-color: rgba(255, 255, 255, .07); box-shadow: var(--shadow-card); }
+:root[data-theme="dark"] .vt-app .vt-custom-payment__field { border-color: rgba(255, 255, 255, .18); background: color-mix(in srgb, var(--surface-2) 78%, #000); box-shadow: var(--shadow-card-sm); }
 :root[data-theme="dark"] .vt-app .vt-custom-payment__field > span { border-right-color: rgba(255, 255, 255, .14); background: rgba(255, 255, 255, .025); color: var(--ink); }
 :root[data-theme="dark"] .vt-app .vt-custom-payment__field:focus-within { border-color: color-mix(in srgb, var(--vt-accent) 75%, white); background: var(--surface-2); box-shadow: 0 0 0 3px color-mix(in srgb, var(--vt-accent) 24%, transparent); }
 :root[data-theme="dark"] .vt-app :is(.vt-pay__action, .vt-custom-payment__submit):not(:disabled) { border-color: var(--accent-action); background: var(--accent-action); color: var(--accent-action-ink); }
@@ -757,19 +796,19 @@ button { font: inherit; }
 .vt-app .vt-documents__heading h1 { font-size: clamp(2rem, 6vw, 2.6rem); }
 .vt-app .vt-documents__heading > p:last-child { max-width: 42rem; margin-top: 3px; color: var(--ink-2); font-size: .92rem; font-weight: 500; line-height: 1.55; }
 .vt-app .vt-documents__kicker { color: var(--vt-accent-text); font-size: .78rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
-.vt-app .vt-doc-group { margin-top: 24px; padding: clamp(18px, 3vw, 22px); border: 1px solid color-mix(in srgb, var(--ink) 5%, transparent); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .03); }
+.vt-app .vt-doc-group { margin-top: 24px; padding: clamp(18px, 3vw, 22px); border: 1px solid color-mix(in srgb, var(--ink) 5%, transparent); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-card); }
 .vt-app .vt-doc-group__heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
 .vt-app .vt-doc-group__heading h2 { color: var(--ink); font-size: 1.18rem; line-height: 1.25; }
 .vt-app .vt-doc-group__heading p { margin-top: 4px; color: var(--ink-2); font-size: .82rem; line-height: 1.45; }
-.vt-app .vt-doc-group__heading > span { display: grid; place-items: center; flex: 0 0 auto; min-width: 28px; height: 28px; padding-inline: 8px; border-radius: 999px; background: var(--tint); color: var(--vt-accent-text); font-size: .74rem; font-weight: 800; }
+.vt-app .vt-doc-group__heading > span { display: grid; place-items: center; flex: 0 0 auto; min-width: 28px; height: 28px; padding-inline: 8px; border-radius: var(--r-pill); background: var(--tint); color: var(--vt-accent-text); font-size: .74rem; font-weight: 800; }
 .vt-app .vt-main--documents .vt-docs { display: grid; gap: 10px; margin: 0; }
 .vt-app .vt-main--documents .vt-docs > li { border: 0; }
-.vt-app .vt-main--documents .vt-doc-button { min-height: 76px; padding: 13px 14px; border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent); border-radius: 16px; background: var(--surface-2); box-shadow: 0 4px 20px rgba(0, 0, 0, .03); transition: border-color .18s ease, background-color .18s ease, box-shadow .18s ease, transform .15s ease; }
+.vt-app .vt-main--documents .vt-doc-button { min-height: 76px; padding: 13px 14px; border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent); border-radius: var(--r); background: var(--surface-2); box-shadow: var(--shadow-card); transition: border-color .18s ease, background-color .18s ease, box-shadow .18s ease, transform .15s ease; }
 .vt-app .vt-main--documents button.vt-doc-button:hover { border-color: color-mix(in srgb, var(--vt-accent) 25%, transparent); background: color-mix(in srgb, var(--vt-accent) 5%, var(--surface)); box-shadow: 0 7px 24px rgba(0, 0, 0, .05); transform: scale(1.006); }
 .vt-app .vt-main--documents button.vt-doc-button:active { background: color-mix(in srgb, var(--vt-accent) 8%, var(--surface)); transform: scale(.992); }
 .vt-app .vt-main--documents button.vt-doc-button:focus-visible { border-color: var(--vt-accent); outline: 3px solid var(--tint-2); outline-offset: 2px; }
 .vt-app .vt-main--documents button.vt-doc-button:disabled { cursor: wait; opacity: .7; transform: none; }
-.vt-app .vt-doc-button__icon, .vt-app .vt-doc-button__action { display: grid; place-items: center; flex: 0 0 auto; width: 40px; height: 40px; border-radius: 10px; background: var(--tint); color: var(--vt-accent-text); }
+.vt-app .vt-doc-button__icon, .vt-app .vt-doc-button__action { display: grid; place-items: center; flex: 0 0 auto; width: 40px; height: 40px; border-radius: var(--r-s); background: var(--tint); color: var(--vt-accent-text); }
 .vt-app .vt-doc-button__action { border-radius: 50%; background: color-mix(in srgb, var(--vt-accent) 10%, var(--surface)); }
 .vt-app .vt-doc-button__copy { display: grid; gap: 4px; min-width: 0; }
 .vt-app .vt-doc-button__title { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
@@ -777,13 +816,13 @@ button { font: inherit; }
 .vt-app .vt-doc-button__description { color: var(--ink-2); font-size: .84rem; line-height: 1.4; }
 .vt-app .vt-doc-button__meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; color: var(--ink-3); font-size: .73rem; font-weight: 600; line-height: 1.35; }
 .vt-app .vt-doc-button__meta small { color: var(--ok); font: inherit; }
-.vt-app .vt-doc-badge { display: inline-flex; align-items: center; min-height: 20px; padding: 3px 7px; border-radius: 999px; font-size: .64rem; font-weight: 800; letter-spacing: .04em; line-height: 1; text-transform: uppercase; white-space: nowrap; }
+.vt-app .vt-doc-badge { display: inline-flex; align-items: center; min-height: 20px; padding: 3px 7px; border-radius: var(--r-pill); font-size: .64rem; font-weight: 800; letter-spacing: .04em; line-height: 1; text-transform: uppercase; white-space: nowrap; }
 .vt-app .vt-doc-badge--type { background: color-mix(in srgb, var(--vt-accent) 9%, var(--surface)); color: var(--vt-accent-text); }
 .vt-app .vt-doc-badge--updated { background: color-mix(in srgb, var(--warn) 14%, var(--surface)); color: var(--warn); }
 .vt-app .vt-doc-badge--pending { justify-self: end; background: color-mix(in srgb, var(--warn) 12%, var(--surface)); color: var(--warn); }
 .vt-app .vt-doc-button--unavailable { cursor: default; }
 .vt-app .vt-doc-button--unavailable .vt-doc-button__icon { background: color-mix(in srgb, var(--ink-3) 10%, var(--surface)); color: var(--ink-3); }
-.vt-app .vt-doc-empty { display: grid; justify-items: center; gap: 8px; margin-top: 24px; padding: 32px 20px; border: 1px dashed var(--line-2); border-radius: 16px; background: var(--surface); text-align: center; }
+.vt-app .vt-doc-empty { display: grid; justify-items: center; gap: 8px; margin-top: 24px; padding: 32px 20px; border: 1px dashed var(--line-2); border-radius: var(--r); background: var(--surface); text-align: center; }
 .vt-app .vt-doc-empty h2 { margin-top: 4px; font-size: 1.15rem; }
 .vt-app .vt-doc-empty p { max-width: 28rem; color: var(--ink-2); font-size: .88rem; line-height: 1.5; }
 @media (max-width: 480px) {
@@ -792,17 +831,17 @@ button { font: inherit; }
   .vt-app .vt-doc-button--unavailable > .vt-doc-badge--pending { grid-column: 2; justify-self: start; }
 }
 :root[data-theme="dark"] .vt-app .vt-doc-group,
-:root[data-theme="dark"] .vt-app .vt-main--documents .vt-doc-button { border-color: rgba(255, 255, 255, .07); box-shadow: 0 8px 28px rgba(0, 0, 0, .22); }
+:root[data-theme="dark"] .vt-app .vt-main--documents .vt-doc-button { border-color: rgba(255, 255, 255, .07); box-shadow: var(--shadow-card); }
 
 /* Help-specific touch targets, form controls and section hierarchy. */
 .vt-app .vt-main--help { padding-bottom: 32px; }
 .vt-app .vt-main--help .vt-help-card {
   margin: 24px var(--vt-flat-gutter) 0;
-  padding: clamp(20px, 3vw, 24px);
+  padding: var(--card-pad);
   border: 1px solid color-mix(in srgb, var(--ink) 5%, transparent);
-  border-radius: 16px;
+  border-radius: var(--r);
   background: var(--surface);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, .03);
+  box-shadow: var(--shadow-card);
 }
 .vt-app .vt-main--help .vt-help-card:first-of-type { border-top-color: color-mix(in srgb, var(--ink) 5%, transparent); }
 .vt-app .vt-help-heading { display: grid; gap: 5px; margin-bottom: 22px; }
@@ -818,11 +857,11 @@ button { font: inherit; }
   min-height: 64px;
   padding: 13px 14px;
   border: 1px solid color-mix(in srgb, var(--ink) 5%, transparent);
-  border-radius: 16px;
+  border-radius: var(--r);
   background: var(--surface-2);
   color: var(--ink);
   text-decoration: none;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, .03);
+  box-shadow: var(--shadow-card);
   transition: border-color .18s ease, background-color .18s ease, box-shadow .18s ease, transform .15s ease;
 }
 .vt-app .vt-contact-card:hover { border-color: color-mix(in srgb, var(--vt-accent) 25%, transparent); background: color-mix(in srgb, var(--vt-accent) 5%, var(--surface)); box-shadow: 0 7px 24px rgba(0, 0, 0, .05); transform: scale(1.006); }
@@ -832,7 +871,7 @@ button { font: inherit; }
 .vt-app .vt-contact-card__icon svg, .vt-app .vt-share-button svg { display: block; width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .vt-app .vt-contact-card__copy { display: grid; gap: 2px; min-width: 0; flex: 1; }
 .vt-app .vt-contact-card__copy strong { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; font-size: .97rem; }
-.vt-app .vt-contact-card__copy strong small { display: inline-flex; align-items: center; flex: 0 0 auto; min-height: 22px; padding: 3px 8px; border-radius: 999px; background: color-mix(in srgb, var(--bad) 12%, var(--surface)); color: var(--bad); font-size: .68rem; line-height: 1; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+.vt-app .vt-contact-card__copy strong small { display: inline-flex; align-items: center; flex: 0 0 auto; min-height: 22px; padding: 3px 8px; border-radius: var(--r-pill); background: color-mix(in srgb, var(--bad) 12%, var(--surface)); color: var(--bad); font-size: .68rem; line-height: 1; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
 .vt-app .vt-contact-card__copy > span { overflow: hidden; color: var(--ink-2); font-size: .86rem; overflow-wrap: anywhere; }
 .vt-app .vt-contact-card__arrow { display: grid; place-items: center; align-self: center; flex: 0 0 auto; width: 24px; height: 24px; color: var(--ink-3); line-height: 0; }
 .vt-app .vt-contact-card__arrow > vt-icon { width: 20px; height: 20px; }
@@ -849,7 +888,7 @@ button { font: inherit; }
 .vt-app .vt-help-intro { margin-top: 8px; color: color-mix(in srgb, var(--ink) 78%, var(--surface)); font-size: .92rem; line-height: 1.55; }
 .vt-app .vt-help-form { display: grid; gap: 18px; margin-top: 22px; }
 .vt-app .vt-help-field { display: grid; gap: 8px; color: var(--ink); font-size: .9rem; font-weight: 700; }
-.vt-app .vt-help-field :is(select, textarea) { width: 100%; min-height: 52px; padding: 13px 14px; border: 1.5px solid var(--line-2); border-radius: 12px; background: var(--surface-2); color: var(--ink); font-weight: 400; }
+.vt-app .vt-help-field :is(select, textarea) { width: 100%; min-height: 52px; padding: 13px 14px; border: 1.5px solid var(--line-2); border-radius: var(--r-s); background: var(--surface-2); color: var(--ink); font-weight: 400; }
 .vt-app .vt-help-select { display: grid; align-items: center; }
 .vt-app .vt-help-select select { grid-area: 1 / 1; appearance: none; padding-right: 52px; }
 .vt-app .vt-help-select > vt-icon { z-index: 1; grid-area: 1 / 1; justify-self: end; width: 20px; height: 20px; margin-right: 18px; color: var(--ink-2); pointer-events: none; }
@@ -858,7 +897,7 @@ button { font: inherit; }
 .vt-app .vt-help-field :is(select, textarea):focus { border-color: var(--vt-accent); outline: none; box-shadow: 0 0 0 3px var(--tint-2); background: var(--surface); }
 .vt-app .vt-help-form__meta { display: flex; justify-content: space-between; gap: 16px; margin-top: -10px; color: var(--ink-2); font-size: .78rem; }
 .vt-app .vt-help-form__meta span:last-child { white-space: nowrap; }
-.vt-app .vt-help-send { width: 100%; min-height: 54px; margin-top: 2px; border-radius: 999px; font-size: 1rem; transition: background-color .18s ease, border-color .18s ease, color .18s ease, opacity .18s ease, box-shadow .18s ease, transform .12s ease; }
+.vt-app .vt-help-send { width: 100%; min-height: 54px; margin-top: 2px; border-radius: var(--r-pill); font-size: 1rem; transition: background-color .18s ease, border-color .18s ease, color .18s ease, opacity .18s ease, box-shadow .18s ease, transform .12s ease; }
 .vt-app .vt-help-send__icon { flex: 0 0 auto; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .vt-app .vt-help-send:disabled { border-color: var(--line-2); background: var(--surface-2); color: var(--ink-3); opacity: 1; box-shadow: none; }
 .vt-app .vt-help-send:not(:disabled) { border-color: transparent; background: var(--accent-action); color: var(--accent-action-ink); box-shadow: 0 8px 20px color-mix(in srgb, var(--accent-action) 24%, transparent); }
@@ -876,34 +915,34 @@ button { font: inherit; }
   .vt-app .vt-help-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 :root[data-theme="dark"] .vt-app .vt-main--help .vt-help-card,
-:root[data-theme="dark"] .vt-app .vt-contact-card { border-color: rgba(255, 255, 255, .07); box-shadow: 0 8px 28px rgba(0, 0, 0, .22); }
+:root[data-theme="dark"] .vt-app .vt-contact-card { border-color: rgba(255, 255, 255, .07); box-shadow: var(--shadow-card); }
 
 /* Account-specific trip and preference hierarchy. */
 .vt-app .vt-main--account .vt-account-page { display: grid; gap: 18px; padding-bottom: 42px; border-top: 0; }
 .vt-app .vt-account-heading { margin-bottom: 4px; }
 .vt-app .vt-account-heading h1 { margin: 4px 0 0; color: var(--ink); font-size: clamp(1.9rem, 7vw, 2.45rem); font-weight: 650; line-height: 1.08; }
 .vt-app .vt-account-kicker { margin: 0 0 5px; color: var(--vt-accent-text); font-size: .7rem; font-weight: 800; letter-spacing: .14em; line-height: 1.2; text-transform: uppercase; }
-.vt-app .vt-account-card { padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .03); }
+.vt-app .vt-account-card { padding: var(--card-pad); border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-card); }
 .vt-app .vt-account-card__header { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 13px; }
 .vt-app .vt-account-card__header h2 { margin: 0; color: var(--ink); font-size: 1.25rem; font-weight: 650; line-height: 1.2; }
-.vt-app .vt-account-card__icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 11px; background: var(--tint); color: var(--vt-accent-text); }
+.vt-app .vt-account-card__icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: var(--r-s); background: var(--tint); color: var(--vt-accent-text); }
 .vt-app .vt-account-intro, .vt-app .vt-account-muted { margin: 14px 0 0; color: color-mix(in srgb, var(--ink) 74%, var(--surface)); font-size: .9rem; line-height: 1.55; }
 .vt-app .vt-account-trips { display: grid; gap: 12px; margin-top: 18px; }
-.vt-app .vt-account-trip { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--line); border-radius: 16px; background: var(--surface-2); box-shadow: 0 4px 16px rgba(0, 0, 0, .025); transition: border-color .18s ease, transform .12s ease, box-shadow .18s ease; }
+.vt-app .vt-account-trip { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface-2); box-shadow: var(--shadow-card-sm); transition: border-color .18s ease, transform .12s ease, box-shadow .18s ease; }
 .vt-app .vt-account-trip--current { border-color: color-mix(in srgb, var(--vt-accent) 35%, var(--line)); }
 .vt-app .vt-account-trip__image { display: block; width: 100%; height: 118px; object-fit: cover; }
 .vt-app .vt-account-trip__body { display: flex; flex: 1; flex-direction: column; padding: 16px; }
 .vt-app .vt-account-trip__topline { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .vt-app .vt-account-trip h3 { margin: 0; color: var(--ink); font-size: 1rem; font-weight: 700; line-height: 1.3; }
 .vt-app .vt-account-trip__topline p { margin: 4px 0 0; color: var(--ink-3); font-size: .72rem; font-weight: 650; letter-spacing: .04em; }
-.vt-app .vt-account-status { flex: 0 0 auto; padding: 5px 9px; border-radius: 999px; background: var(--accent-status-bg); color: var(--vt-accent-text); font-size: .62rem; font-weight: 850; letter-spacing: .08em; line-height: 1; text-transform: uppercase; }
+.vt-app .vt-account-status { flex: 0 0 auto; padding: 5px 9px; border-radius: var(--r-pill); background: var(--accent-status-bg); color: var(--vt-accent-text); font-size: .62rem; font-weight: 850; letter-spacing: .08em; line-height: 1; text-transform: uppercase; }
 .vt-app .vt-account-status--past { background: color-mix(in srgb, var(--ink-3) 11%, var(--surface)); color: var(--ink-2); }
 .vt-app .vt-account-trip__dates { margin: 13px 0 0; padding-bottom: 15px; color: color-mix(in srgb, var(--ink) 76%, var(--surface)); font-size: .85rem; font-weight: 550; }
-.vt-app .vt-account-trip__action { display: inline-flex; align-items: center; justify-content: center; align-self: flex-start; gap: 8px; min-height: 42px; margin-top: auto; padding: 9px 15px; border: 1.5px solid var(--vt-accent-text); border-radius: 999px; background: var(--tint); color: var(--vt-accent-text); font-size: .82rem; font-weight: 800; cursor: pointer; transition: background-color .18s ease, transform .12s ease; }
+.vt-app .vt-account-trip__action { display: inline-flex; align-items: center; justify-content: center; align-self: flex-start; gap: 8px; min-height: 42px; margin-top: auto; padding: 9px 15px; border: 1.5px solid var(--vt-accent-text); border-radius: var(--r-pill); background: var(--tint); color: var(--vt-accent-text); font-size: .82rem; font-weight: 800; cursor: pointer; transition: background-color .18s ease, transform .12s ease; }
 .vt-app .vt-account-trip__action:hover { background: var(--tint-2); }
 .vt-app .vt-account-trip__action:active { transform: scale(.97); }
 .vt-app .vt-account-trip__action:disabled { opacity: .5; }
-.vt-app .vt-account-empty { margin: 4px 0 0; padding: 18px; border: 1px dashed var(--line-2); border-radius: 14px; color: var(--ink-2); font-size: .9rem; text-align: center; }
+.vt-app .vt-account-empty { margin: 4px 0 0; padding: 18px; border: 1px dashed var(--line-2); border-radius: var(--r); color: var(--ink-2); font-size: .9rem; text-align: center; }
 .vt-app .vt-account-form { display: grid; min-width: 0; gap: 18px; }
 .vt-app .vt-account-form + .vt-account-danger { margin-top: 6px; }
 .vt-app .vt-account-fieldset { min-width: 0; margin: 22px 0 0; padding: 0; border: 0; }
@@ -911,48 +950,48 @@ button { font: inherit; }
 .vt-app .vt-account-fieldset--divided { padding-top: 21px; border-top: 1px solid var(--line); }
 .vt-app .vt-account-field-hint { margin: 5px 0 0; color: var(--ink-3); font-size: .78rem; line-height: 1.45; }
 .vt-app .vt-channel-grid { display: grid; gap: 10px; margin-top: 12px; }
-.vt-app .vt-channel-tile { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 68px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-2); cursor: pointer; transition: border-color .18s ease, background-color .18s ease, transform .12s ease; }
+.vt-app .vt-channel-tile { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 68px; padding: 12px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface-2); cursor: pointer; transition: border-color .18s ease, background-color .18s ease, transform .12s ease; }
 .vt-app .vt-channel-tile.is-selected { border-color: color-mix(in srgb, var(--vt-accent) 38%, var(--line)); background: color-mix(in srgb, var(--vt-accent) 5%, var(--surface)); }
 .vt-app .vt-channel-tile:active { transform: scale(.985); }
 .vt-app .vt-channel-tile:has(input:focus-visible), .vt-app .vt-month-chip:has(input:focus-visible) { outline: 3px solid var(--tint-2); outline-offset: 2px; }
-.vt-app .vt-channel-tile__icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; background: var(--tint); color: var(--vt-accent-text); }
+.vt-app .vt-channel-tile__icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: var(--r-s); background: var(--tint); color: var(--vt-accent-text); }
 .vt-app .vt-channel-tile__copy { display: grid; gap: 3px; min-width: 0; }
 .vt-app .vt-channel-tile__copy strong { color: var(--ink); font-size: .9rem; }
 .vt-app .vt-channel-tile__copy small { color: color-mix(in srgb, var(--ink) 67%, var(--surface)); font-size: .72rem; line-height: 1.35; }
-.vt-app .vt-toggle { position: relative; width: 44px; height: 26px; padding: 3px; border: 1px solid var(--line-2); border-radius: 999px; background: color-mix(in srgb, var(--ink-3) 16%, var(--surface)); transition: background-color .18s ease, border-color .18s ease; }
+.vt-app .vt-toggle { position: relative; width: 44px; height: 26px; padding: 3px; border: 1px solid var(--line-2); border-radius: var(--r-pill); background: color-mix(in srgb, var(--ink-3) 16%, var(--surface)); transition: background-color .18s ease, border-color .18s ease; }
 .vt-app .vt-toggle span { display: block; width: 18px; height: 18px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 4px rgba(0, 0, 0, .2); transition: transform .18s ease; }
 .vt-app .vt-channel-tile.is-selected .vt-toggle { border-color: var(--accent-action); background: var(--accent-action); }
 .vt-app .vt-channel-tile.is-selected .vt-toggle span { transform: translateX(18px); }
 .vt-app .vt-airport-combobox { position: relative; margin-top: 13px; }
-.vt-app .vt-airport-search { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; min-height: 50px; padding: 0 14px; border: 1.5px solid var(--line-2); border-radius: 12px; background: var(--surface-2); color: var(--ink-3); transition: border-color .18s ease, background-color .18s ease, box-shadow .18s ease; }
+.vt-app .vt-airport-search { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; min-height: 50px; padding: 0 14px; border: 1.5px solid var(--line-2); border-radius: var(--r-s); background: var(--surface-2); color: var(--ink-3); transition: border-color .18s ease, background-color .18s ease, box-shadow .18s ease; }
 .vt-app .vt-airport-search:focus-within { border-color: var(--vt-accent); background: var(--surface); box-shadow: 0 0 0 3px var(--tint-2); color: var(--vt-accent-text); }
 .vt-app .vt-airport-search input { width: 100%; min-width: 0; min-height: 48px; padding: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 1rem; }
 .vt-app .vt-airport-search input::placeholder { color: var(--ink-3); opacity: 1; }
 .vt-app .vt-airport-search input:disabled { color: var(--ink-3); opacity: 1; }
-.vt-app .vt-airport-options { display: grid; gap: 3px; margin-top: 7px; padding: 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 10px 28px rgba(0, 0, 0, .1); }
-.vt-app .vt-airport-options button { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 42px; padding: 9px 11px; border: 0; border-radius: 8px; background: transparent; color: var(--ink-2); font-size: .82rem; font-weight: 650; text-align: left; cursor: pointer; }
+.vt-app .vt-airport-options { display: grid; gap: 3px; margin-top: 7px; padding: 6px; border: 1px solid var(--line); border-radius: var(--r-s); background: var(--surface); box-shadow: 0 10px 28px rgba(0, 0, 0, .1); }
+.vt-app .vt-airport-options button { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 42px; padding: 9px 11px; border: 0; border-radius: var(--r-xs); background: transparent; color: var(--ink-2); font-size: .82rem; font-weight: 650; text-align: left; cursor: pointer; }
 .vt-app .vt-airport-options button:hover, .vt-app .vt-airport-options button:focus-visible { outline: 0; background: var(--tint); color: var(--vt-accent-text); }
 .vt-app .vt-airport-options p { margin: 0; padding: 12px; color: var(--ink-3); font-size: .8rem; text-align: center; }
 .vt-app .vt-selected-airports { display: flex; flex-wrap: wrap; gap: 8px; min-height: 38px; margin-top: 11px; }
-.vt-app .vt-selected-airport { display: inline-flex; align-items: center; gap: 5px; min-height: 34px; padding: 4px 5px 4px 11px; border: 1px solid color-mix(in srgb, var(--vt-accent) 28%, var(--line)); border-radius: 999px; background: var(--tint); color: var(--vt-accent-text); font-size: .75rem; font-weight: 750; }
+.vt-app .vt-selected-airport { display: inline-flex; align-items: center; gap: 5px; min-height: 34px; padding: 4px 5px 4px 11px; border: 1px solid color-mix(in srgb, var(--vt-accent) 28%, var(--line)); border-radius: var(--r-pill); background: var(--tint); color: var(--vt-accent-text); font-size: .75rem; font-weight: 750; }
 .vt-app .vt-selected-airport button { display: grid; place-items: center; width: 25px; height: 25px; padding: 0; border: 0; border-radius: 50%; background: color-mix(in srgb, var(--vt-accent) 10%, var(--surface)); color: inherit; cursor: pointer; transition: background-color .18s ease, transform .12s ease; }
 .vt-app .vt-selected-airport button:hover { background: color-mix(in srgb, var(--vt-accent) 18%, var(--surface)); }
 .vt-app .vt-selected-airport button:active { transform: scale(.9); }
 .vt-app .vt-selected-airports__empty { align-self: center; color: var(--ink-3); font-size: .76rem; font-style: italic; }
 .vt-app .vt-month-chip:active { transform: scale(.95); }
 .vt-app .vt-month-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 13px; }
-.vt-app .vt-month-chip { display: grid; place-items: center; min-height: 42px; padding: 8px 4px; border: 1px solid var(--line-2); border-radius: 999px; background: transparent; color: var(--ink-2); font-size: .78rem; font-weight: 750; cursor: pointer; transition: border-color .18s ease, background-color .18s ease, color .18s ease, transform .12s ease; }
+.vt-app .vt-month-chip { display: grid; place-items: center; min-height: 42px; padding: 8px 4px; border: 1px solid var(--line-2); border-radius: var(--r-pill); background: transparent; color: var(--ink-2); font-size: .78rem; font-weight: 750; cursor: pointer; transition: border-color .18s ease, background-color .18s ease, color .18s ease, transform .12s ease; }
 .vt-app .vt-month-chip.is-selected { border-color: var(--accent-action); background: var(--accent-action); color: var(--accent-action-ink); box-shadow: 0 5px 14px color-mix(in srgb, var(--accent-action) 18%, transparent); }
-.vt-app .vt-account-save { display: flex; align-items: center; justify-content: center; gap: 9px; width: 100%; max-width: 100%; min-width: 0; min-height: 52px; margin: 24px 0 0; padding: 12px 20px; border: 0; border-radius: 999px; background: var(--accent-action); color: var(--accent-action-ink); box-shadow: 0 8px 20px color-mix(in srgb, var(--accent-action) 24%, transparent); font-size: .94rem; font-weight: 800; cursor: pointer; transition: filter .18s ease, opacity .18s ease, transform .12s ease; }
+.vt-app .vt-account-save { display: flex; align-items: center; justify-content: center; gap: 9px; width: 100%; max-width: 100%; min-width: 0; min-height: 52px; margin: 24px 0 0; padding: 12px 20px; border: 0; border-radius: var(--r-pill); background: var(--accent-action); color: var(--accent-action-ink); box-shadow: 0 8px 20px color-mix(in srgb, var(--accent-action) 24%, transparent); font-size: .94rem; font-weight: 800; cursor: pointer; transition: filter .18s ease, opacity .18s ease, transform .12s ease; }
 .vt-app .vt-account-save:hover { filter: brightness(.9); }
 .vt-app .vt-account-save:active { filter: brightness(.82); transform: scale(.98); }
 .vt-app .vt-account-save:disabled { background: var(--surface-2); color: var(--ink-3); box-shadow: none; opacity: 1; }
 .vt-app .vt-account-saved { margin: 12px 0 0; color: var(--ok); font-size: .83rem; font-weight: 750; text-align: center; }
-.vt-app .vt-account-danger { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 13px; padding: 20px; border: 1px solid color-mix(in srgb, var(--bad) 27%, var(--line)); border-radius: 16px; background: color-mix(in srgb, var(--bad) 7%, var(--surface)); box-shadow: 0 4px 20px rgba(0, 0, 0, .025); }
-.vt-app .vt-account-danger__icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 11px; background: color-mix(in srgb, var(--bad) 13%, var(--surface)); color: var(--bad); }
+.vt-app .vt-account-danger { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 13px; padding: 20px; border: 1px solid color-mix(in srgb, var(--bad) 27%, var(--line)); border-radius: var(--r); background: color-mix(in srgb, var(--bad) 7%, var(--surface)); box-shadow: var(--shadow-card); }
+.vt-app .vt-account-danger__icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: var(--r-s); background: color-mix(in srgb, var(--bad) 13%, var(--surface)); color: var(--bad); }
 .vt-app .vt-account-danger h2 { margin: 1px 0 0; color: color-mix(in srgb, var(--bad) 76%, var(--ink)); font-size: 1rem; font-weight: 750; }
 .vt-app .vt-account-danger p { margin: 7px 0 0; color: color-mix(in srgb, var(--ink) 72%, var(--surface)); font-size: .8rem; line-height: 1.5; }
-.vt-app .vt-account-danger button { grid-column: 1 / -1; justify-self: start; min-height: 42px; padding: 9px 17px; border: 1.5px solid color-mix(in srgb, var(--bad) 58%, var(--line)); border-radius: 999px; background: color-mix(in srgb, var(--bad) 8%, var(--surface)); color: var(--bad); font-size: .82rem; font-weight: 800; cursor: pointer; transition: background-color .18s ease, transform .12s ease; }
+.vt-app .vt-account-danger button { grid-column: 1 / -1; justify-self: start; min-height: 42px; padding: 9px 17px; border: 1.5px solid color-mix(in srgb, var(--bad) 58%, var(--line)); border-radius: var(--r-pill); background: color-mix(in srgb, var(--bad) 8%, var(--surface)); color: var(--bad); font-size: .82rem; font-weight: 800; cursor: pointer; transition: background-color .18s ease, transform .12s ease; }
 .vt-app .vt-account-danger button:hover { background: color-mix(in srgb, var(--bad) 14%, var(--surface)); }
 .vt-app .vt-account-danger button:active { transform: scale(.97); }
 .vt-app .vt-account-error { margin: 0; color: var(--warn); font-size: .9rem; line-height: 1.5; }
@@ -965,9 +1004,9 @@ button { font: inherit; }
   .vt-app .vt-account-danger button { grid-column: auto; justify-self: end; }
 }
 :root[data-theme="dark"] .vt-app .vt-account-card,
-:root[data-theme="dark"] .vt-app .vt-account-danger { border-color: rgba(255, 255, 255, .08); box-shadow: 0 8px 28px rgba(0, 0, 0, .22); }
+:root[data-theme="dark"] .vt-app .vt-account-danger { border-color: rgba(255, 255, 255, .08); box-shadow: var(--shadow-card); }
 :root[data-theme="dark"] .vt-app .vt-account-trip,
-:root[data-theme="dark"] .vt-app .vt-channel-tile { border-color: rgba(255, 255, 255, .09); }
+:root[data-theme="dark"] .vt-app .vt-channel-tile { border-color: var(--card-border); }
 
 /* Saved trip library hierarchy. */
 .vt-app .vt-main--trips .vt-trip-library { display: grid; gap: 26px; padding: 32px var(--vt-flat-gutter) 48px; }
@@ -975,17 +1014,17 @@ button { font: inherit; }
 .vt-app .vt-trip-library__kicker { margin: 0; color: var(--vt-accent-text); font-size: .72rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
 .vt-app .vt-trip-library__header h1 { margin: 5px 0 0; color: var(--ink); font-size: clamp(2rem, 7vw, 2.5rem); font-weight: 650; line-height: 1.08; }
 .vt-app .vt-trip-library__header p:last-child { margin: 9px 0 0; color: var(--ink-2); font-size: .9rem; line-height: 1.55; }
-.vt-app .vt-trip-library__add { display: inline-flex; align-items: center; justify-content: center; gap: 9px; width: 100%; min-height: 50px; padding: 11px 20px; border: 1px solid var(--accent-action); border-radius: 999px; background: var(--accent-action); color: var(--accent-action-ink); box-shadow: 0 8px 20px color-mix(in srgb, var(--accent-action) 22%, transparent); font-size: .9rem; font-weight: 800; cursor: pointer; transition: filter .18s ease, transform .12s ease; }
+.vt-app .vt-trip-library__add { display: inline-flex; align-items: center; justify-content: center; gap: 9px; width: 100%; min-height: 50px; padding: 11px 20px; border: 1px solid var(--accent-action); border-radius: var(--r-pill); background: var(--accent-action); color: var(--accent-action-ink); box-shadow: 0 8px 20px color-mix(in srgb, var(--accent-action) 22%, transparent); font-size: .9rem; font-weight: 800; cursor: pointer; transition: filter .18s ease, transform .12s ease; }
 .vt-app .vt-trip-library__add:hover { filter: brightness(.9); }
 .vt-app .vt-trip-library__add:active { filter: brightness(.82); transform: scale(.98); }
-.vt-app .vt-trip-library__notice { margin: 0; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--warn) 24%, var(--line)); border-radius: 14px; background: color-mix(in srgb, var(--warn) 9%, var(--surface)); color: var(--ink); font-size: .82rem; line-height: 1.5; }
+.vt-app .vt-trip-library__notice { margin: 0; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--warn) 24%, var(--line)); border-radius: var(--r); background: color-mix(in srgb, var(--warn) 9%, var(--surface)); color: var(--ink); font-size: .82rem; line-height: 1.5; }
 .vt-app .vt-trip-group { display: grid; gap: 14px; }
 .vt-app .vt-trip-group + .vt-trip-group { padding-top: 8px; }
 .vt-app .vt-trip-group__heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .vt-app .vt-trip-group__heading h2 { margin: 0; color: var(--ink); font-size: 1.18rem; font-weight: 700; }
-.vt-app .vt-trip-group__heading > span { display: inline-flex; align-items: center; justify-content: center; min-height: 28px; padding: 5px 10px; border-radius: 999px; background: var(--tint); color: var(--vt-accent-text); font-size: .7rem; font-weight: 800; line-height: 1; white-space: nowrap; }
+.vt-app .vt-trip-group__heading > span { display: inline-flex; align-items: center; justify-content: center; min-height: 28px; padding: 5px 10px; border-radius: var(--r-pill); background: var(--tint); color: var(--vt-accent-text); font-size: .7rem; font-weight: 800; line-height: 1; white-space: nowrap; }
 .vt-app .vt-trip-grid { display: grid; grid-auto-rows: 1fr; align-items: stretch; gap: 14px; }
-.vt-app .vt-saved-trip { display: flex; flex-direction: column; min-width: 0; height: 100%; overflow: hidden; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .03); }
+.vt-app .vt-saved-trip { display: flex; flex-direction: column; min-width: 0; height: 100%; overflow: hidden; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-card); }
 .vt-app .vt-saved-trip__media { position: relative; isolation: isolate; flex: 0 0 140px; height: 140px; overflow: hidden; background: linear-gradient(135deg, color-mix(in srgb, var(--vt-accent) 28%, var(--surface-2)), color-mix(in srgb, var(--vt-accent-2) 13%, var(--surface))); }
 .vt-app .vt-saved-trip__media::before { content: ""; position: absolute; inset: 0; z-index: -1; background: radial-gradient(circle at 18% 26%, color-mix(in srgb, var(--vt-accent-text) 17%, transparent) 0 2px, transparent 3px) 0 0 / 26px 26px, linear-gradient(145deg, transparent 40%, color-mix(in srgb, var(--vt-accent) 12%, transparent)); opacity: .72; }
 .vt-app .vt-saved-trip__media::after { content: ""; position: absolute; right: -28px; bottom: -64px; z-index: -1; width: 170px; height: 170px; border: 1px solid color-mix(in srgb, var(--vt-accent-text) 18%, transparent); border-radius: 50%; box-shadow: 0 0 0 26px color-mix(in srgb, var(--vt-accent-text) 5%, transparent), 0 0 0 52px color-mix(in srgb, var(--vt-accent-text) 3%, transparent); }
@@ -995,7 +1034,7 @@ button { font: inherit; }
 .vt-app .vt-saved-trip__header h3 { margin: 0; overflow-wrap: anywhere; color: var(--ink); font-size: 1.14rem; font-weight: 700; line-height: 1.25; }
 .vt-app .vt-saved-trip__header > div:first-child > p { margin: 6px 0 0; color: var(--ink-2); font-size: .73rem; font-weight: 700; letter-spacing: .035em; overflow-wrap: anywhere; }
 .vt-app .vt-saved-trip__aside { display: grid; justify-items: end; gap: 10px; }
-.vt-app .vt-saved-trip__status { max-width: 16ch; padding: 6px 9px; border-radius: 999px; background: var(--accent-status-bg); color: var(--vt-accent-text); font-size: .6rem; font-weight: 850; letter-spacing: .08em; line-height: 1.1; text-align: center; text-transform: uppercase; }
+.vt-app .vt-saved-trip__status { max-width: 16ch; padding: 6px 9px; border-radius: var(--r-pill); background: var(--accent-status-bg); color: var(--vt-accent-text); font-size: .6rem; font-weight: 850; letter-spacing: .08em; line-height: 1.1; text-align: center; text-transform: uppercase; }
 .vt-app .vt-saved-trip__status--past { background: color-mix(in srgb, var(--ink-3) 11%, var(--surface)); color: var(--ink-2); }
 .vt-app .vt-saved-trip__status--danger { background: color-mix(in srgb, var(--bad) 13%, var(--surface)); color: var(--bad); }
 .vt-app .vt-saved-trip__utilities { display: flex; gap: 7px; }
@@ -1011,7 +1050,7 @@ button { font: inherit; }
 .vt-app .vt-saved-trip__freshness { margin: 7px 0 20px; color: var(--ink-3); font-size: .72rem; font-weight: 650; }
 .vt-app .vt-saved-trip__freshness.is-fresh { color: var(--ok); }
 .vt-app .vt-saved-trip__freshness.is-error { color: var(--bad); }
-.vt-app .vt-saved-trip__open { display: inline-flex; align-items: center; justify-content: center; gap: 9px; width: 100%; min-height: 48px; margin-top: auto; padding: 10px 18px; border: 1px solid var(--accent-action); border-radius: 999px; background: var(--accent-action); color: var(--accent-action-ink); box-shadow: 0 7px 18px color-mix(in srgb, var(--accent-action) 20%, transparent); font-size: .88rem; font-weight: 800; cursor: pointer; transition: filter .18s ease, transform .12s ease; }
+.vt-app .vt-saved-trip__open { display: inline-flex; align-items: center; justify-content: center; gap: 9px; width: 100%; min-height: 48px; margin-top: auto; padding: 10px 18px; border: 1px solid var(--accent-action); border-radius: var(--r-pill); background: var(--accent-action); color: var(--accent-action-ink); box-shadow: 0 7px 18px color-mix(in srgb, var(--accent-action) 20%, transparent); font-size: .88rem; font-weight: 800; cursor: pointer; transition: filter .18s ease, transform .12s ease; }
 .vt-app .vt-saved-trip__open:hover { filter: brightness(.9); }
 .vt-app .vt-saved-trip__open:active { filter: brightness(.82); transform: scale(.98); }
 @media (min-width: 640px) {
@@ -1019,7 +1058,7 @@ button { font: inherit; }
   .vt-app .vt-trip-library__add { flex: 0 0 auto; width: auto; }
   .vt-app .vt-trip-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-:root[data-theme="dark"] .vt-app .vt-saved-trip { border-color: rgba(255, 255, 255, .09); box-shadow: 0 8px 28px rgba(0, 0, 0, .22); }
+:root[data-theme="dark"] .vt-app .vt-saved-trip { border-color: var(--card-border); box-shadow: var(--shadow-card); }
 :root[data-theme="dark"] .vt-app .vt-saved-trip__icon-button { border-color: rgba(255, 255, 255, .1); }
 
 @media (min-width: 760px) and (max-width: 1023px) {
@@ -1051,7 +1090,7 @@ button { font: inherit; }
   .vt-app .vt-main:not(.vt-main--home):not(.vt-main--itinerary):not(.vt-main--payments):not(.vt-main--documents):not(.vt-main--help):not(.vt-main--account):not(.vt-main--trips) { padding-top: 18px; }
   .vt-app .vt-hero { min-height: 440px; }
   .vt-app .vt-section { padding-top: 36px; }
-  .vt-app .vt-card { padding: 22px; }
+  .vt-app .vt-card { padding: var(--card-pad); }
   .vt-app .vt-el__row { padding: 18px; }
 }
 
@@ -1091,8 +1130,6 @@ button { font: inherit; }
     --fs-4: 1.25rem;
     --fs-5: 1.5rem;
     --nav-h: 60px;
-    --r: 16px;
-    --r-l: 16px;
   }
 
   body.vt { font-size: .875rem; line-height: 1.5; padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px)); }
@@ -1110,7 +1147,7 @@ button { font: inherit; }
     .vt-countdown-card, .vt-booking-journey-card, .vt-faq-card, .vt-home-info-card, .vt-travellers-card,
     .vt-weather-card, .vt-guide-card, .vt-value-props, .vt-home-footer, .vt-update-card, .vt-why-book-card,
     .vt-payment-card, .vt-doc-group, .vt-main--help .vt-help-card
-  ) { padding: 16px; border-radius: 16px; }
+  ) { padding: 16px; border-radius: var(--r); }
   .vt-app :is(
     .vt-tailor-section, .vt-faq-card, .vt-home-info-card, .vt-travellers-card, .vt-weather-section, .vt-guide-section,
     .vt-destination-section, .vt-value-props, .vt-inspiration, .vt-upsell-section, .vt-updates-section, .vt-why-book-card,
@@ -1123,23 +1160,23 @@ button { font: inherit; }
     .vt-tailor-card, .vt-destination-card, .vt-upsell-card, .vt-update-card, .vt-why-book-card,
     .vt-value-props, .vt-weather-card, .vt-guide-card, .vt-payment-card, .vt-doc-group,
     .vt-main--documents .vt-doc-button, .vt-main--help .vt-help-card, .vt-contact-card
-  ) { border-radius: 16px; }
+  ) { border-radius: var(--r); }
 
-  .vt-app .vt-main--home .vt-hero { min-height: 300px; border-radius: 16px; }
+  .vt-app .vt-main--home .vt-hero { min-height: 300px; border-radius: var(--r); }
   .vt-app .vt-main--home .vt-hero__body { gap: 6px; padding: 16px; }
   .vt-app .vt-main--home .vt-hero__title { font-size: 1.5rem; line-height: 1.1; }
   .vt-app .vt-main--home .vt-hero__facts { gap: 5px; }
   .vt-app .vt-main--home .vt-hero__facts li { padding: 5px 9px; font-size: .72rem; }
   .vt-app .vt-main--home .vt-hero__calendar { min-height: 44px; padding: 8px 15px; font-size: .8rem; }
   .vt-app .vt-destination-card__media { height: 170px; max-height: 170px; }
-  .vt-app .vt-destination-card__body { gap: 12px; padding: 16px; }
+  .vt-app .vt-destination-card__body { gap: 12px; padding: var(--card-pad); }
   .vt-app .vt-upsell-card { min-height: 160px; }
   .vt-app .vt-upsell-card__media img { min-height: 160px; max-height: 180px; }
   .vt-app .vt-main--home img.h-56 { height: 180px; max-height: 180px; }
-  .vt-app .vt-main--home :is(.rounded-3xl, .rounded-2xl) { border-radius: 16px; }
+  .vt-app .vt-main--home :is(.rounded-3xl, .rounded-2xl) { border-radius: var(--r); }
 
   .vt-app .vt-countdown-card__units { gap: 8px; margin-top: 12px; }
-  .vt-app .vt-countdown-card__unit { padding: 12px 6px; border-radius: 12px; }
+  .vt-app .vt-countdown-card__unit { padding: 12px 6px; border-radius: var(--r-s); }
   .vt-app .vt-countdown-card__unit strong { font-size: 1.65rem; }
   .vt-app .vt-booking-timeline { margin-top: 18px; }
   .vt-app .vt-booking-step { gap: 12px; padding-bottom: 20px; }
@@ -1289,7 +1326,7 @@ body.vt .vt-app :is(
   height: 44px;
   min-height: 44px;
   padding: 0 18px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   font-family: var(--vt-font-family);
   font-size: 14px;
   line-height: 20px;
@@ -1361,7 +1398,7 @@ body.vt .vt-app .vt-selected-airport {
   min-height: 40px;
   padding: 3px 4px 3px 12px;
   border: 1px solid color-mix(in srgb, var(--vt-accent) 32%, var(--line));
-  border-radius: 16px;
+  border-radius: var(--r);
   background: var(--surface-2);
   color: var(--ink);
   font-family: var(--vt-font-family);
@@ -1379,7 +1416,7 @@ body.vt .vt-app .vt-selected-airport button {
   min-height: 32px;
   padding: 0;
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--r-s);
   background: transparent;
   color: var(--ink-2);
   transition: background-color .18s ease, color .18s ease, transform .12s ease;
@@ -1398,7 +1435,7 @@ body.vt .vt-app .vt-month-chip {
   min-height: 36px;
   padding: 4px 8px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r-s);
   background: var(--surface-2);
   color: var(--ink);
   box-shadow: 0 2px 6px rgba(20, 22, 24, .05);
@@ -1418,16 +1455,16 @@ body.vt .vt-app .vt-month-chip.is-selected {
 body.vt .vt-app .vt-account-danger {
   gap: 12px;
   padding: 16px;
-  border-radius: 16px;
+  border-radius: var(--r);
 }
-body.vt .vt-app .vt-account-danger__icon { width: 44px; height: 44px; border-radius: 12px; }
+body.vt .vt-app .vt-account-danger__icon { width: 44px; height: 44px; border-radius: var(--r-s); }
 body.vt .vt-app .vt-account-danger button {
   min-width: 44px;
   height: 44px;
   min-height: 44px;
   padding: 0 18px;
   border: 1px solid color-mix(in srgb, var(--bad) 82%, #5f1712);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--bad) 78%, #7f1d1d);
   color: #fff;
   font-family: var(--vt-font-family);
@@ -1441,7 +1478,7 @@ body.vt .vt-app .vt-account-danger button:focus-visible { outline: 3px solid col
 body.vt .vt-app .vt-account-danger button:active { transform: scale(.97); }
 
 @media (max-width: 768px) {
-  body.vt .vt-app .vt-account-card { padding: 16px; }
+  body.vt .vt-app .vt-account-card { padding: var(--card-pad); }
   body.vt .vt-app .vt-month-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
@@ -1457,7 +1494,7 @@ body.vt .vt-app .vt-account-danger button:active { transform: scale(.97); }
 :root[data-theme="dark"] body.vt .vt-app :is(.vt-selected-airport, .vt-month-chip) {
   border-color: rgba(255, 255, 255, .12);
   background: color-mix(in srgb, var(--surface-2) 92%, #000);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .025);
+  box-shadow: var(--shadow-card-sm);
 }
 :root[data-theme="dark"] body.vt .vt-app .vt-month-chip.is-selected {
   border-color: var(--accent-action);
