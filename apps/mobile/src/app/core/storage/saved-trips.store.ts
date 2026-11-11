@@ -26,6 +26,11 @@ export class SavedTripsStore {
     else localStorage.setItem('vision-trips:device-trust', token);
   }
 
+  async clearDeviceTrust(): Promise<void> {
+    if (Capacitor.isNativePlatform()) await SecureStorage.remove('device:trust');
+    else localStorage.removeItem('vision-trips:device-trust');
+  }
+
   async save(snapshot: TripSnapshot, session: MobileSession): Promise<boolean> {
     const key = `trip:${snapshot.tripId}`;
     const saved: SavedTrip = { snapshot, session, savedAt: new Date().toISOString() };

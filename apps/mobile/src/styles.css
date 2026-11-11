@@ -1506,3 +1506,9 @@ body.vt .vt-app .vt-account-danger button:active { transform: scale(.97); }
   border-color: color-mix(in srgb, var(--bad) 30%, var(--line));
   background: color-mix(in srgb, var(--bad) 8%, var(--surface));
 }
+
+/* Trip-level error message: fixed above the bottom navigation so it is visible at any scroll position. */
+.vt-app .vt-trip-error { position: fixed; left: var(--sp-4); right: var(--sp-4); bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + var(--sp-3)); z-index: 60; display: flex; align-items: flex-start; gap: var(--sp-2); max-width: 560px; margin: 0 auto; padding: var(--sp-3) var(--sp-3) var(--sp-3) var(--sp-4); border: 1px solid color-mix(in srgb, var(--bad) 30%, var(--line)); border-radius: var(--r); background: color-mix(in srgb, var(--bad) 10%, var(--surface)); color: var(--ink); font-weight: 600; box-shadow: var(--shadow-raised); }
+.vt-app .vt-trip-error p { flex: 1; margin: 0; line-height: 1.45; }
+.vt-app .vt-trip-error__close { display: grid; place-items: center; flex: 0 0 auto; width: 32px; height: 32px; margin: -4px -4px -4px 0; padding: 0; border: 0; border-radius: var(--r-pill); background: transparent; color: var(--ink-2); cursor: pointer; }
+.vt-app .vt-trip-error__close:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); }

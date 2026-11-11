@@ -35,6 +35,20 @@ export class DocumentWalletStore {
     catch { return null; }
   }
 
+  /** Deletes every saved file for one trip (or all trips when tripId is omitted) and drops their index entries. */
+  async remove(tripId?: string): Promise<void> {
+    if (!Capacitor.isNativePlatform()) return;
+    const entries = await this.entries();
+    const keep: WalletEntry[] = [];
+    for (const entry of entries) {
+      if (tripId !== undefined && entry.tripId !== tripId) { keep.push(entry); continue; }
+      try { await Filesystem.deleteFile({ path: entry.path, directory: Directory.Data }); } catch { /* File is already absent. */ }
+    }
+    const folder = tripId === undefined ? 'document-wallet' : `document-wallet/${safe(tripId)}`;
+    try { await Filesystem.rmdir({ path: folder, directory: Directory.Data, recursive: true }); } catch { /* Folder is already absent. */ }
+    await Preferences.set({ key: 'document-wallet:index', value: JSON.stringify(keep) });
+  }
+
   private async entries(): Promise<WalletEntry[]> {
     if (!Capacitor.isNativePlatform()) return [];
     const value = (await Preferences.get({ key: 'document-wallet:index' })).value;

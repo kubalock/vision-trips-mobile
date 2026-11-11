@@ -226,12 +226,12 @@ export class App implements OnInit, OnDestroy {
     this.submitting.set(true);
     this.error.set('');
     try {
-      const result = await this.api.acceptQuotation({
+      const result = await this.withSession(currentSession, (accessToken) => this.api.acceptQuotation({
         name: this.acceptanceName().trim(),
         email: this.acceptanceEmail().trim(),
         agreed: true,
         confirmations: this.acceptanceConfirmations(),
-      }, currentSession.accessToken);
+      }, accessToken));
       this.acceptanceComplete.set(true);
       await this.customerNotifications.quoteAccepted(currentTrip);
       this.loadCustomerNotifications(currentTrip.tripId);
@@ -270,7 +270,7 @@ export class App implements OnInit, OnDestroy {
     this.submitting.set(true);
     this.error.set('');
     try {
-      await this.api.sendMessage({ topic: this.messageTopic(), message: this.customerMessage().trim() }, currentSession.accessToken);
+      await this.withSession(currentSession, (accessToken) => this.api.sendMessage({ topic: this.messageTopic(), message: this.customerMessage().trim() }, accessToken));
       this.messageSent.set(true);
       await this.refreshTripAfterWrite();
     } catch (error) {
@@ -294,7 +294,7 @@ export class App implements OnInit, OnDestroy {
     this.paymentReturnState.set('idle');
     this.error.set('');
     try {
-      const link = await this.api.paymentLink(paymentId, currentSession.accessToken);
+      const link = await this.withSession(currentSession, (accessToken) => this.api.paymentLink(paymentId, accessToken));
       this.paymentPaidBefore = payments.paid;
       this.paymentIdAwaiting = paymentId;
       this.paymentAwaitingReturn = true;
@@ -313,7 +313,7 @@ export class App implements OnInit, OnDestroy {
     if (!currentSession || !payments?.customPayments.enabled || this.openingPaymentId() || !this.online()) return;
     this.openingPaymentId.set('custom'); this.paymentReturnState.set('idle'); this.error.set('');
     try {
-      const link = await this.api.customPaymentLink(amount, currentSession.accessToken);
+      const link = await this.withSession(currentSession, (accessToken) => this.api.customPaymentLink(amount, accessToken));
       this.paymentPaidBefore = payments.paid; this.paymentIdAwaiting = null; this.paymentAwaitingReturn = true; this.paymentOpenedAt = Date.now();
       window.open(link.url, '_blank', 'noopener,noreferrer');
     } catch (error) { this.error.set(this.apiError(error, 'We could not create that payment link. Check the amount and try again.')); this.paymentReturnState.set('error'); }
@@ -328,7 +328,7 @@ export class App implements OnInit, OnDestroy {
     this.shareResult.set('');
     this.error.set('');
     try {
-      const link = await this.api.fellowTravellerLink(currentSession.accessToken);
+      const link = await this.withSession(currentSession, (accessToken) => this.api.fellowTravellerLink(accessToken));
       const text = `View ${currentTrip.summary.name} in Vision Trips. This restricted link expires ${formatEuropeanDate(link.expiresAt)}.`;
       try {
         await Share.share({ title: currentTrip.summary.name, text, url: link.url, dialogTitle: 'Share trip' });
@@ -371,7 +371,7 @@ export class App implements OnInit, OnDestroy {
       let reconciled = false;
       for (let attempt = 0; attempt < 6; attempt += 1) {
         if (attempt > 0) await delay(2_000);
-        latest = await this.api.refreshTrip(currentSession.accessToken);
+        latest = await this.withSession(this.session() ?? currentSession, (accessToken) => this.api.refreshTrip(accessToken));
         const paidNow = latest.payments?.paid ?? 0;
         const itemNow = latest.payments?.items.find((item) => item.id === this.paymentIdAwaiting);
         reconciled = paidNow > this.paymentPaidBefore || itemNow?.status === 'paid';
@@ -384,7 +384,7 @@ export class App implements OnInit, OnDestroy {
         await this.syncCustomerNotifications(previous, latest);
         void this.loadExternalContent(false);
         await this.refreshDocumentStatuses(latest);
-        this.storedSecurely.set(await this.savedTrips.save(latest, currentSession));
+        this.storedSecurely.set(await this.savedTrips.save(latest, this.session() ?? currentSession));
         await this.reloadSavedTrips();
       }
       this.paymentReturnState.set(reconciled ? 'updated' : 'unchanged');
@@ -399,14 +399,14 @@ export class App implements OnInit, OnDestroy {
     const currentSession = this.session();
     if (!currentSession) return;
     try {
-      const snapshot = await this.api.refreshTrip(currentSession.accessToken);
+      const snapshot = await this.withSession(currentSession, (accessToken) => this.api.refreshTrip(accessToken));
       const previous = this.trip();
       this.trip.set(snapshot);
       await this.loadBrandLogo(snapshot, true);
       await this.syncCustomerNotifications(previous, snapshot);
       void this.loadExternalContent(false);
       await this.refreshDocumentStatuses(snapshot);
-      this.storedSecurely.set(await this.savedTrips.save(snapshot, currentSession));
+      this.storedSecurely.set(await this.savedTrips.save(snapshot, this.session() ?? currentSession));
       await this.reloadSavedTrips();
     } catch {
       // The write already succeeded. Keep the optimistic state and refresh next time the trip opens.
@@ -541,7 +541,12 @@ export class App implements OnInit, OnDestroy {
     if (response.trustedDeviceToken) await this.savedTrips.saveDeviceTrust(response.trustedDeviceToken);
   }
 
+  protected dismissError(): void {
+    this.error.set('');
+  }
+
   protected selectView(view: AppView): void {
+    this.error.set('');
     this.showTripLibrary.set(false);
     this.activeView.set(view);
     this.trackEngagement('section_opened', view);
@@ -615,6 +620,8 @@ export class App implements OnInit, OnDestroy {
     const refreshTokens = [...new Set([this.session()?.refreshToken, ...saved.map((trip) => trip.session.refreshToken)].filter((token): token is string => Boolean(token)))];
     await Promise.allSettled(refreshTokens.map((refreshToken) => this.api.revokeSession(refreshToken)));
     for (const trip of saved) { await this.savedTrips.remove(trip.snapshot.tripId); await this.brandAssets.remove(trip.snapshot.tripId); this.customerNotifications.clear(trip.snapshot.tripId); }
+    await this.documentWallet.remove();
+    await this.savedTrips.clearDeviceTrust();
     this.clearOpenTrip(); this.savedTripList.set([]); this.showTripLibrary.set(false); this.storedSecurely.set(false);
   }
 
@@ -681,7 +688,8 @@ export class App implements OnInit, OnDestroy {
     if (this.tripRefreshStates()[tripId] === 'refreshing') return;
     this.setTripRefreshState(tripId, 'refreshing');
     try {
-      let session = await this.sessionForRequest(saved.session);
+      const openSession = this.trip()?.tripId === tripId ? this.session() : null;
+      let session = await this.sessionForRequest(openSession ?? saved.session);
       let snapshot: TripSnapshot;
       try {
         snapshot = await this.api.refreshTrip(session.accessToken);
@@ -712,8 +720,11 @@ export class App implements OnInit, OnDestroy {
   protected async removeSavedTrip(saved: SavedTrip, event?: Event): Promise<void> {
     event?.stopPropagation();
     if (!window.confirm(`Remove ${saved.snapshot.summary.name} from this device?`)) return;
+    const openSession = this.trip()?.tripId === saved.snapshot.tripId ? this.session() : null;
+    void this.api.revokeSession((openSession ?? saved.session).refreshToken).catch(() => undefined);
     await this.savedTrips.remove(saved.snapshot.tripId);
     await this.brandAssets.remove(saved.snapshot.tripId);
+    await this.documentWallet.remove(saved.snapshot.tripId);
     this.customerNotifications.clear(saved.snapshot.tripId);
     this.savedTripList.update((trips) => trips.filter((trip) => trip.snapshot.tripId !== saved.snapshot.tripId));
     this.tripRefreshStates.update((states) => {
@@ -922,6 +933,8 @@ export class App implements OnInit, OnDestroy {
         const snapshot = this.trip();
         if (snapshot) this.storedSecurely.set(await this.savedTrips.save(snapshot, session));
       }
+      // The old refresh token is now dead server-side; keep the in-memory library in step with storage.
+      this.savedTripList.update((trips) => trips.map((trip) => trip.session.refreshToken === refreshToken ? { ...trip, session } : trip));
       return session;
     }).finally(() => {
       this.sessionRefreshes.delete(refreshToken);
@@ -936,7 +949,7 @@ export class App implements OnInit, OnDestroy {
     if (!session || !trip) return;
     this.error.set('');
     try {
-      const blob = await this.api.downloadCalendar(session.accessToken);
+      const blob = await this.withSession(session, (accessToken) => this.api.downloadCalendar(accessToken));
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
@@ -962,7 +975,8 @@ export class App implements OnInit, OnDestroy {
         if (uri) { await Share.share({ title: document.title, files: [uri], dialogTitle: 'Open or share document' }); return; }
       }
       if (!this.online()) throw new Error('offline');
-      const blob = await this.api.downloadDocument(document.downloadAction, session.accessToken);
+      const action = document.downloadAction;
+      const blob = await this.withSession(session, (accessToken) => this.api.downloadDocument(action, accessToken));
       if (await this.documentWallet.save(trip.tripId, document, blob)) {
         await this.refreshDocumentStatuses(trip);
         const uri = await this.documentWallet.uri(trip.tripId, document.id);
