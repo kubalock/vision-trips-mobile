@@ -603,28 +603,67 @@ button { font: inherit; }
 /* Itinerary-specific day and event hierarchy. */
 .vt-app .vt-main--itinerary .vt-section:first-child { border-top: 0; }
 .vt-app .vt-main--itinerary #itinerary-title { margin-bottom: 24px; }
-.vt-app .vt-main--itinerary .vt-days,
-.vt-app .vt-main--itinerary .vt-day__items { gap: 0; }
-.vt-app .vt-main--itinerary .vt-days > section + section {
-  margin-top: 32px;
-  padding-top: 32px;
-  border-top: 1px solid var(--line);
+.vt-app .vt-main--itinerary .vt-days { display: grid; gap: 16px; }
+.vt-app .vt-main--itinerary .vt-day-card {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--ink) 7%, transparent);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, .03);
 }
-.vt-app .vt-main--itinerary .vt-day__head { margin-left: 0; }
+.vt-app .vt-main--itinerary .vt-day__head { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; }
+.vt-app .vt-main--itinerary .vt-day__n { flex: 0 0 auto; margin: 0; padding: 6px 10px; border-radius: 999px; background: var(--tint); color: var(--vt-accent-text); font-size: .7rem; font-weight: 850; letter-spacing: .06em; line-height: 1; text-transform: uppercase; }
+.vt-app .vt-main--itinerary .vt-day__label { margin: 0; color: var(--ink); font-family: var(--vt-body); font-size: 1rem; font-weight: 800; line-height: 1.3; }
+.vt-app .vt-main--itinerary .vt-day__items { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
 .vt-app .vt-main--itinerary .vt-el {
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-2);
   box-shadow: none;
 }
-.vt-app .vt-main--itinerary .vt-el + .vt-el { border-top: 1px solid var(--line); }
-.vt-app .vt-main--itinerary .vt-el__row { padding: 20px 0; }
-.vt-app .vt-main--itinerary .vt-el__row > :is(dl, div).bg-slate-50 {
-  padding: 16px 0 0;
-  border-top: 1px solid var(--line);
-  border-radius: 0;
-  background: transparent;
-}
+.vt-app .vt-main--itinerary .vt-el__row { padding: 16px; }
+.vt-app .vt-main--itinerary .vt-el__main { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.vt-app .vt-main--itinerary .vt-el__kind { margin: 0 0 3px; color: var(--vt-accent-text); font-size: .68rem; font-weight: 850; letter-spacing: .08em; line-height: 1.2; text-transform: uppercase; }
+.vt-app .vt-main--itinerary .vt-el__title { margin: 0; color: var(--ink); font-size: 1.05rem; line-height: 1.35; }
+.vt-app .vt-main--itinerary .vt-chip { flex: 0 0 auto; margin: 0; padding: 5px 9px; border-radius: 999px; background: var(--tint); color: var(--vt-accent-text); font-size: .72rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; }
+.vt-app .vt-main--itinerary :is(.vt-el__route, .vt-el__meta) { margin: 9px 0 0; color: var(--ink-2); font-size: .8rem; line-height: 1.5; }
+.vt-app .vt-main--itinerary .vt-el__route { color: var(--ink); font-weight: 700; }
+.vt-app .vt-itinerary-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin: 14px 0 0; }
+.vt-app .vt-itinerary-meta > div { min-width: 0; padding: 10px 11px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); }
+.vt-app :is(.vt-itinerary-meta, .vt-itinerary-detail, .vt-itinerary-reference) dt { color: var(--ink-3); font-size: .66rem; font-weight: 750; letter-spacing: .04em; line-height: 1.35; text-transform: uppercase; }
+.vt-app :is(.vt-itinerary-meta, .vt-itinerary-detail, .vt-itinerary-reference) dd { min-width: 0; margin: 3px 0 0; overflow-wrap: anywhere; color: var(--ink); font-size: .78rem; font-weight: 700; line-height: 1.45; }
+.vt-app .vt-itinerary-detail { margin-top: 14px; padding: 13px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.vt-app .vt-itinerary-detail h4 { margin: 0; color: var(--ink); font-family: var(--vt-body); font-size: .84rem; font-weight: 800; line-height: 1.4; }
+.vt-app .vt-itinerary-detail dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; margin: 11px 0 0; }
+.vt-app .vt-itinerary-disclosure { margin-top: 14px; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); }
+.vt-app .vt-itinerary-disclosure summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 46px; padding: 11px 13px; cursor: pointer; font-size: .8rem; font-weight: 800; list-style: none; }
+.vt-app .vt-itinerary-disclosure summary::-webkit-details-marker { display: none; }
+.vt-app .vt-itinerary-disclosure summary em { display: inline-flex; margin-left: 5px; padding: 4px 7px; border-radius: 999px; background: var(--tint); color: var(--vt-accent-text); font-size: .62rem; font-style: normal; line-height: 1; }
+.vt-app .vt-itinerary-disclosure summary vt-icon { flex: 0 0 auto; color: var(--ink-2); transition: transform .2s ease; }
+.vt-app .vt-itinerary-disclosure[open] summary vt-icon { transform: rotate(180deg); }
+.vt-app .vt-itinerary-disclosure[open] summary { border-bottom: 1px solid var(--line); }
+.vt-app .vt-passenger-list { display: grid; gap: 10px; padding: 13px; }
+.vt-app .vt-passenger-list > div + div { padding-top: 10px; border-top: 1px solid var(--line); }
+.vt-app .vt-passenger-list p { margin: 0; color: var(--ink); font-size: .78rem; font-weight: 750; }
+.vt-app .vt-passenger-list span { display: block; margin-top: 2px; color: var(--ink-2); font-size: .73rem; line-height: 1.5; }
+.vt-app .vt-cruise-timeline { display: grid; gap: 0; margin: 0; padding: 14px; list-style: none; }
+.vt-app .vt-cruise-timeline li { position: relative; display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 11px; min-width: 0; padding-bottom: 18px; }
+.vt-app .vt-cruise-timeline li:not(:last-child)::before { content: ""; position: absolute; top: 13px; bottom: -1px; left: 6px; width: 2px; background: color-mix(in srgb, var(--vt-accent) 28%, var(--line)); }
+.vt-app .vt-cruise-timeline li:last-child { padding-bottom: 0; }
+.vt-app .vt-cruise-timeline__node { position: relative; z-index: 1; width: 14px; height: 14px; margin-top: 3px; border: 3px solid var(--surface); border-radius: 50%; background: var(--accent-action); box-shadow: 0 0 0 1px color-mix(in srgb, var(--vt-accent) 45%, var(--line)); }
+.vt-app .vt-cruise-timeline__title { margin: 0; color: var(--ink); font-size: .8rem; font-weight: 800; line-height: 1.4; }
+.vt-app .vt-cruise-timeline__time { margin: 2px 0 0; color: var(--vt-accent-text); font-size: .69rem; font-weight: 750; font-variant-numeric: tabular-nums; line-height: 1.4; }
+.vt-app .vt-cruise-timeline__description { margin: 5px 0 0; color: var(--ink-2); font-size: .74rem; line-height: 1.55; }
+.vt-app .vt-itinerary-reference { display: flex; flex-wrap: wrap; gap: 10px 20px; margin: 14px 0 0; padding-top: 13px; border-top: 1px solid var(--line); }
+.vt-app .vt-itinerary-reference > div { min-width: min(100%, 130px); }
+.vt-app .vt-itinerary-notes { margin: 14px 0 0; padding-top: 13px; border-top: 1px solid var(--line); color: var(--ink-2); font-size: .78rem; line-height: 1.6; white-space: pre-line; }
+:root[data-theme="dark"] .vt-app .vt-main--itinerary .vt-day-card { border-color: rgba(255, 255, 255, .09); box-shadow: 0 8px 28px rgba(0, 0, 0, .22); }
+:root[data-theme="dark"] .vt-app .vt-main--itinerary .vt-el,
+:root[data-theme="dark"] .vt-app :is(.vt-itinerary-meta > div, .vt-itinerary-detail, .vt-itinerary-disclosure) { border-color: rgba(255, 255, 255, .09); }
+:root[data-theme="dark"] .vt-app .vt-main--itinerary :is(.vt-day__n, .vt-chip, .vt-itinerary-disclosure summary em) { background: rgba(115, 208, 194, .14); color: #8de3d5; }
 
 /* Payments-specific totals and transaction hierarchy. */
 .vt-app .vt-main--payments { padding-bottom: 32px; }
@@ -1039,3 +1078,101 @@ button { font: inherit; }
 
 /* The shared web theme adds a dark-mode logo plate; the app keeps an identical header footprint in both modes. */
 :root[data-theme="dark"] .vt-app .vt-top__brand { background: transparent; border-radius: 0; padding: 0; }
+
+/* App-wide compact mobile/tablet scale. Kept last so legacy component spacing cannot re-expand <=768px layouts. */
+@media (max-width: 768px) {
+  :root {
+    --fs-0: .8125rem;
+    --fs-1: .875rem;
+    --fs-2: 1rem;
+    --fs-3: 1.125rem;
+    --fs-4: 1.25rem;
+    --fs-5: 1.5rem;
+    --nav-h: 60px;
+    --r: 16px;
+    --r-l: 16px;
+  }
+
+  body.vt { font-size: .875rem; line-height: 1.5; padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px)); }
+  .vt-app main:is(.vt-main--home, .vt-main--itinerary, .vt-main--payments, .vt-main--documents, .vt-main--help) { --vt-flat-gutter: 16px; padding-bottom: 20px; }
+  .vt-app :is(.vt-main--home, .vt-main--itinerary, .vt-main--payments, .vt-main--documents, .vt-main--help) .vt-section { padding: 20px var(--vt-flat-gutter) 12px; }
+
+  .vt-app :is(.vt-main--home, .vt-main--itinerary, .vt-main--payments, .vt-main--documents, .vt-main--help) h1,
+  .vt-app :is(.vt-payments__heading, .vt-documents__heading, .vt-help-heading) h1 { font-size: 1.5rem; line-height: 1.15; }
+  .vt-app :is(.vt-main--home, .vt-main--itinerary, .vt-main--payments, .vt-main--documents, .vt-main--help) .vt-h2,
+  .vt-app :is(.vt-lower-section__header, .vt-booking-journey-card__header) h2,
+  .vt-app :is(.vt-payment-card__heading, .vt-doc-group__heading, .vt-help-card) h2 { font-size: 1.125rem; line-height: 1.25; }
+  .vt-app :is(.vt-main--home, .vt-main--itinerary, .vt-main--payments, .vt-main--documents, .vt-main--help) :is(p, li, dd, dt, label) { line-height: 1.5; }
+
+  .vt-app :is(
+    .vt-countdown-card, .vt-booking-journey-card, .vt-faq-card, .vt-home-info-card, .vt-travellers-card,
+    .vt-weather-card, .vt-guide-card, .vt-value-props, .vt-home-footer, .vt-update-card, .vt-why-book-card,
+    .vt-payment-card, .vt-doc-group, .vt-main--help .vt-help-card
+  ) { padding: 16px; border-radius: 16px; }
+  .vt-app :is(
+    .vt-tailor-section, .vt-faq-card, .vt-home-info-card, .vt-travellers-card, .vt-weather-section, .vt-guide-section,
+    .vt-destination-section, .vt-value-props, .vt-inspiration, .vt-upsell-section, .vt-updates-section, .vt-why-book-card,
+    .vt-home-footer, .vt-main--help .vt-help-card
+  ) { margin-top: 16px; }
+  .vt-app :is(.vt-tailor-grid, .vt-weather-grid, .vt-guide-grid, .vt-destination-grid, .vt-value-props__grid, .vt-upsell-grid, .vt-update-feed) { gap: 12px; margin-top: 14px; }
+  .vt-app :is(.vt-payment-card, .vt-doc-group) { margin-top: 16px; }
+
+  .vt-app :is(
+    .vt-tailor-card, .vt-destination-card, .vt-upsell-card, .vt-update-card, .vt-why-book-card,
+    .vt-value-props, .vt-weather-card, .vt-guide-card, .vt-payment-card, .vt-doc-group,
+    .vt-main--documents .vt-doc-button, .vt-main--help .vt-help-card, .vt-contact-card
+  ) { border-radius: 16px; }
+
+  .vt-app .vt-main--home .vt-hero { min-height: 300px; border-radius: 16px; }
+  .vt-app .vt-main--home .vt-hero__body { gap: 6px; padding: 16px; }
+  .vt-app .vt-main--home .vt-hero__title { font-size: 1.5rem; line-height: 1.1; }
+  .vt-app .vt-main--home .vt-hero__facts { gap: 5px; }
+  .vt-app .vt-main--home .vt-hero__facts li { padding: 5px 9px; font-size: .72rem; }
+  .vt-app .vt-main--home .vt-hero__calendar { min-height: 44px; padding: 8px 15px; font-size: .8rem; }
+  .vt-app .vt-destination-card__media { height: 170px; max-height: 170px; }
+  .vt-app .vt-destination-card__body { gap: 12px; padding: 16px; }
+  .vt-app .vt-upsell-card { min-height: 160px; }
+  .vt-app .vt-upsell-card__media img { min-height: 160px; max-height: 180px; }
+  .vt-app .vt-main--home img.h-56 { height: 180px; max-height: 180px; }
+  .vt-app .vt-main--home :is(.rounded-3xl, .rounded-2xl) { border-radius: 16px; }
+
+  .vt-app .vt-countdown-card__units { gap: 8px; margin-top: 12px; }
+  .vt-app .vt-countdown-card__unit { padding: 12px 6px; border-radius: 12px; }
+  .vt-app .vt-countdown-card__unit strong { font-size: 1.65rem; }
+  .vt-app .vt-booking-timeline { margin-top: 18px; }
+  .vt-app .vt-booking-step { gap: 12px; padding-bottom: 20px; }
+  .vt-app .vt-faq-list { margin-top: 12px; }
+  .vt-app .vt-faq-item summary { min-height: 48px; padding: 9px 0; }
+
+  .vt-app .vt-main--itinerary #itinerary-title { margin-bottom: 16px; }
+  .vt-app .vt-main--itinerary .vt-day-card { padding: 14px; }
+  .vt-app .vt-main--itinerary .vt-day__head { margin-bottom: 12px; }
+  .vt-app .vt-main--itinerary .vt-el__row { padding: 14px; }
+  .vt-app .vt-main--itinerary .vt-itinerary-disclosure summary { min-height: 44px; }
+
+  .vt-app .vt-payment-summary { gap: 14px; }
+  .vt-app .vt-payment-summary__total > strong { font-size: 1.85rem; }
+  .vt-app .vt-payment-summary__stats > div { min-height: 70px; padding: 11px 12px; }
+  .vt-app .vt-payment-card__heading, .vt-app .vt-doc-group__heading { gap: 12px; margin-bottom: 12px; }
+  .vt-app .vt-main--payments .vt-pay, .vt-app .vt-main--documents .vt-doc-button { min-height: 64px; padding: 11px 12px; }
+  .vt-app .vt-payment-schedule__empty, .vt-app .vt-doc-empty { padding: 20px 16px; }
+
+  .vt-app .vt-help-heading { margin-bottom: 16px; }
+  .vt-app .vt-help-actions { gap: 10px; }
+  .vt-app .vt-contact-card { min-height: 56px; gap: 11px; padding: 9px 11px; }
+  .vt-app .vt-help-form { gap: 14px; margin-top: 16px; }
+  .vt-app .vt-help-field { gap: 6px; font-size: .82rem; }
+  .vt-app .vt-help-field :is(select, textarea), .vt-app .vt-form :is(input, textarea, select) { min-height: 44px; padding: 10px 12px; }
+  .vt-app .vt-help-field textarea { min-height: 140px; }
+  .vt-app .vt-help-send, .vt-app .vt-share-button, .vt-app .vt-custom-payment__submit { min-height: 44px; }
+
+  .vt-app .vt-nav { position: fixed; right: 0; bottom: 0; left: 0; z-index: 50; min-height: var(--nav-h); padding: 0 0 env(safe-area-inset-bottom, 0px); border-radius: 0; }
+  .vt-app .vt-nav button { min-width: 44px; min-height: var(--nav-h); padding: 4px 2px; font-size: .64rem; }
+  .vt-app .vt-nav__icon { width: 28px; height: 28px; font-size: 1.1rem; }
+}
+
+@media (max-width: 480px) {
+  .vt-app main:is(.vt-main--home, .vt-main--itinerary, .vt-main--payments, .vt-main--documents, .vt-main--help) { --vt-flat-gutter: 12px; }
+  .vt-app .vt-main--itinerary .vt-day__head { align-items: flex-start; flex-direction: column; gap: 7px; }
+  .vt-app .vt-main--itinerary :is(.vt-itinerary-meta, .vt-itinerary-detail dl) { grid-template-columns: 1fr; }
+}

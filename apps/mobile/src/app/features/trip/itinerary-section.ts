@@ -12,9 +12,9 @@ import { VtIcon } from '../../shared/lucide-icon';
       @if (items().length) {
         <div class="vt-days">
           @for (group of groupedItems(); track group.date) {
-            <section>
+            <section class="vt-day-card">
               <div class="vt-day__head">
-                <p class="vt-day__n">{{ group.dayLabel }}</p><h3 class="vt-day__label">{{ group.dateLabel }}</h3>
+                <p class="vt-day__n">{{ group.dayLabel }}</p><h2 class="vt-day__label">{{ group.dateLabel }}</h2>
               </div>
               <ol class="vt-day__items">
                 @for (item of group.items; track item.id) {
@@ -22,36 +22,36 @@ import { VtIcon } from '../../shared/lucide-icon';
                     @if (item.images.length) { <app-photo-gallery [photos]="item.images" [limit]="4" /> }
                     <div class="vt-el__row">
                       <div class="vt-el__main">
-                        <div><p class="vt-el__kind">{{ item.typeLabel }}</p><h4 class="vt-el__title">{{ item.title }}</h4></div>
+                        <div>@if (showTypeLabel(item)) { <p class="vt-el__kind">{{ item.typeLabel }}</p> }<h3 class="vt-el__title">{{ item.title }}</h3></div>
                         @if (item.startTime) { <time class="vt-chip">{{ item.startTime }}</time> }
                       </div>
                       @if (item.from || item.to) { <p class="vt-el__route flex items-center gap-1">{{ item.from }}@if (item.to) { <vt-icon name="arrow-right" [size]="15" /> {{ item.to }} }</p> }
                       @if (item.carrier || item.flightNumber) { <p class="vt-el__meta">{{ item.carrier }} {{ item.flightNumber }}</p> }
                       @if (item.address) { <p class="vt-el__meta">{{ item.address }}</p> }
                       @if (item.details.length) {
-                        <dl class="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-4 text-sm">
-                          @for (detail of item.details; track detail.label) { <div><dt class="text-slate-500">{{ detail.label }}</dt><dd class="mt-0.5 font-medium">{{ detail.value }}</dd></div> }
+                        <dl class="vt-itinerary-meta">
+                          @for (detail of item.details; track detail.label) { <div><dt>{{ detail.label }}</dt><dd>{{ detail.value }}</dd></div> }
                         </dl>
                       }
                       @for (room of item.rooms; track room.type) {
-                        <div class="mt-4 rounded-xl bg-slate-50 p-4 text-sm"><p class="font-semibold">{{ room.type }}</p><p class="mt-1 text-slate-600">{{ joined([room.view, room.board]) }}</p>@if (room.requests) { <p class="mt-2 text-slate-600">{{ room.requests }}</p> }</div>
+                        <section class="vt-itinerary-detail" aria-label="Accommodation details"><h4>{{ room.type }}</h4><dl>@if (room.board) { <div><dt>Board basis</dt><dd>{{ room.board }}</dd></div> }@if (room.view) { <div><dt>Room view</dt><dd>{{ room.view }}</dd></div> }@if (room.requests) { <div><dt>Requests</dt><dd>{{ room.requests }}</dd></div> }</dl></section>
                       }
                       @for (cabin of item.cabins; track cabin.name + cabin.number) {
-                        <div class="mt-4 rounded-xl bg-slate-50 p-4 text-sm"><p class="font-semibold">{{ cabin.name }}</p><p class="mt-1 text-slate-600">{{ joined([cabin.grade, cabin.number ? 'Cabin ' + cabin.number : null, cabin.deck, cabin.bed, cabin.dining]) }}</p></div>
+                        <section class="vt-itinerary-detail" aria-label="Cabin details"><h4>{{ cabin.name }}</h4><dl>@if (cabin.grade) { <div><dt>Grade</dt><dd>{{ cabin.grade }}</dd></div> }@if (cabin.number) { <div><dt>Cabin</dt><dd>{{ cabin.number }}</dd></div> }@if (cabin.deck) { <div><dt>Deck</dt><dd>{{ cabin.deck }}</dd></div> }@if (cabin.bed) { <div><dt>Bed</dt><dd>{{ cabin.bed }}</dd></div> }@if (cabin.dining) { <div><dt>Dining</dt><dd>{{ cabin.dining }}</dd></div> }</dl></section>
                       }
                       @if (item.passengers.length) {
-                        <details class="mt-4 rounded-xl border border-slate-200 p-4 text-sm"><summary class="cursor-pointer font-semibold">Passenger details</summary><div class="mt-3 grid gap-3">
-                          @for (passenger of item.passengers; track passenger.name) { <div><p class="font-medium">{{ passenger.name }}</p><p class="text-slate-600">{{ passengerLine(passenger) }}</p></div> }
+                        <details class="vt-itinerary-disclosure"><summary><span>Passenger details</span><vt-icon name="chevron-down" [size]="18" /></summary><div class="vt-passenger-list">
+                          @for (passenger of item.passengers; track passenger.name) { <div><p>{{ passenger.name }}</p><span>{{ passengerLine(passenger) }}</span></div> }
                         </div></details>
                       }
                       @if (item.cruisePorts.length) {
-                        <details class="mt-4 rounded-xl border border-slate-200 p-4 text-sm"><summary class="cursor-pointer font-semibold">Cruise itinerary · {{ item.cruisePorts.length }} stops</summary><ol class="mt-3 grid gap-3 border-l border-slate-200 pl-4">
-                          @for (port of item.cruisePorts; track port.day + port.port) { <li><p class="font-medium">{{ port.day ? 'Day ' + port.day + ' · ' : '' }}{{ port.port }}</p><p class="text-slate-500">{{ port.arrivalTime }}{{ port.departureTime ? ' – ' + port.departureTime : '' }}</p>@if (port.description) { <p class="mt-1 leading-5 text-slate-600">{{ port.description }}</p> }</li> }
+                        <details class="vt-itinerary-disclosure vt-cruise-stops"><summary><span>Cruise itinerary <em>{{ item.cruisePorts.length }} stops</em></span><vt-icon name="chevron-down" [size]="18" /></summary><ol class="vt-cruise-timeline">
+                          @for (port of item.cruisePorts; track port.day + port.port) { <li><span class="vt-cruise-timeline__node" aria-hidden="true"></span><div><p class="vt-cruise-timeline__title">{{ port.day ? 'Day ' + port.day + ' · ' : '' }}{{ port.port }}</p>@if (port.arrivalTime || port.departureTime) { <p class="vt-cruise-timeline__time">{{ port.arrivalTime }}{{ port.departureTime ? ' – ' + port.departureTime : '' }}</p> }@if (port.description) { <p class="vt-cruise-timeline__description">{{ port.description }}</p> }</div></li> }
                         </ol></details>
                       }
-                      @if (item.supplier || item.reference) { <p class="mt-4 text-sm text-slate-500">{{ item.supplier?.name }}{{ item.reference ? ' · Reference ' + item.reference : '' }}</p> }
+                      @if (item.supplier || item.reference) { <dl class="vt-itinerary-reference">@if (item.supplier) { <div><dt>Supplier</dt><dd>{{ item.supplier.name }}</dd></div> }@if (item.reference) { <div><dt>Booking reference</dt><dd>{{ item.reference }}</dd></div> }</dl> }
                       @if (item.emergencyContact; as emergency) { <a class="mt-4 flex items-center justify-between rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-900" [href]="telephoneLink(emergency.phone)"><span>{{ emergency.name }}</span><span>{{ emergency.phone }}</span></a> }
-                      @if (item.notes) { <p class="mt-4 border-t border-slate-100 pt-4 text-sm leading-6 text-slate-600">{{ item.notes }}</p> }
+                      @if (item.notes) { <p class="vt-itinerary-notes">{{ item.notes }}</p> }
                     </div>
                   </li>
                 }
@@ -77,6 +77,7 @@ export class ItinerarySection {
   }
 
   joined(values: Array<string | null>): string { return values.filter(Boolean).join(' · '); }
+  showTypeLabel(item: ItineraryItem): boolean { return item.typeLabel.trim().toLocaleLowerCase() !== item.title.trim().toLocaleLowerCase(); }
   passengerLine(passenger: ItineraryItem['passengers'][number]): string { return this.joined([passenger.travelClass, passenger.seat ? `Seat ${passenger.seat}` : null, passenger.cabinBaggage, passenger.checkedBaggage, passenger.meal, passenger.assistance]); }
   telephoneLink(phone: string): string { return `tel:${phone.replace(/[^0-9+]/g, '')}`; }
 
