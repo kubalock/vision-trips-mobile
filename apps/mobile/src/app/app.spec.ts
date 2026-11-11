@@ -326,6 +326,78 @@ describe('App', () => {
       expect(app.session()?.refreshToken).toBe('tab-b-refresh');
     });
 
+    describe('switching trips', () => {
+      const future = () => new Date(Date.now() + 86_400_000).toISOString();
+      const saved = (tripId: string) => ({ snapshot: { ...(minimalTrip() as object), tripId }, session: { accessToken: `${tripId}-a`, accessExpiresAt: future(), refreshToken: `${tripId}-r`, refreshExpiresAt: future() }, savedAt: '2026-11-01T00:00:00Z' });
+      const deferred = <T,>() => { let resolve!: (value: T) => void; const promise = new Promise<T>((r) => { resolve = r; }); return { promise, resolve }; };
+      type Switching = {
+        online: { set: (v: boolean) => void };
+        messageSent: { set: (v: boolean) => void; (): boolean };
+        acceptanceComplete: { set: (v: boolean) => void; (): boolean };
+        customerAccount: { set: (v: unknown) => void; (): unknown };
+        relatedQuotations: { set: (v: unknown[]) => void; (): unknown[] };
+        externalContent: () => unknown;
+        paymentAwaitingReturn: boolean;
+        paymentReturnState: { set: (v: string) => void; (): string };
+        openSavedTrip: (trip: unknown) => Promise<void>;
+        loadExternalContent: () => Promise<void>;
+        refreshCurrentTrip: (showError?: boolean) => Promise<void>;
+      };
+
+      it('clears everything that belonged to the previous trip', async () => {
+        const { app } = setup();
+        const view = app as unknown as Switching;
+        app.trip.set({ ...(minimalTrip() as object), tripId: 'trip-A' });
+        view.messageSent.set(true); view.acceptanceComplete.set(true); view.customerAccount.set({ preferences: {} });
+        view.relatedQuotations.set([{ id: 'q' }]); view.paymentAwaitingReturn = true; view.paymentReturnState.set('unchanged');
+        view.online.set(false); // Opening offline avoids network calls; the reset is the same.
+
+        await view.openSavedTrip(saved('trip-B'));
+
+        expect((app as unknown as { trip: () => { tripId: string } }).trip().tripId).toBe('trip-B');
+        expect(view.messageSent()).toBe(false);
+        expect(view.acceptanceComplete()).toBe(false);
+        expect(view.customerAccount()).toBeNull();
+        expect(view.relatedQuotations()).toEqual([]);
+        expect(view.paymentAwaitingReturn).toBe(false);
+        expect(view.paymentReturnState()).toBe('idle');
+      });
+
+      it('drops extra content that arrives after switching to another trip', async () => {
+        const { app, api } = setup();
+        const view = app as unknown as Switching;
+        app.trip.set({ ...(minimalTrip() as object), tripId: 'trip-A' });
+        const late = deferred<unknown>();
+        vi.mocked(api.externalContent).mockReturnValueOnce(late.promise as never);
+        const loading = view.loadExternalContent();
+
+        view.online.set(false);
+        await view.openSavedTrip(saved('trip-B'));
+        late.resolve({ providers: { ai: { state: 'ready' } }, refreshAfterSeconds: 60 });
+        await loading;
+
+        expect(view.externalContent()).toBeNull();
+      });
+
+      it('keeps a late refresh of the previous trip out of view but saves it', async () => {
+        const { app, api } = setup();
+        const view = app as unknown as Switching;
+        app.trip.set({ ...(minimalTrip() as object), tripId: 'trip-A' });
+        const late = deferred<unknown>();
+        vi.spyOn(api, 'refreshTrip').mockReturnValueOnce(late.promise as never);
+        const refreshing = view.refreshCurrentTrip(false);
+
+        view.online.set(false);
+        await view.openSavedTrip(saved('trip-B'));
+        late.resolve({ ...(minimalTrip() as object), tripId: 'trip-A', summary: { ...(minimalTrip() as { summary: object }).summary, name: 'Updated A' } });
+        await refreshing;
+
+        expect((app as unknown as { trip: () => { tripId: string } }).trip().tripId).toBe('trip-B');
+        const stored = JSON.parse(localStorage.getItem('vision-trips:trip:trip-A') ?? 'null');
+        expect(stored?.snapshot.summary.name).toBe('Updated A');
+      });
+    });
+
     it('forgets the trusted-device token on sign-out', async () => {
       const { app, api } = setup();
       localStorage.setItem('vision-trips:device-trust', 'trust-token');

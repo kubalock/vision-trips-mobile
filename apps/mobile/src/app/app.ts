@@ -149,6 +149,8 @@ export class App implements OnInit, OnDestroy {
   private resumeListener: PluginListenerHandle | null = null;
   private backButtonListener: PluginListenerHandle | null = null;
   private browserClosedListener: { remove: () => Promise<void> } | null = null;
+  /** Bumped whenever a different trip is opened or the trip is closed; see beginTrip(). */
+  private tripGeneration = 0;
   private readonly paymentPollDelaysMs: readonly number[] = PAYMENT_POLL_DELAYS_MS;
   private networkListener: PluginListenerHandle | null = null;
   private resendTimer: ReturnType<typeof setInterval> | null = null;
@@ -293,6 +295,7 @@ export class App implements OnInit, OnDestroy {
     if (!currentSession || !currentTrip?.quotation.canAccept || !this.online()) return;
     this.submitting.set(true);
     this.error.set('');
+    const generation = this.tripGeneration;
     try {
       const result = await this.withSession(currentSession, (accessToken) => this.api.acceptQuotation({
         name: this.acceptanceName().trim(),
@@ -300,8 +303,9 @@ export class App implements OnInit, OnDestroy {
         agreed: true,
         confirmations: this.acceptanceConfirmations(),
       }, accessToken));
-      this.acceptanceComplete.set(true);
       await this.customerNotifications.quoteAccepted(currentTrip);
+      if (!this.isCurrentTrip(generation)) return; // Recorded; the traveller has moved on to another trip.
+      this.acceptanceComplete.set(true);
       this.loadCustomerNotifications(currentTrip.tripId);
       this.acceptanceNotice.set(result.notifications.customer === 'sent' ? 'A confirmation email has been sent to you.' : result.notifications.customer === 'local_preview' ? 'Email delivery is in local preview mode.' : 'Your acceptance was recorded, but the confirmation email could not be sent.');
       this.trip.update((trip) => trip ? {
@@ -340,7 +344,9 @@ export class App implements OnInit, OnDestroy {
     this.submitting.set(true);
     this.error.set('');
     try {
+      const generation = this.tripGeneration;
       await this.withSession(currentSession, (accessToken) => this.api.sendMessage({ topic: this.messageTopic(), message: this.customerMessage().trim() }, accessToken));
+      if (!this.isCurrentTrip(generation)) return;
       this.messageSent.set(true);
       await this.refreshTripAfterWrite();
     } catch (error) {
@@ -477,6 +483,7 @@ export class App implements OnInit, OnDestroy {
     const currentSession = this.session();
     if (!currentSession) return;
     if (Date.now() - this.paymentOpenedAt > PAYMENT_RECHECK_WINDOW_MS) { this.paymentAwaitingReturn = false; this.paymentIdAwaiting = null; return; }
+    const generation = this.tripGeneration;
     this.paymentAwaitingReturn = false;
     this.paymentReturnState.set('checking');
     let reconciled = false;
@@ -485,8 +492,9 @@ export class App implements OnInit, OnDestroy {
       // Mint reports to Airtable via a webhook, which can take a minute or more.
       for (const [attempt, waitMs] of this.paymentPollDelaysMs.entries()) {
         if (attempt > 0) await delay(waitMs);
-        if (!this.session()) return; // Trip closed or signed out while waiting.
+        if (!this.isCurrentTrip(generation)) return; // Another trip was opened, or signed out, while waiting.
         const status = await this.withSession(this.session() ?? currentSession, (accessToken) => this.api.paymentStatus(accessToken));
+        if (!this.isCurrentTrip(generation)) return;
         const itemNow = status.items.find((item) => item.id === this.paymentIdAwaiting);
         reconciled = status.paid > this.paymentPaidBefore || itemNow?.status === 'paid';
         if (reconciled) { this.applyPaymentStatus(status); break; }
@@ -495,12 +503,19 @@ export class App implements OnInit, OnDestroy {
       if (reconciled) await this.refreshTripAfterWrite();
       this.paymentReturnState.set(reconciled ? 'updated' : 'unchanged');
     } catch {
-      this.paymentReturnState.set('error');
+      if (this.isCurrentTrip(generation)) this.paymentReturnState.set('error');
     } finally {
+      if (!this.isCurrentTrip(generation)) return;
       // Not confirmed yet: check again the next time the user comes back to the app, within the recheck window.
       if (!reconciled && this.session() && Date.now() - this.paymentOpenedAt <= PAYMENT_RECHECK_WINDOW_MS) this.paymentAwaitingReturn = true;
       else this.paymentIdAwaiting = null;
     }
+  }
+
+  /** A refresh that finished after the traveller switched trips: keep the saved copy current, don't show it. */
+  private async storeBackgroundRefresh(snapshot: TripSnapshot, session: MobileSession): Promise<void> {
+    await this.savedTrips.save(snapshot, session);
+    await this.reloadSavedTrips();
   }
 
   /** Shows the confirmed payment straight away, even if the full trip reload that follows fails. */
@@ -519,17 +534,19 @@ export class App implements OnInit, OnDestroy {
   }
 
   private async refreshTripAfterWrite(): Promise<void> {
+    const generation = this.tripGeneration;
     const currentSession = this.session();
     if (!currentSession) return;
     try {
-      const snapshot = await this.withSession(currentSession, (accessToken) => this.api.refreshTrip(accessToken));
+      const { result: snapshot, session: activeSession } = await this.sessions.runWithSession(currentSession, (accessToken) => this.api.refreshTrip(accessToken));
+      if (!this.isCurrentTrip(generation)) { await this.storeBackgroundRefresh(snapshot, activeSession); return; }
       const previous = this.trip();
       this.trip.set(snapshot);
       await this.loadBrandLogo(snapshot, true);
       await this.syncCustomerNotifications(previous, snapshot);
       void this.loadExternalContent(false);
-      await this.refreshDocumentStatuses(snapshot);
-      this.storedSecurely.set(await this.savedTrips.save(snapshot, this.session() ?? currentSession));
+      await this.refreshDocumentStatuses(snapshot, generation);
+      this.storedSecurely.set(await this.savedTrips.save(snapshot, this.session() ?? activeSession));
       await this.reloadSavedTrips();
     } catch {
       // The write already succeeded. Keep the optimistic state and refresh next time the trip opens.
@@ -544,12 +561,14 @@ export class App implements OnInit, OnDestroy {
       if (showError) this.error.set('You are offline. Your last saved trip is still available.');
       return;
     }
+    const generation = this.tripGeneration;
     this.refreshing.set(true);
     const tripId = this.trip()?.tripId;
     if (tripId) this.setTripRefreshState(tripId, 'refreshing');
     if (showError) this.error.set('');
     try {
       const { result: snapshot, session: activeSession } = await this.sessions.runWithSession(currentSession, (accessToken) => this.api.refreshTrip(accessToken));
+      if (!this.isCurrentTrip(generation)) { await this.storeBackgroundRefresh(snapshot, activeSession); return; }
       const previous = this.trip();
       this.trip.set(snapshot);
       await this.loadBrandLogo(snapshot, true);
@@ -560,11 +579,12 @@ export class App implements OnInit, OnDestroy {
       await this.reloadSavedTrips();
       this.setTripRefreshState(snapshot.tripId, 'fresh');
     } catch (error) {
-      this.markFreshness(this.online() ? 'stale' : 'offline');
       if (tripId) this.setTripRefreshState(tripId, this.online() ? 'error' : 'offline');
+      if (!this.isCurrentTrip(generation)) return;
+      this.markFreshness(this.online() ? 'stale' : 'offline');
       if (showError) this.error.set(this.apiError(error, 'We could not refresh this trip. Your saved copy is still available.'));
     } finally {
-      this.refreshing.set(false);
+      if (this.isCurrentTrip(generation)) this.refreshing.set(false);
     }
   }
 
@@ -641,16 +661,16 @@ export class App implements OnInit, OnDestroy {
   }
 
   private async acceptAuthorized(response: Extract<LinkExchangeResponse, { status: 'authorized' }>): Promise<void> {
+    const generation = this.beginTrip();
     this.trip.set(response.snapshot);
-    await this.loadBrandLogo(response.snapshot, true);
-    await this.syncCustomerNotifications(null, response.snapshot);
-    await this.refreshDocumentStatuses(response.snapshot);
     this.session.set(response.session);
-    void this.loadExternalContent();
-    void this.loadRelatedQuotations();
     this.challenge.set(null);
     this.showTripLibrary.set(false);
-    this.activeView.set('home');
+    void this.loadExternalContent();
+    void this.loadRelatedQuotations();
+    await this.loadBrandLogo(response.snapshot, true);
+    await this.syncCustomerNotifications(null, response.snapshot);
+    await this.refreshDocumentStatuses(response.snapshot, generation);
     this.storedSecurely.set(await this.savedTrips.save(response.snapshot, response.session));
     await this.reloadSavedTrips();
     if (response.trustedDeviceToken) await this.savedTrips.saveDeviceTrust(response.trustedDeviceToken);
@@ -737,9 +757,10 @@ export class App implements OnInit, OnDestroy {
   protected async saveCustomerPreferences(preferences: CustomerPreferences): Promise<void> {
     const currentSession = this.session(); if (!currentSession || this.accountSaving()) return;
     this.accountSaving.set(true); this.accountNotice.set('');
-    try { const result = await this.withSession(currentSession, (accessToken) => this.api.updateCustomerPreferences(preferences, accessToken)); this.customerAccount.update((account) => account ? { ...account, preferences: result.preferences } : account); this.accountNotice.set(`Saved across ${result.updatedRecords} customer ${result.updatedRecords === 1 ? 'record' : 'records'}.`); }
+    const generation = this.tripGeneration;
+    try { const result = await this.withSession(currentSession, (accessToken) => this.api.updateCustomerPreferences(preferences, accessToken)); if (!this.isCurrentTrip(generation)) return; this.customerAccount.update((account) => account ? { ...account, preferences: result.preferences } : account); this.accountNotice.set(`Saved across ${result.updatedRecords} customer ${result.updatedRecords === 1 ? 'record' : 'records'}.`); }
     catch (error) { this.error.set(this.apiError(error, 'We could not save your preferences. Please try again.')); }
-    finally { this.accountSaving.set(false); }
+    finally { if (this.isCurrentTrip(generation)) this.accountSaving.set(false); }
   }
 
   protected async openCustomerAccountTrip(accountTripId: string): Promise<void> {
@@ -762,11 +783,12 @@ export class App implements OnInit, OnDestroy {
   }
 
   private async loadCustomerAccount(): Promise<void> {
+    const generation = this.tripGeneration;
     const currentSession = this.session(); if (!currentSession || this.accountLoading() || this.trip()?.accessScope !== 'primary_customer') return;
     this.accountLoading.set(true); this.accountNotice.set(''); this.error.set('');
-    try { this.customerAccount.set(await this.withSession(currentSession, (accessToken) => this.api.customerAccount(accessToken))); }
-    catch (error) { this.customerAccount.set(null); this.error.set(this.apiError(error, 'We could not load your customer account.')); }
-    finally { this.accountLoading.set(false); }
+    try { const account = await this.withSession(currentSession, (accessToken) => this.api.customerAccount(accessToken)); if (this.isCurrentTrip(generation)) this.customerAccount.set(account); }
+    catch (error) { if (this.isCurrentTrip(generation)) { this.customerAccount.set(null); this.error.set(this.apiError(error, 'We could not load your customer account.')); } }
+    finally { if (this.isCurrentTrip(generation)) this.accountLoading.set(false); }
   }
 
   protected planNextTrip(): void {
@@ -788,8 +810,11 @@ export class App implements OnInit, OnDestroy {
   }
 
   private async loadRelatedQuotations(): Promise<void> {
+    const generation = this.tripGeneration;
     const currentSession = this.session(); if (!currentSession || !this.online() || this.trip()?.accessScope !== 'primary_customer') { this.relatedQuotations.set([]); return; }
-    try { this.relatedQuotations.set((await this.withSession(currentSession, (accessToken) => this.api.relatedQuotations(accessToken))).quotations); } catch { this.relatedQuotations.set([]); }
+    let quotations: RelatedQuotationSummary[] = [];
+    try { quotations = (await this.withSession(currentSession, (accessToken) => this.api.relatedQuotations(accessToken))).quotations; } catch { quotations = []; }
+    if (this.isCurrentTrip(generation)) this.relatedQuotations.set(quotations);
   }
 
   protected openAnotherTrip(): void {
@@ -880,10 +905,21 @@ export class App implements OnInit, OnDestroy {
   }
 
   private clearOpenTrip(): void {
+    this.beginTrip();
     this.trip.set(null);
     this.replaceBrandLogo(null);
     this.session.set(null);
+  }
+
+  /**
+   * Starts a new trip context: clears everything that belongs to the previous trip and invalidates its in-flight
+   * work. Async loaders capture the returned generation and drop their results if another trip has been opened since.
+   */
+  private beginTrip(): number {
+    const generation = ++this.tripGeneration;
     this.activeView.set('home');
+    this.acceptanceName.set('');
+    this.acceptanceEmail.set('');
     this.acceptanceComplete.set(false);
     this.acceptanceConfirmations.set([]);
     this.acceptanceSectionsOpened.set([]);
@@ -905,20 +941,30 @@ export class App implements OnInit, OnDestroy {
     if (this.externalContentTimer) clearTimeout(this.externalContentTimer);
     this.notifications.set([]);
     this.showNotifications.set(false);
+    this.paymentIdAwaiting = null;
+    this.refreshing.set(false);
+    this.messageTopic.set('itinerary');
+    this.error.set('');
+    return generation;
+  }
+
+  private isCurrentTrip(generation: number): boolean {
+    return generation === this.tripGeneration;
   }
 
   private async activateSavedTrip(saved: SavedTrip, refresh: boolean): Promise<void> {
+    const generation = this.beginTrip();
     this.session.set(saved.session);
     const status = refresh && !isSnapshotStale(saved.snapshot) ? 'fresh' as const : refresh ? 'stale' as const : 'offline' as const;
     const snapshot = { ...saved.snapshot, freshness: { ...saved.snapshot.freshness, status } };
     this.trip.set(snapshot);
-    await this.loadBrandLogo(snapshot, false);
-    await this.syncCustomerNotifications(null, snapshot);
-    if (refresh) void this.loadExternalContent();
-    this.activeView.set('home');
     this.storedSecurely.set(true);
-    await this.refreshDocumentStatuses(snapshot);
-    if (refresh) await this.refreshCurrentTrip(false);
+    await this.loadBrandLogo(snapshot, false);
+    if (!this.isCurrentTrip(generation)) return;
+    await this.syncCustomerNotifications(null, snapshot);
+    if (refresh) { void this.loadExternalContent(); void this.loadRelatedQuotations(); }
+    await this.refreshDocumentStatuses(snapshot, generation);
+    if (refresh && this.isCurrentTrip(generation)) await this.refreshCurrentTrip(false);
   }
 
   private async reloadSavedTrips(): Promise<void> {
@@ -1004,6 +1050,7 @@ export class App implements OnInit, OnDestroy {
   }
 
   protected async loadExternalContent(showLoading = true): Promise<void> {
+    const generation = this.tripGeneration;
     const currentSession = this.session();
     if (!currentSession || !this.online() || this.externalContentLoading()) return;
     if (this.externalContentTimer) clearTimeout(this.externalContentTimer);
@@ -1011,14 +1058,16 @@ export class App implements OnInit, OnDestroy {
     this.externalContentFailed.set(false);
     try {
       const content = await this.withSession(currentSession, (accessToken) => this.api.externalContent(accessToken));
+      if (!this.isCurrentTrip(generation)) return; // Another trip was opened while this was loading.
       this.externalContent.set(content);
       const pending = content.providers.ai.state === 'pending';
       const delayMs = pending ? 5_000 : Math.max(60, content.refreshAfterSeconds) * 1_000;
       this.externalContentTimer = setTimeout(() => { if (this.trip() && this.online()) void this.loadExternalContent(false); }, delayMs);
     } catch {
+      if (!this.isCurrentTrip(generation)) return;
       this.externalContentFailed.set(true);
       this.externalContentTimer = setTimeout(() => { if (this.trip() && this.online()) void this.loadExternalContent(false); }, 60_000);
-    } finally { this.externalContentLoading.set(false); }
+    } finally { if (this.isCurrentTrip(generation)) this.externalContentLoading.set(false); }
   }
 
   private sessionForRequest(session: MobileSession): Promise<MobileSession> { return this.sessions.forRequest(session); }
@@ -1089,8 +1138,9 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  private async refreshDocumentStatuses(snapshot: TripSnapshot): Promise<void> {
-    this.documentStatuses.set(await this.documentWallet.statuses(snapshot.tripId, snapshot.documents));
+  private async refreshDocumentStatuses(snapshot: TripSnapshot, generation = this.tripGeneration): Promise<void> {
+    const statuses = await this.documentWallet.statuses(snapshot.tripId, snapshot.documents);
+    if (this.isCurrentTrip(generation)) this.documentStatuses.set(statuses);
   }
 
   private downloadBlob(blob: Blob, filename: string): void {

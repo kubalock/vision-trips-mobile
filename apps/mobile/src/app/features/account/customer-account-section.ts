@@ -1,4 +1,4 @@
-import { Component, input, output } from '@angular/core';
+import { Component, effect, input, output, untracked } from '@angular/core';
 import type { CustomerAccount, CustomerAccountTrip, CustomerPreferences } from '@vision-trips/contracts';
 import { VtIcon } from '../../shared/lucide-icon';
 import { EuropeanDatePipe } from '../../shared/european-date.pipe';
@@ -169,6 +169,11 @@ export class CustomerAccountSection {
   readonly account = input<CustomerAccount | null>(null); readonly loading = input(false); readonly saving = input(false); readonly savedNotice = input(''); readonly openingTripId = input<string | null>(null);
   readonly save = output<CustomerPreferences>(); readonly openTrip = output<string>(); readonly signOut = output<void>();
   private draft: CustomerPreferences | null = null;
+  /** A new account (another trip, or a fresh load after saving) discards any unsaved edits from the previous one. */
+  private readonly resetDraftOnAccountChange = effect(() => {
+    this.account();
+    untracked(() => { this.draft = null; this.airportQuery = ''; this.airportSearchOpen = false; });
+  });
   airportQuery = '';
   airportSearchOpen = false;
   channel(data: CustomerAccount, key: 'emailMarketing' | 'smsMarketing' | 'postalMarketing', event: Event): void { const checked = (event.target as HTMLInputElement).checked; this.ensure(data)[key] = checked; data.preferences[key] = checked; }
