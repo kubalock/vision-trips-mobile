@@ -17,9 +17,9 @@ interface DocumentGroup {
   template: `
     <section class="vt-section vt-documents" aria-labelledby="documents-title">
       <header class="vt-documents__heading">
-        <p class="vt-documents__kicker">Travel wallet</p>
-        <h1 id="documents-title">Your documents</h1>
-        <p>Downloaded documents are kept on this device for offline access. Replaced files are clearly marked as updated.</p>
+        <p class="vt-page-kicker vt-documents__kicker">Travel wallet</p>
+        <h1 id="documents-title" class="vt-page-title">Your documents</h1>
+        <p class="vt-page-description">Downloaded documents are kept on this device for offline access. Replaced files are clearly marked as updated.</p>
       </header>
 
       @for (group of groups(); track group.id) {

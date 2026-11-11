@@ -9,8 +9,8 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
   template: `
     <section class="vt-section vt-payments-screen" aria-labelledby="payments-title">
       <header class="vt-payments__heading">
-        <p class="vt-payments__kicker">Your booking</p>
-        <h1 id="payments-title">Payments</h1>
+        <p class="vt-page-kicker vt-payments__kicker">Your booking</p>
+        <h1 id="payments-title" class="vt-page-title">Payments</h1>
       </header>
 
       <section class="vt-payment-card vt-payment-summary" aria-label="Payment summary">
@@ -54,7 +54,7 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
                 @if (payment.dueDate) { <span class="vt-pay__date">Due {{ payment.dueDate | europeanDate }}</span> }
               </div>
               @if (payment.canPay) {
-                <button type="button" class="vt-pay__action" [disabled]="openingPaymentId() !== null || actionsDisabled()" (click)="pay.emit(payment.id)">{{ openingPaymentId() === payment.id ? 'Opening…' : 'Pay now' }}</button>
+                <button type="button" class="vt-primary-action vt-pay__action" [disabled]="openingPaymentId() !== null || actionsDisabled()" (click)="pay.emit(payment.id)">{{ openingPaymentId() === payment.id ? 'Opening…' : 'Pay now' }}</button>
               } @else {
                 <span class="vt-pay__status" [class.vt-pay__status--paid]="payment.status === 'paid'" [class.vt-pay__status--overdue]="payment.status === 'overdue'">{{ statusLabel(payment.status) }}</span>
               }
@@ -77,7 +77,7 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
             <input id="custom-payment" type="number" inputmode="decimal" step="0.01" min="0.01" [max]="payments().customPayments.maximum" [value]="customAmount()" (input)="updateCustom($event)" placeholder="0.00">
           </div>
           <p class="vt-custom-payment__limit">Maximum {{ payments().customPayments.maximum | currency: payments().currency }}</p>
-          <button type="submit" class="vt-custom-payment__submit" [disabled]="actionsDisabled() || openingPaymentId() !== null || !validCustom()">{{ openingPaymentId() === 'custom' ? 'Opening…' : 'Pay securely' }}</button>
+          <button type="submit" class="vt-primary-action vt-custom-payment__submit" [disabled]="actionsDisabled() || openingPaymentId() !== null || !validCustom()">{{ openingPaymentId() === 'custom' ? 'Opening…' : 'Pay securely' }}</button>
         </form>
       }
     </section>

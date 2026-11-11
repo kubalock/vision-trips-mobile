@@ -8,7 +8,7 @@ import { VtIcon } from '../../shared/lucide-icon';
   imports: [PhotoGallery, VtIcon],
   template: `
     <section class="vt-section" aria-labelledby="itinerary-title">
-      <p class="text-sm font-semibold uppercase tracking-widest text-teal-700">Trip plan</p><h1 id="itinerary-title" class="mt-1 text-3xl font-semibold">Your itinerary</h1>
+      <p class="vt-page-kicker text-sm font-semibold uppercase tracking-widest text-teal-700">Trip plan</p><h1 id="itinerary-title" class="vt-page-title mt-1 text-3xl font-semibold">Your itinerary</h1>
       @if (items().length) {
         <div class="vt-days">
           @for (group of groupedItems(); track group.date) {

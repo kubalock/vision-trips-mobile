@@ -16,7 +16,10 @@ $ver = class_exists('\\VisionTrips\\Plugin') ? \VisionTrips\Plugin::assetVersion
 $vars = Theme::cssVars($theme, $brand->fontDisplay);
 $vars['--vt-accent'] = $accent;
 $vars['--vt-accent-2'] = $brand->colour2 !== '' ? $brand->colour2 : $accent;
-$vars['--vt-body'] = "'" . $bodyFont . "', 'Instrument Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+$vars['--vt-font-family'] = "'Montserrat', system-ui, -apple-system, 'Segoe UI', sans-serif";
+$vars['--vt-body'] = 'var(--vt-font-family)';
+$vars['--vt-display'] = 'var(--vt-font-family)';
+$vars['--vt-display-weight'] = '600';
 $vars['--accent-ink'] = View::contrastInk($accent);
 $vars['--vt-accent-text'] = View::accessibleAccent($accent, '#F4F4F1');
 $vars['--vt-accent-text-dark'] = View::accessibleAccent($accent, '#121415');
@@ -30,7 +33,7 @@ $vars['--vt-accent-text-dark'] = View::accessibleAccent($accent, '#121415');
 <?php if ($faviconUrl !== ''): ?><link rel="icon" href="<?= e($faviconUrl) ?>"><?php endif; ?>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="<?= e($fontsUrl) ?>">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&amp;display=swap">
 <style id="vt-tokens">:root{<?php foreach ($vars as $k => $v): ?><?= e($k) ?>:<?= str_replace(['<', '>', ';'], '', $v) ?>;<?php endforeach; ?>}</style>
 <?php if ($preview): ?>
 <style><?= file_get_contents(VISION_TRIPS_DIR . 'assets/css/' . $stylesheet . '.css') ?></style>

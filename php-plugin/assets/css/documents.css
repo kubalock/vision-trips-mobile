@@ -74,7 +74,8 @@ body.vt-doc img { max-width: 100%; height: auto; }
 .vt-page__foot p { margin: 0 0 1mm; }
 .vt-page__gen { color: #A0A4AA; }
 /* ATOL certificate (CAA layout) */
-body.vt-doc--atol { font-family: Arial, Helvetica, sans-serif; }
+body.vt-doc--atol { font-family: var(--vt-font-family, 'Montserrat', system-ui, sans-serif); }
+
 .vt-atol { width: 210mm; max-width: 100%; min-height: 297mm; margin: 18px auto; padding: 12mm 18mm 10mm; background: #fff; color: #231F20; box-shadow: 0 2px 20px rgba(0,0,0,.08); display: grid; gap: 3mm; align-content: start; grid-template-rows: auto auto 1fr auto auto auto; }
 .vt-atol__note { margin: 0; border: 0.6pt solid #231F20; text-align: center; font-size: 10.5pt; padding: 2.5mm 4mm; }
 .vt-atol__title { margin: 2mm 0 0; text-align: center; font-size: 46pt; font-weight: 900; line-height: 1; }
@@ -135,4 +136,12 @@ body.vt-doc--atol { font-family: Arial, Helvetica, sans-serif; }
   .vt-table { font-size: 11.5px; }
   .vt-atol { padding: 16px; width: auto; min-height: 0; }
   .vt-atol__title { font-size: 32pt; }
+}
+
+@media screen and (max-width: 768px) {
+  body.vt-doc { font-size: 14px; line-height: 20px; }
+  .vt-page__title, .vt-atol__title { font-size: 24px; line-height: 32px; font-weight: 700; }
+  .vt-page h2, .vt-atol__h2, .vt-atol h2 { font-size: 18px; line-height: 24px; font-weight: 600; }
+  .vt-page h3, .vt-atol h3 { font-size: 16px; line-height: 22px; font-weight: 600; }
+  .vt-page small, .vt-atol small, .vt-box__k { font-size: 12px; line-height: 16px; font-weight: 500; }
 }
