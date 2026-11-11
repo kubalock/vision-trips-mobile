@@ -11,8 +11,10 @@ export class LinkExchangesController {
   @Post()
   @ApiBody({ schema: { example: { linkOrCode: 'https://example.test/trip/{signed-token}/' } } })
   @ApiCreatedResponse({ description: 'An authorized trip snapshot or a verification challenge.' })
-  create(@Body() body: { linkOrCode?: unknown; deviceTrustToken?: unknown }): Promise<LinkExchangeResponse> {
-    return this.exchanges.create(body?.linkOrCode, body?.deviceTrustToken);
+  create(@Body() body: { linkOrCode?: unknown; deviceTrustToken?: unknown; deviceTrustTokens?: unknown }): Promise<LinkExchangeResponse> {
+    // deviceTrustTokens (one per remembered booking) supersedes the older single deviceTrustToken; both are accepted.
+    const tokens = Array.isArray(body?.deviceTrustTokens) ? body.deviceTrustTokens : body?.deviceTrustToken !== undefined ? [body.deviceTrustToken] : [];
+    return this.exchanges.create(body?.linkOrCode, tokens);
   }
 
   @Post('local')

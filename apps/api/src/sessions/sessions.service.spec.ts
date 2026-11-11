@@ -18,6 +18,31 @@ describe('SessionsService', () => {
     expect(() => service.refresh(initial.refreshToken)).toThrow('expired');
   });
 
+  it('ends the whole session when a replaced refresh token is reused after the grace period', () => {
+    vi.useFakeTimers();
+    try {
+      const service = serviceInMemory();
+      const initial = service.issue({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false });
+      const legitimate = service.refresh(initial.refreshToken);
+
+      vi.advanceTimersByTime(60_000);
+      expect(() => service.refresh(initial.refreshToken)).toThrow('expired');
+
+      // The holder of the current tokens is signed out too, because we can't tell which copy is genuine.
+      expect(() => service.refresh(legitimate.refreshToken)).toThrow('expired');
+      expect(() => service.validateAccess(`Bearer ${legitimate.accessToken}`)).toThrow();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('tolerates a near-simultaneous reuse without ending the session', () => {
+    const service = serviceInMemory();
+    const initial = service.issue({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false });
+    const legitimate = service.refresh(initial.refreshToken);
+
+    expect(() => service.refresh(initial.refreshToken)).toThrow('expired');
+    expect(service.refresh(legitimate.refreshToken).refreshToken).toBeTruthy();
+  });
+
   it('rejects refresh after revocation', () => {
     const service = serviceInMemory();
     const session = service.issue({

@@ -1536,3 +1536,41 @@ body.vt .vt-app .vt-account-danger button:active { transform: scale(.97); }
 .vt-app .vt-blocked-page, .vt-app .vt-main--payments > .vt-blocked-page { display: grid; gap: var(--sp-3); margin: var(--sp-3) var(--vt-flat-gutter, 0) 0; padding: var(--card-pad); border: 1px solid color-mix(in srgb, var(--warn) 35%, var(--line)); border-radius: var(--r); background: color-mix(in srgb, var(--warn) 10%, var(--surface)); color: var(--ink); }
 .vt-app .vt-blocked-page p { margin: 0; font-weight: 600; }
 .vt-app .vt-blocked-page .vt-primary-action { justify-self: start; text-decoration: none; }
+
+/* Share-this-trip feedback. */
+.vt-app .vt-share-result { display: flex; align-items: center; gap: var(--sp-2); margin: var(--sp-3) 0 0; color: var(--ok); font-size: var(--fs-0); font-weight: 600; }
+.vt-app .vt-share-fallback { display: grid; gap: var(--sp-2); margin-top: var(--sp-3); }
+.vt-app .vt-share-fallback label { color: var(--ink-2); font-size: var(--fs-0); font-weight: 600; }
+.vt-app .vt-share-fallback input { width: 100%; min-height: 44px; padding: 0 var(--sp-3); border: 1px solid var(--line-2); border-radius: var(--r-s); background: var(--surface-2); color: var(--ink); font: inherit; font-size: var(--fs-0); }
+.vt-app .vt-trip-library .vt-status-card.vt-trip-library__notice { margin: 0 0 var(--sp-4); }
+
+/* ---------- Tailwind colour utilities mapped onto the design tokens ----------
+   Templates still use a few fixed Tailwind colours. Map them to tokens so they follow the brand accent and dark mode.
+   Intentionally dark blocks (bg-slate-900, bg-teal-950, gradients with text-white) are left alone. */
+.vt-app .text-teal-700, .vt-app .text-teal-800 { color: var(--vt-accent-text); }
+.vt-app .ring-teal-600 { --tw-ring-color: var(--vt-accent); }
+
+:root[data-theme="dark"] .vt-app .bg-white:not(.vt-logo-tile) { background-color: var(--surface); }
+:root[data-theme="dark"] .vt-app :is(.bg-slate-50, .bg-slate-100) { background-color: var(--surface-2); }
+:root[data-theme="dark"] .vt-app .bg-teal-50 { background-color: var(--tint); }
+:root[data-theme="dark"] .vt-app :is(.text-slate-500, .text-slate-600) { color: var(--ink-2); }
+:root[data-theme="dark"] .vt-app :is(.ring-slate-200) { --tw-ring-color: var(--card-border); }
+:root[data-theme="dark"] .vt-app :is(.border-slate-200, .border-slate-300) { border-color: var(--line-2); }
+:root[data-theme="dark"] .vt-app .bg-red-50 { background-color: color-mix(in srgb, var(--bad) 14%, var(--surface)); }
+:root[data-theme="dark"] .vt-app :is(.text-red-800, .text-red-900) { color: var(--bad); }
+:root[data-theme="dark"] .vt-app .ring-red-200 { --tw-ring-color: color-mix(in srgb, var(--bad) 35%, transparent); }
+:root[data-theme="dark"] .vt-app .bg-emerald-50 { background-color: color-mix(in srgb, var(--ok) 14%, var(--surface)); }
+:root[data-theme="dark"] .vt-app .text-emerald-950 { color: var(--ink); }
+:root[data-theme="dark"] .vt-app .text-amber-900 { color: var(--warn); }
+:root[data-theme="dark"] .vt-app .from-amber-50 { --tw-gradient-from: color-mix(in srgb, var(--warn) 10%, var(--surface)); }
+:root[data-theme="dark"] .vt-app .to-teal-50 { --tw-gradient-to: color-mix(in srgb, var(--vt-accent-text) 10%, var(--surface)); }
+/* Form fields inside Tailwind blocks (entry and verification screens). */
+:root[data-theme="dark"] .vt-app :is(input, select, textarea).border-slate-300 { background-color: var(--surface); color: var(--ink); }
+
+/* Appearance choice on the Account page. */
+.vt-app .vt-appearance-card { margin: var(--sp-6) var(--vt-flat-gutter, 0) 0; padding: var(--card-pad); border: 1px solid var(--card-border); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-card); }
+.vt-app .vt-appearance-card h2 { margin: 0; font-size: var(--fs-2); }
+.vt-app .vt-appearance-card > p { margin: var(--sp-1) 0 var(--sp-3); color: var(--ink-2); font-size: var(--fs-0); }
+.vt-app .vt-segmented { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-1); padding: var(--sp-1); border-radius: var(--r-s); background: var(--surface-2); }
+.vt-app .vt-segmented button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 var(--sp-2); border: 0; border-radius: var(--r-xs); background: transparent; color: var(--ink-2); font: inherit; font-size: var(--fs-0); font-weight: 600; cursor: pointer; }
+.vt-app .vt-segmented button.is-selected { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-card-sm), 0 0 0 1px var(--card-border); }

@@ -6,7 +6,10 @@
     "start": "ng serve",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "start:device": "ng serve --host 0.0.0.0",
+    "build:device": "ng build --configuration development --define VISION_API_URL=\\\"http://$(ipconfig getifaddr en0):3000/v1\\\"",
+    "icons": "node scripts/extract-icons.mjs src/app/shared/lucide-icon.ts ../../node_modules/@lucide/angular/fesm2022/lucide-angular.mjs src/app/shared/lucide-icon-data.ts"
   },
   "private": true,
   "packageManager": "npm@10.9.7",

@@ -39,6 +39,11 @@ export class DurableAuthStore implements OnModuleDestroy {
       );
       CREATE INDEX IF NOT EXISTS auth_sessions_refresh_expiry ON auth_sessions(refresh_expires_at);
       CREATE INDEX IF NOT EXISTS auth_sessions_access_expiry ON auth_sessions(access_expires_at);
+      CREATE TABLE IF NOT EXISTS retired_refresh_tokens (
+        refresh_hash TEXT PRIMARY KEY, session_id TEXT NOT NULL,
+        retired_at INTEGER NOT NULL, expires_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS retired_refresh_tokens_expiry ON retired_refresh_tokens(expires_at);
       CREATE TABLE IF NOT EXISTS verification_challenges (
         exchange_id TEXT PRIMARY KEY, payload TEXT NOT NULL, expires_at INTEGER NOT NULL
       );
@@ -85,6 +90,20 @@ export class DurableAuthStore implements OnModuleDestroy {
       .run(session.refreshHash, session.refreshExpiresAt, session.accessHash, session.accessExpiresAt, session.id);
   }
 
+  /** Remembers a replaced refresh token so a later reuse can be recognised as theft. */
+  retireRefreshHash(hash: string, sessionId: string, expiresAt: number, now = Date.now()): void {
+    this.database.prepare('INSERT OR REPLACE INTO retired_refresh_tokens (refresh_hash, session_id, retired_at, expires_at) VALUES (?, ?, ?, ?)').run(hash, sessionId, now, expiresAt);
+  }
+
+  retiredRefresh(hash: string): { sessionId: string; retiredAt: number } | null {
+    const row = this.database.prepare('SELECT session_id, retired_at FROM retired_refresh_tokens WHERE refresh_hash = ?').get(hash) as { session_id: string; retired_at: number } | undefined;
+    return row ? { sessionId: row.session_id, retiredAt: row.retired_at } : null;
+  }
+
+  revokeSession(sessionId: string): void {
+    this.database.prepare('UPDATE auth_sessions SET revoked = 1 WHERE id = ?').run(sessionId);
+  }
+
   revokeByRefreshHash(hash: string): void {
     this.database.prepare('UPDATE auth_sessions SET revoked = 1 WHERE refresh_hash = ?').run(hash);
   }
@@ -114,6 +133,12 @@ export class DurableAuthStore implements OnModuleDestroy {
   markNotificationDelivered(key: string): void { this.database.prepare("UPDATE notification_deliveries SET status = 'delivered_unaudited', delivered_at = ? WHERE delivery_key = ?").run(Date.now(), key); }
   completeNotificationDelivery(key: string): void { this.database.prepare("UPDATE notification_deliveries SET status = 'complete' WHERE delivery_key = ?").run(key); }
   releaseNotificationDelivery(key: string): void { this.database.prepare("DELETE FROM notification_deliveries WHERE delivery_key = ? AND status = 'pending'").run(key); }
+
+  /** True while a bucket has already used up its limit in the current window (does not count as a use). */
+  rateLimitExhausted(bucket: string, limit: number, windowMs: number, now = Date.now()): boolean {
+    const row = this.database.prepare('SELECT window_started_at, count FROM rate_limits WHERE bucket = ?').get(bucket) as { window_started_at: number; count: number } | undefined;
+    return Boolean(row && row.window_started_at + windowMs > now && row.count >= limit);
+  }
 
   consumeRateLimit(bucket: string, limit: number, windowMs: number, now = Date.now()): { allowed: boolean; remaining: number; resetAt: number } {
     const row = this.database.prepare('SELECT window_started_at, count FROM rate_limits WHERE bucket = ?').get(bucket) as { window_started_at: number; count: number } | undefined;
@@ -163,6 +188,7 @@ export class DurableAuthStore implements OnModuleDestroy {
     const now = Date.now();
     this.database.prepare('DELETE FROM verification_challenges WHERE expires_at < ?').run(now);
     this.database.prepare('DELETE FROM auth_sessions WHERE refresh_expires_at < ?').run(now);
+    this.database.prepare('DELETE FROM retired_refresh_tokens WHERE expires_at < ?').run(now);
     this.database.prepare('DELETE FROM rate_limits WHERE window_started_at < ?').run(now - 86_400_000);
     this.database.prepare('DELETE FROM idempotency_results WHERE created_at < ?').run(now - 86_400_000);
     this.database.prepare("DELETE FROM background_jobs WHERE status = 'complete' AND created_at < ?").run(now - 86_400_000);

@@ -1,4 +1,4 @@
-<div class="vt-app" [style.--vt-accent]="trip()?.brand?.theme?.primaryColor || '#0f766e'" [style.--vt-accent-2]="trip()?.brand?.theme?.secondaryColor || '#115e59'" [style.--vt-wash]="trip()?.brand?.theme?.primaryColor || '#0f766e'" [style.--vt-hero-a]="trip()?.brand?.theme?.secondaryColor || '#134e4a'" [style.--vt-hero-b]="trip()?.brand?.theme?.primaryColor || '#0f766e'">
+<div class="vt-app" [style]="brandStyle()">
   <a class="vt-skip" href="#main-content">Skip to main content</a>
   <header class="vt-top">
     <div class="vt-wrap vt-top__inner">
@@ -148,11 +148,20 @@
           </section>
         }
         @if (currentTrip.capabilities.shareWithTraveller) {
-          <section class="vt-section vt-help-card vt-help-share"><h2>Share this trip</h2><p class="vt-help-intro">Create a seven-day restricted link. Fellow travellers can see the itinerary and documents, but not prices, payments, supplier references, or quotation acceptance.</p><button type="button" class="vt-share-button" [disabled]="sharing() || !online()" (click)="shareWithTraveller()"><vt-icon name="share" [size]="22" /><span>{{ sharing() ? 'Creating link…' : online() ? 'Share with a traveller' : 'Connect to share' }}</span></button>@if (shareResult()) { <p class="mt-3 text-sm font-medium text-emerald-800">{{ shareResult() }}</p> }</section>
+          <section class="vt-section vt-help-card vt-help-share"><h2>Share this trip</h2><p class="vt-help-intro">Create a seven-day restricted link. Fellow travellers can see the itinerary and documents, but not prices, payments, supplier references, or quotation acceptance.</p><button type="button" class="vt-share-button" [disabled]="sharing() || !online()" (click)="shareWithTraveller()"><vt-icon name="share" [size]="22" /><span>{{ sharing() ? 'Creating link…' : online() ? 'Share with a traveller' : 'Connect to share' }}</span></button>@if (shareResult()) { <p class="vt-share-result" role="status"><vt-icon name="check" [size]="16" /> {{ shareResult() }}</p> }@if (shareFallbackUrl(); as shareUrl) { <div class="vt-share-fallback"><label for="share-link">Copy this link to share it</label><input id="share-link" type="text" readonly [value]="shareUrl" (focus)="selectAll($event)" /></div> }</section>
         }
         <section class="vt-section vt-help-card vt-help-protection"><span class="vt-help-protection__icon"><vt-icon name="shield" [size]="24" /></span><div class="vt-help-protection__body"><h2>Financial protection</h2><p class="vt-help-intro">{{ currentTrip.protection.summary }}</p>@if (currentTrip.protection.holderName) { <p class="vt-help-protection__holder">Holder: {{ currentTrip.protection.holderName }}</p> }</div></section>
       } @else {
         <app-customer-account-section [account]="customerAccount()" [loading]="accountLoading()" [saving]="accountSaving()" [savedNotice]="accountNotice()" [openingTripId]="openingAccountTripId()" (save)="saveCustomerPreferences($event)" (openTrip)="openCustomerAccountTrip($event)" (signOut)="signOutDevice()" />
+        <section class="vt-appearance-card" aria-labelledby="appearance-title">
+          <h2 id="appearance-title">Appearance</h2>
+          <p>Choose how Vision Trips looks on this device.</p>
+          <div class="vt-segmented" role="radiogroup" aria-labelledby="appearance-title">
+            @for (option of appearanceOptions; track option.value) {
+              <button type="button" role="radio" [attr.aria-checked]="appearancePreference() === option.value" [class.is-selected]="appearancePreference() === option.value" [attr.data-engagement]="'Appearance: ' + option.label" (click)="setAppearancePreference(option.value)"><vt-icon [name]="option.icon" [size]="18" /> {{ option.label }}</button>
+            }
+          </div>
+        </section>
       }
 
       <nav class="vt-nav" aria-label="Trip navigation">
@@ -164,6 +173,7 @@
       </nav>
     } @else if (showTripLibrary()) {
       <section class="vt-trip-library">
+        @if (error() && !trip()) { <div class="vt-status-card vt-trip-library__notice" data-tone="warn" role="alert"><span class="vt-status-card__icon" aria-hidden="true"><vt-icon name="alert" [size]="20" /></span><div class="vt-status-card__copy"><strong>That link didn’t work</strong><p>{{ error() }}</p></div><button type="button" class="vt-status-card__close" aria-label="Dismiss" (click)="dismissError()"><vt-icon name="close" [size]="18" /></button></div> }
         <header class="vt-trip-library__header">
           <div><p class="vt-page-kicker vt-trip-library__kicker">Saved on this device</p><h1 class="vt-page-title">My trips</h1><p class="vt-page-description">Open any saved trip without entering its Airtable IDs again.</p></div>
           <button type="button" class="vt-primary-action vt-trip-library__add" (click)="addAnotherTrip()"><vt-icon name="plus" [size]="19" /> Add another trip</button>
@@ -226,7 +236,11 @@
         <label class="mt-5 flex items-start gap-3 text-sm text-slate-600"><input type="checkbox" class="mt-1" [checked]="rememberDevice()" (change)="updateRememberDevice($event)"><span>Trust this device for 30 days. Don’t select this on a shared device.</span></label>
         @if (!currentChallenge.methods.includes('postcode')) { <p class="mt-4 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600">For this booking, email verification is required and postcode fallback is disabled. Contact your travel agent if you cannot access the email account.</p> }@if (error()) { <p class="mt-4 text-sm text-red-800">{{ error() }}</p> }</div>
     } @else {
+      @if (localPreviewEnabled) {
       <div class="vt-gate__panel vt-card"><p class="text-sm font-semibold uppercase tracking-widest text-teal-700">Open your trip</p><h1 class="mt-2 text-3xl font-semibold">Where are you heading?</h1><p class="mt-3 text-slate-600">Enter the Airtable IDs for the booking you want to preview locally.</p><form class="vt-gate__form vt-form" (submit)="openTrip($event)"><label for="base-id" class="text-sm font-semibold">Airtable base ID</label><input id="base-id" type="text" autocomplete="off" spellcheck="false" [value]="baseId()" (input)="updateBaseId($event)" placeholder="appXXXXXXXXXXXXXX" class="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-4"><label for="record-id" class="mt-5 block text-sm font-semibold">Booking record ID</label><input id="record-id" type="text" autocomplete="off" spellcheck="false" [value]="recordId()" (input)="updateRecordId($event)" placeholder="recXXXXXXXXXXXXXX" class="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-4"><button type="submit" [disabled]="!canContinue()" class="vt-btn vt-btn--primary vt-btn--wide">{{ submitting() ? 'Opening your trip…' : 'Open local preview' }}</button></form>@if (error()) { <p class="mt-4 rounded-xl bg-red-50 p-4 text-sm text-red-800">{{ error() }}</p> }<p class="mt-5 text-center text-xs text-slate-500">Local development only. Direct-ID entry is disabled in production.</p></div>
+      } @else {
+        <div class="vt-gate__panel vt-card vt-gate--link-only"><p class="text-sm font-semibold uppercase tracking-widest text-teal-700">Open your trip</p><h1 class="mt-2 text-3xl font-semibold">Use your trip link</h1><p class="mt-3 text-slate-600">Open the link in your booking email or text message on this device, and your trip will appear here.</p>@if (error()) { <p class="mt-4 rounded-xl bg-red-50 p-4 text-sm text-red-800" role="alert">{{ error() }}</p> }<p class="mt-5 text-sm text-slate-500">Can’t find it? Your travel agent can send it again.</p></div>
+      }
     }
   </main>
 </div>

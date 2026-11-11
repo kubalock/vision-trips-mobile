@@ -21,8 +21,16 @@ export class SessionsService {
 
   refresh(refreshToken: unknown): MobileSession {
     if (typeof refreshToken !== 'string') throw invalidSession();
-    const stored = this.store.sessionByRefreshHash(hash(refreshToken));
-    if (!stored || stored.revoked || stored.refreshExpiresAt < Date.now()) throw new UnauthorizedException('The session has expired.');
+    const presented = hash(refreshToken);
+    const stored = this.store.sessionByRefreshHash(presented);
+    if (!stored) {
+      // A replaced token coming back after the grace period means it was copied: end the whole session.
+      const retired = this.store.retiredRefresh(presented);
+      if (retired && Date.now() - retired.retiredAt > REFRESH_REUSE_GRACE_MS) this.store.revokeSession(retired.sessionId);
+      throw new UnauthorizedException('The session has expired.');
+    }
+    if (stored.revoked || stored.refreshExpiresAt < Date.now()) throw new UnauthorizedException('The session has expired.');
+    this.store.retireRefreshHash(presented, stored.id, stored.refreshExpiresAt);
     const nextRefresh = token('vrt');
     stored.refreshHash = hash(nextRefresh);
     stored.refreshExpiresAt = Date.now() + 30 * 86_400_000;
@@ -48,6 +56,9 @@ export class SessionsService {
     return response(accessToken, stored.accessExpiresAt, refreshToken, stored.refreshExpiresAt);
   }
 }
+
+/** Two requests racing with the same refresh token is normal; only treat reuse after this as theft. */
+const REFRESH_REUSE_GRACE_MS = 10_000;
 
 function token(prefix: string): string { return `${prefix}_${randomBytes(32).toString('base64url')}`; }
 function hash(value: string): string { return createHash('sha256').update(value).digest('base64url'); }

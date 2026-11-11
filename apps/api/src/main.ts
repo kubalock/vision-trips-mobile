@@ -2,6 +2,12 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module.js';
 
+/** Installed Capacitor app (iOS/Android) and browsers on private networks (a phone opening the dev server by IP). */
+const DEVELOPMENT_ORIGINS: Array<string | RegExp> = [
+  'capacitor://localhost', 'http://localhost', 'https://localhost',
+  /^https?:\/\/(localhost|127\.0\.0\.1|10(\.\d{1,3}){3}|192\.168(\.\d{1,3}){2}|172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2})(:\d+)?$/,
+];
+
 try {
   process.loadEnvFile();
 } catch (error) {
@@ -17,7 +23,8 @@ async function bootstrap() {
   if (process.env.TRUST_PROXY) app.getHttpAdapter().getInstance().set('trust proxy', process.env.TRUST_PROXY === 'true' ? 1 : process.env.TRUST_PROXY);
   app.setGlobalPrefix('v1');
   app.enableCors({
-    origin: origins,
+    // Development also accepts the installed app and devices on the local network; production uses MOBILE_ORIGIN only.
+    origin: production ? origins : [...origins, ...DEVELOPMENT_ORIGINS],
     credentials: false,
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Authorization', 'Content-Type', 'Idempotency-Key', 'X-Request-Id', 'X-Vision-Key'],
@@ -46,6 +53,7 @@ async function bootstrap() {
   await app.listen(process.env.PORT ?? 3000);
 }
 await bootstrap();
+
 
 function allowedOrigins(): string[] {
   const configured = process.env.MOBILE_ORIGIN || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4200');

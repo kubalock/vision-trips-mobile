@@ -20,6 +20,29 @@ Copy `apps/api/.env.example` to `apps/api/.env` before connecting to Airtable. T
 
 Authentication sessions and pending verification challenges are stored in SQLite at `apps/api/.data/auth.sqlite` by default. Set `AUTH_DATABASE_PATH` to use a different persistent path. The database contains token hashes and OTP hashes, never the original tokens or codes. Back up or mount this path when running the API outside local development.
 
+## Testing on a phone
+
+The mobile app finds the API like this:
+
+1. An explicit build-time URL always wins: `ng build --define 'VISION_API_URL="https://api.example.com/v1"'`. The installed iOS/Android app and production builds need this.
+2. In a browser, it uses the host the page was opened from on port 3000. A phone on the same Wi-Fi can open `http://<your-computer's-IP>:4200` and reach the API on your computer with no extra setup.
+3. Otherwise it uses `http://localhost:3000/v1`.
+
+In development the API accepts requests from `localhost:4200`, from private-network addresses (10.x, 172.16–31.x, 192.168.x) and from the installed app (`capacitor://localhost`, `http(s)://localhost`). Production accepts only the origins listed in `MOBILE_ORIGIN`.
+
+**Phone browser:** run `npm run start:api` and `npm run start:device --workspace @vision-trips/mobile`, then open `http://<your-computer's-IP>:4200` on the phone.
+
+**Installed app (once `ios/` or `android/` has been added with `npx cap add`):**
+
+```sh
+npm run build:device --workspace @vision-trips/mobile   # bakes in http://<this Mac's Wi-Fi IP>:3000/v1
+(cd apps/mobile && CAP_DEV=1 npx cap sync)              # allows plain HTTP for this local build only
+```
+
+The app sends API requests through Capacitor's native HTTP layer (`CapacitorHttp`), so browser CORS and mixed-content rules don't apply inside it. iOS still blocks plain HTTP to local addresses unless `NSAllowsLocalNetworking` is set in `Info.plist`.
+
+Production builds hide the Airtable-ID entry form; trips open only from their links.
+
 ## Mint payments
 
 Mint credentials and the Airtable automation webhook remain in the Airtable `Brands & Branches` record (`Mint | API Key`, `Mint | Business Unit`, `Webhook URL`, allowed methods and custom-payment setting). The booking must contain a `Mint | Booking ID` beginning with `BK.`. Every generated Mint link includes that brand's HTTPS webhook URL. Mint posts successful payment data directly to Airtable; the mobile app then refreshes the Airtable-backed snapshot until the completed payment and receipt appear.

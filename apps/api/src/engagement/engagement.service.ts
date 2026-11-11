@@ -26,7 +26,7 @@ export class EngagementService implements OnModuleInit, OnModuleDestroy {
     const fields = {
       Booking: [principal.recordId],
       Event: input.event,
-      Detail: input.detail.slice(0, 200),
+      Detail: redactPersonalDetails(input.detail).slice(0, 200),
       Stage: (input.stage || '').slice(0, 100),
       When: validDate(input.occurredAt),
       Device: (input.device || 'unknown').slice(0, 100),
@@ -52,6 +52,15 @@ export class EngagementService implements OnModuleInit, OnModuleDestroy {
       }
     } finally { this.running = false; }
   }
+}
+
+/** Defence in depth: the app already sends safe labels, but never store emails or phone numbers in analytics. */
+export function redactPersonalDetails(text: string): string {
+  return String(text ?? '')
+    .replace(/[^\s@]+@[^\s@]+\.[^\s@]+/g, '[email]')
+    .replace(/\+?\d[\d\s().-]{5,}\d/g, '[number]')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function validDate(value: string | undefined): string {

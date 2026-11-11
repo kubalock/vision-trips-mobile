@@ -1,6 +1,6 @@
 import { BadGatewayException, BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, Headers, Logger, NotFoundException, Optional, Param, Post, Req, ServiceUnavailableException, StreamableFile } from '@nestjs/common';
 import { ApiBearerAuth, ApiProduces, ApiTags } from '@nestjs/swagger';
-import type { CustomerAccount, CustomerMessageRequest, CustomerMessageResponse, CustomerMessageTopic, CustomerPreferences, FellowTravellerLinkResponse, OpenCustomerAccountTripResponse, OpenRelatedQuotationResponse, PaymentLinkResponse, QuotationAcceptanceRequest, QuotationAcceptanceResponse, RelatedQuotationsResponse, UpdateCustomerPreferencesResponse } from '@vision-trips/contracts';
+import type { CustomerAccount, CustomerMessageRequest, CustomerMessageResponse, CustomerMessageTopic, CustomerPreferences, FellowTravellerLinkResponse, OpenCustomerAccountTripResponse, OpenRelatedQuotationResponse, PaymentLinkResponse, QuotationAcceptanceRequest, QuotationAcceptanceResponse, RelatedQuotationsResponse, UpdateCustomerPreferencesResponse, PaymentStatusResponse } from '@vision-trips/contracts';
 import type { Request } from 'express';
 import { AirtableService } from '../airtable/airtable.service.js';
 import { SessionsService } from '../sessions/sessions.service.js';
@@ -73,6 +73,14 @@ export class TripActionsController {
       principal.recordId,
       principal.fellowTraveller ? 'fellow_traveller' : 'primary_customer',
     );
+  }
+
+  @Get('payment-status')
+  @ApiBearerAuth()
+  paymentStatus(@Headers('authorization') authorization: string | undefined): Promise<PaymentStatusResponse> {
+    const principal = this.sessions.validateAccess(authorization);
+    if (principal.fellowTraveller) throw new ForbiddenException('Payment details are only available to the lead customer.');
+    return this.trips.paymentStatus(principal.baseId, principal.recordId);
   }
 
   @Post('fellow-traveller-link')

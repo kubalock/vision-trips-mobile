@@ -1,8 +1,9 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
-import { App, customerErrorMessage, isShareCancelled } from './app';
+import { App, customerErrorMessage, engagementLabel, isShareCancelled } from './app';
 import { VisionApiService } from './core/api/vision-api.service';
+import { ShareSheet } from './core/platform/share-sheet';
 
 describe('App', () => {
   beforeEach(async () => {
@@ -62,6 +63,18 @@ describe('App', () => {
     expect(document.documentElement.dataset['theme']).toBe('dark');
     expect(localStorage.getItem('vision-trips:appearance')).toBe('dark');
     localStorage.removeItem('vision-trips:appearance');
+  });
+
+  it('can go back to following the device theme', () => {
+    localStorage.setItem('vision-trips:appearance', 'dark');
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance as unknown as { appearancePreference: () => string; setAppearancePreference: (value: string) => void };
+    expect(app.appearancePreference()).toBe('dark');
+
+    app.setAppearancePreference('system');
+
+    expect(app.appearancePreference()).toBe('system');
+    expect(localStorage.getItem('vision-trips:appearance')).toBeNull();
   });
 
   it('should preserve and mark the saved snapshot when refreshing offline', async () => {
@@ -219,20 +232,28 @@ describe('App', () => {
         paymentReturnState: () => string; checkPaymentReturn: () => Promise<void>;
       };
       internals.paymentPollDelaysMs = [0, 0];
-      const unpaid = { ...(minimalTrip() as object), payments: { paid: 0, items: [] } };
-      const paid = { ...(minimalTrip() as object), payments: { paid: 100, items: [] } };
-      app.trip.set(unpaid);
-      const refresh = vi.spyOn(api, 'refreshTrip').mockResolvedValue(unpaid as never);
+      const trip = { ...(minimalTrip() as object), payments: { paid: 0, balance: 2, total: 2, items: [{ id: 'pay-1', status: 'outstanding', canPay: true }] } };
+      app.trip.set(trip);
+      const status = (paid: number, itemStatus: string) => ({ tripId: 'trip-1', checkedAt: '', currency: 'GBP', total: 2, paid, balance: 2 - paid, items: [{ id: 'pay-1', status: itemStatus, completedDate: null }] });
+      const poll = vi.spyOn(api, 'paymentStatus').mockResolvedValue(status(0, 'outstanding') as never);
+      const fullReload = vi.spyOn(api, 'refreshTrip').mockResolvedValue(trip as never);
       internals.paymentAwaitingReturn = true; internals.paymentOpenedAt = Date.now() - 5_000; internals.paymentPaidBefore = 0;
 
       await internals.checkPaymentReturn();
-      expect(refresh).toHaveBeenCalledTimes(2);
+      expect(poll).toHaveBeenCalledTimes(2);
+      expect(fullReload).not.toHaveBeenCalled(); // Cheap checks only while unconfirmed.
       expect(internals.paymentReturnState()).toBe('unchanged');
       expect(internals.paymentAwaitingReturn).toBe(true);
 
-      refresh.mockResolvedValue(paid as never);
+      poll.mockResolvedValue(status(1, 'paid') as never);
+      fullReload.mockRejectedValue(new Error('Airtable busy'));
       await internals.checkPaymentReturn();
+      expect(fullReload).toHaveBeenCalledOnce();
       expect(internals.paymentReturnState()).toBe('updated');
+      // The confirmed payment shows even though the full reload failed.
+      const shown = (app as unknown as { trip: () => { payments: { paid: number; items: Array<{ status: string; canPay: boolean }> } } }).trip();
+      expect(shown.payments.paid).toBe(1);
+      expect(shown.payments.items[0]).toMatchObject({ status: 'paid', canPay: false });
       expect(internals.paymentAwaitingReturn).toBe(false);
     });
 
@@ -248,6 +269,63 @@ describe('App', () => {
       expect(internals.paymentAwaitingReturn).toBe(false);
     });
 
+    it('does nothing when the traveller cancels the share sheet', async () => {
+      const { app, api } = setup();
+      app.trip.set({ tripId: 'trip-1', summary: { name: 'Trip' }, capabilities: { shareWithTraveller: true } });
+      vi.spyOn(api, 'fellowTravellerLink').mockResolvedValue({ url: 'https://trips.example/trip/abc', expiresAt: '2026-11-18T00:00:00Z' });
+      vi.spyOn(TestBed.inject(ShareSheet), 'available').mockResolvedValue(true);
+      vi.spyOn(TestBed.inject(ShareSheet), 'share').mockRejectedValue(new Error('Share canceled'));
+      const copy = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: copy } });
+
+      await (app as unknown as { shareWithTraveller: () => Promise<void> }).shareWithTraveller();
+
+      expect(copy).not.toHaveBeenCalled();
+      expect((app as unknown as { shareResult: () => string }).shareResult()).toBe('');
+      expect(app.error()).toBe('');
+    });
+
+    it('shows the link to copy by hand when neither sharing nor the clipboard is available', async () => {
+      const { app, api } = setup();
+      app.trip.set({ tripId: 'trip-1', summary: { name: 'Trip' }, capabilities: { shareWithTraveller: true } });
+      vi.spyOn(api, 'fellowTravellerLink').mockResolvedValue({ url: 'https://trips.example/trip/abc', expiresAt: '2026-11-18T00:00:00Z' });
+      vi.spyOn(TestBed.inject(ShareSheet), 'available').mockResolvedValue(false);
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) } });
+
+      await (app as unknown as { shareWithTraveller: () => Promise<void> }).shareWithTraveller();
+
+      expect((app as unknown as { shareFallbackUrl: () => string | null }).shareFallbackUrl()).toBe('https://trips.example/trip/abc');
+    });
+
+    it('does not re-open a saved trip when the app was launched from a booking link', async () => {
+      const { app } = setup();
+      app.trip.set(null); app.session.set(null);
+      const future = new Date(Date.now() + 86_400_000).toISOString();
+      localStorage.setItem('vision-trips:trip:index', JSON.stringify(['trip-saved']));
+      localStorage.setItem('vision-trips:trip:trip-saved', JSON.stringify({ snapshot: { ...(minimalTrip() as object), tripId: 'trip-saved' }, session: { accessToken: 'a', accessExpiresAt: future, refreshToken: 'r', refreshExpiresAt: future }, savedAt: '2026-11-01T00:00:00Z' }));
+
+      await (app as unknown as { initializeOfflineState: (activate: boolean) => Promise<void> }).initializeOfflineState(false);
+
+      expect(app.savedTripList()).toHaveLength(1);
+      expect((app as unknown as { trip: () => unknown }).trip()).toBeNull();
+    });
+
+    it('adopts a session another tab already renewed instead of re-using the old token', async () => {
+      const { app, api } = setup();
+      const future = new Date(Date.now() + 10 * 60_000).toISOString();
+      app.trip.set({ ...(minimalTrip() as object), tripId: 'trip-1' });
+      const renewedElsewhere = { accessToken: 'tab-b-access', accessExpiresAt: future, refreshToken: 'tab-b-refresh', refreshExpiresAt: future };
+      localStorage.setItem('vision-trips:trip:index', JSON.stringify(['trip-1']));
+      localStorage.setItem('vision-trips:trip:trip-1', JSON.stringify({ snapshot: { ...(minimalTrip() as object), tripId: 'trip-1' }, session: renewedElsewhere, savedAt: '2026-11-01T00:00:00Z' }));
+      const refresh = vi.spyOn(api, 'refreshSession');
+
+      const result = await app.refreshSession(app.session());
+
+      expect(refresh).not.toHaveBeenCalled();
+      expect(result).toEqual(renewedElsewhere);
+      expect(app.session()?.refreshToken).toBe('tab-b-refresh');
+    });
+
     it('forgets the trusted-device token on sign-out', async () => {
       const { app, api } = setup();
       localStorage.setItem('vision-trips:device-trust', 'trust-token');
@@ -259,6 +337,21 @@ describe('App', () => {
       expect(localStorage.getItem('vision-trips:device-trust')).toBeNull();
       expect(app.session()).toBeNull();
     });
+  });
+});
+
+describe('engagementLabel', () => {
+  const element = (html: string) => { const host = document.createElement('div'); host.innerHTML = html; return host.firstElementChild as HTMLElement; };
+
+  it('never sends email addresses or phone numbers', () => {
+    expect(engagementLabel(element('<a href="mailto:alex@example.com">Email us alex@example.com</a>'))).toBe('Email link');
+    expect(engagementLabel(element('<a href="tel:+441234567890">Call us 01234 567 890</a>'))).toBe('Phone link');
+    expect(engagementLabel(element('<button>Contact alex@example.com or 07700 900123</button>'))).toBe('Contact [email] or [number]');
+  });
+
+  it('prefers an explicit label and names external sites by host only', () => {
+    expect(engagementLabel(element('<button data-engagement="Pay now">Pay £1.00</button>'))).toBe('Pay now');
+    expect(engagementLabel(element('<a href="https://wa.me/441234567890?text=hi">WhatsApp us</a>'))).toBe('External link: wa.me');
   });
 });
 

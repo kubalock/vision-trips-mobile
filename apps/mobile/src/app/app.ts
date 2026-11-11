@@ -1,10 +1,9 @@
-import { Component, HostListener, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, computed, effect, inject, isDevMode, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import { Network } from '@capacitor/network';
-import { Share } from '@capacitor/share';
-import type { CustomerAccount, CustomerEngagementEvent, CustomerMessageTopic, CustomerPreferences, ExternalTripContent, LinkExchangeChallenge, LinkExchangeResponse, MobileSession, RelatedQuotationSummary, TripDocument, TripSnapshot, TripStage } from '@vision-trips/contracts';
+import type { CustomerAccount, CustomerEngagementEvent, CustomerMessageTopic, CustomerPreferences, ExternalTripContent, LinkExchangeChallenge, LinkExchangeResponse, MobileSession, PaymentStatusResponse, RelatedQuotationSummary, TripDocument, TripSnapshot, TripStage } from '@vision-trips/contracts';
 import { VisionApiService } from './core/api/vision-api.service';
 import { SavedTripsStore, type SavedTrip } from './core/storage/saved-trips.store';
 import { BrandAssetsStore } from './core/storage/brand-assets.store';
@@ -12,6 +11,8 @@ import { groupSavedTrips } from './core/storage/trip-library';
 import { CustomerNotificationsStore, type CustomerNotification } from './core/storage/customer-notifications.store';
 import { DocumentWalletStore, type WalletStatus } from './core/storage/document-wallet.store';
 import { ExternalPages, type PendingExternalPage } from './core/platform/external-pages';
+import { ShareSheet } from './core/platform/share-sheet';
+import { SessionManager } from './core/session/session-manager';
 import { Directory, Filesystem, Encoding } from '@capacitor/filesystem';
 import { DocumentsSection } from './features/trip/documents-section';
 import { DestinationsSection } from './features/trip/destinations-section';
@@ -25,11 +26,13 @@ import { BookingJourneySection } from './features/trip/booking-journey-section';
 import { CustomerAccountSection } from './features/account/customer-account-section';
 import { BrandSupportSection } from './features/trip/brand-support-section';
 import { VtIcon, type VtIconName } from './shared/lucide-icon';
+import { brandPalette } from './shared/brand-palette';
 import { EuropeanDatePipe, formatEuropeanDate } from './shared/european-date.pipe';
 
 type AppView = 'home' | 'itinerary' | 'payments' | 'documents' | 'help' | 'account';
 type TripRefreshState = 'idle' | 'refreshing' | 'fresh' | 'stale' | 'offline' | 'error';
 type Appearance = 'light' | 'dark';
+type AppearancePreference = Appearance | 'system';
 
 @Component({
   selector: 'app-root',
@@ -44,8 +47,11 @@ export class App implements OnInit, OnDestroy {
   private readonly documentWallet = inject(DocumentWalletStore);
   private readonly customerNotifications = inject(CustomerNotificationsStore);
   private readonly externalPages = inject(ExternalPages);
+  private readonly shareSheet = inject(ShareSheet);
   /** Set when the browser blocked a payment page; the template offers a direct link instead. */
   protected readonly blockedPageUrl = signal<string | null>(null);
+  /** The Airtable-ID entry form is a local development tool; production builds only open trips from links. */
+  protected readonly localPreviewEnabled = isDevMode();
   protected readonly baseId = signal('');
   protected readonly recordId = signal('');
   protected readonly submitting = signal(false);
@@ -84,6 +90,8 @@ export class App implements OnInit, OnDestroy {
   protected readonly refreshing = signal(false);
   protected readonly sharing = signal(false);
   protected readonly shareResult = signal('');
+  /** Shown as selectable text when neither the share sheet nor the clipboard is available. */
+  protected readonly shareFallbackUrl = signal<string | null>(null);
   protected readonly documentStatuses = signal<Record<string, WalletStatus>>({});
   protected readonly downloadingDocumentId = signal<string | null>(null);
   protected readonly savedTripList = signal<SavedTrip[]>([]);
@@ -107,8 +115,33 @@ export class App implements OnInit, OnDestroy {
   protected readonly accountSaving = signal(false);
   protected readonly accountNotice = signal('');
   protected readonly openingAccountTripId = signal<string | null>(null);
-  protected readonly appearance = signal<Appearance>(initialAppearance());
-  private readonly session = signal<MobileSession | null>(null);
+  /** What the traveller chose; 'system' follows the device setting live. */
+  protected readonly appearancePreference = signal<AppearancePreference>(initialAppearancePreference());
+  private readonly systemPrefersDark = signal(prefersDark());
+  protected readonly appearance = computed<Appearance>(() => {
+    const preference = this.appearancePreference();
+    return preference === 'system' ? (this.systemPrefersDark() ? 'dark' : 'light') : preference;
+  });
+  /** Brand accent tokens, adjusted so they stay readable on the current theme. */
+  protected readonly brandStyle = computed<Record<string, string>>(() => {
+    const theme = this.trip()?.brand?.theme;
+    const palette = brandPalette(theme?.primaryColor, this.appearance());
+    return {
+      '--vt-accent': palette.accent, '--vt-accent-text': palette.accentText, '--vt-accent-text-dark': palette.accentText,
+      '--accent-action': palette.action, '--accent-action-ink': palette.actionInk, '--accent-ink': palette.actionInk,
+      '--tint': palette.tint, '--tint-2': palette.tint2, '--link': palette.accentText,
+      '--vt-accent-2': theme?.secondaryColor || '#115e59', '--vt-wash': palette.accent,
+      '--vt-hero-a': theme?.secondaryColor || '#134e4a', '--vt-hero-b': palette.accent,
+    };
+  });
+  protected readonly appearanceOptions: ReadonlyArray<{ value: AppearancePreference; label: string; icon: VtIconName }> = [
+    { value: 'system', label: 'Device', icon: 'device' },
+    { value: 'light', label: 'Light', icon: 'sun' },
+    { value: 'dark', label: 'Dark', icon: 'moon' },
+  ];
+  private readonly applyAppearanceEffect = effect(() => this.applyAppearance(this.appearance()));
+  private readonly sessions = inject(SessionManager);
+  private readonly session = this.sessions.session;
   private paymentAwaitingReturn = false;
   private paymentOpenedAt = 0;
   private paymentPaidBefore = 0;
@@ -120,15 +153,32 @@ export class App implements OnInit, OnDestroy {
   private networkListener: PluginListenerHandle | null = null;
   private resendTimer: ReturnType<typeof setInterval> | null = null;
   private externalContentTimer: ReturnType<typeof setTimeout> | null = null;
-  private readonly sessionRefreshes = new Map<string, Promise<MobileSession>>();
   protected readonly canContinue = computed(() => /^app[A-Za-z0-9]{14}$/.test(this.baseId().trim()) && /^rec[A-Za-z0-9]{14}$/.test(this.recordId().trim()) && !this.submitting());
+
+  constructor() {
+    this.sessions.connect({
+      tripIdFor: (refreshToken) => (this.session()?.refreshToken === refreshToken ? this.trip()?.tripId : undefined)
+        ?? this.savedTripList().find((trip) => trip.session.refreshToken === refreshToken)?.snapshot.tripId,
+      renewed: async ({ previousRefreshToken, session, fromServer }) => {
+        const snapshot = this.trip();
+        if (fromServer && snapshot && this.session()?.refreshToken === session.refreshToken) this.storedSecurely.set(await this.savedTrips.save(snapshot, session));
+        // The old refresh token is now dead server-side; keep the in-memory library in step with storage.
+        this.savedTripList.update((trips) => trips.map((trip) => trip.session.refreshToken === previousRefreshToken ? { ...trip, session } : trip));
+      },
+    });
+  }
 
   ngOnInit(): void {
     document.body.classList.add('vt');
-    this.applyAppearance(this.appearance());
+    if (typeof matchMedia === 'function') {
+      const query = matchMedia('(prefers-color-scheme: dark)');
+      query.addEventListener?.('change', (event) => this.systemPrefersDark.set(event.matches));
+    }
     this.deviceNotificationsEnabled.set(this.customerNotifications.deviceEnabled());
-    void this.openSharedLinkFromLocation();
-    void this.initializeOfflineState();
+    // Decide up front which wins at launch: a booking link in the URL beats re-opening the last saved trip.
+    const sharedLinkToken = window.location.pathname.match(/\/trip\/([^/]+)/)?.[1] ?? null;
+    if (sharedLinkToken) void this.openSharedLink(sharedLinkToken);
+    void this.initializeOfflineState(!sharedLinkToken);
     if (Capacitor.isNativePlatform()) {
       void CapacitorApp.addListener('appStateChange', ({ isActive }) => {
         if (isActive) void this.checkPaymentReturn();
@@ -162,7 +212,7 @@ export class App implements OnInit, OnDestroy {
   protected recordClickedAction(event: MouseEvent): void {
     const target = event.target instanceof Element ? event.target.closest<HTMLElement>('button, a') : null;
     if (!target || target.hasAttribute('disabled')) return;
-    const label = (target.dataset['engagement'] || target.getAttribute('aria-label') || target.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 100);
+    const label = engagementLabel(target);
     if (label) this.trackEngagement('action_clicked', label);
   }
 
@@ -372,16 +422,26 @@ export class App implements OnInit, OnDestroy {
     if (!currentSession || !currentTrip?.capabilities.shareWithTraveller || !this.online() || this.sharing()) return;
     this.sharing.set(true);
     this.shareResult.set('');
+    this.shareFallbackUrl.set(null);
     this.error.set('');
     try {
       const link = await this.withSession(currentSession, (accessToken) => this.api.fellowTravellerLink(accessToken));
       const text = `View ${currentTrip.summary.name} in Vision Trips. This restricted link expires ${formatEuropeanDate(link.expiresAt)}.`;
+      if (await this.shareSheet.available()) {
+        try {
+          await this.shareSheet.share({ title: currentTrip.summary.name, text, url: link.url, dialogTitle: 'Share trip' });
+          this.shareResult.set('Link shared. It works for seven days.');
+          return;
+        } catch (shareError) {
+          if (isShareCancelled(shareError)) return; // The traveller changed their mind: do nothing, copy nothing.
+        }
+      }
+      // No share sheet (most desktop browsers) or it failed: copy instead, and show the link if copying is blocked too.
       try {
-        await Share.share({ title: currentTrip.summary.name, text, url: link.url, dialogTitle: 'Share trip' });
-        this.shareResult.set('The restricted trip link is ready to share.');
-      } catch {
         await navigator.clipboard.writeText(link.url);
-        this.shareResult.set('Restricted trip link copied.');
+        this.shareResult.set('Link copied. Paste it into a message to your fellow traveller.');
+      } catch {
+        this.shareFallbackUrl.set(link.url);
       }
     } catch (error) {
       this.error.set(this.apiError(error, 'We could not create a sharing link. Please try again.'));
@@ -390,17 +450,23 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  private async openSharedLinkFromLocation(): Promise<void> {
-    const match = window.location.pathname.match(/\/trip\/([^/]+)/);
-    if (!match?.[1] || this.trip()) return;
+  private async openSharedLink(linkToken: string): Promise<void> {
+    // Keep the signed token out of the address bar and browser history once it has been read.
+    try { window.history.replaceState(window.history.state, '', new URL(document.baseURI).pathname); } catch { /* Not fatal. */ }
     this.submitting.set(true);
     this.error.set('');
     try {
-      const response = await this.api.exchangeLink(match[1], await this.savedTrips.deviceTrust());
+      const response = await this.api.exchangeLink(linkToken, await this.savedTrips.deviceTrusts());
       if (response.status === 'authorized') await this.acceptAuthorized(response);
       else this.setChallenge(response.challenge);
     } catch (error) {
-      this.error.set(this.apiError(error, 'This shared trip link is invalid or has expired.'));
+      const linkRejected = error instanceof HttpErrorResponse && [400, 401, 403, 404, 410].includes(error.status);
+      this.error.set(linkRejected ? 'This trip link has expired or is no longer valid. Ask your travel agent for a new one.' : this.apiError(error, 'We could not open that trip link. Please try again.'));
+      // Don't strand someone on the entry screen when they already have trips saved on this device.
+      if (!this.trip() && !this.challenge()) {
+        if (!this.savedTripList().length) await this.reloadSavedTrips();
+        if (this.savedTripList().length) this.showTripLibrary.set(true);
+      }
     } finally {
       this.submitting.set(false);
     }
@@ -415,27 +481,18 @@ export class App implements OnInit, OnDestroy {
     this.paymentReturnState.set('checking');
     let reconciled = false;
     try {
-      let latest: TripSnapshot | null = null;
-      // Mint reports to Airtable via a webhook, which can take a minute or more; back off over roughly 70 seconds.
+      // Poll the lightweight payment-status endpoint (2 Airtable reads) rather than reloading the whole trip (~20).
+      // Mint reports to Airtable via a webhook, which can take a minute or more.
       for (const [attempt, waitMs] of this.paymentPollDelaysMs.entries()) {
         if (attempt > 0) await delay(waitMs);
         if (!this.session()) return; // Trip closed or signed out while waiting.
-        latest = await this.withSession(this.session() ?? currentSession, (accessToken) => this.api.refreshTrip(accessToken));
-        const paidNow = latest.payments?.paid ?? 0;
-        const itemNow = latest.payments?.items.find((item) => item.id === this.paymentIdAwaiting);
-        reconciled = paidNow > this.paymentPaidBefore || itemNow?.status === 'paid';
-        if (reconciled) break;
+        const status = await this.withSession(this.session() ?? currentSession, (accessToken) => this.api.paymentStatus(accessToken));
+        const itemNow = status.items.find((item) => item.id === this.paymentIdAwaiting);
+        reconciled = status.paid > this.paymentPaidBefore || itemNow?.status === 'paid';
+        if (reconciled) { this.applyPaymentStatus(status); break; }
       }
-      if (latest) {
-        const previous = this.trip();
-        this.trip.set(latest);
-        await this.loadBrandLogo(latest, true);
-        await this.syncCustomerNotifications(previous, latest);
-        void this.loadExternalContent(false);
-        await this.refreshDocumentStatuses(latest);
-        this.storedSecurely.set(await this.savedTrips.save(latest, this.session() ?? currentSession));
-        await this.reloadSavedTrips();
-      }
+      // Confirmed: one full reload picks up receipts, documents and notifications that came with the payment.
+      if (reconciled) await this.refreshTripAfterWrite();
       this.paymentReturnState.set(reconciled ? 'updated' : 'unchanged');
     } catch {
       this.paymentReturnState.set('error');
@@ -444,6 +501,21 @@ export class App implements OnInit, OnDestroy {
       if (!reconciled && this.session() && Date.now() - this.paymentOpenedAt <= PAYMENT_RECHECK_WINDOW_MS) this.paymentAwaitingReturn = true;
       else this.paymentIdAwaiting = null;
     }
+  }
+
+  /** Shows the confirmed payment straight away, even if the full trip reload that follows fails. */
+  private applyPaymentStatus(status: PaymentStatusResponse): void {
+    this.trip.update((trip) => {
+      if (!trip?.payments || trip.tripId !== status.tripId) return trip;
+      const byId = new Map(status.items.map((item) => [item.id, item]));
+      return { ...trip, payments: {
+        ...trip.payments, paid: status.paid, balance: status.balance, total: status.total,
+        items: trip.payments.items.map((item) => {
+          const latest = byId.get(item.id);
+          return latest ? { ...item, status: latest.status, completedDate: latest.completedDate, canPay: item.canPay && latest.status !== 'paid' } : item;
+        }),
+      } };
+    });
   }
 
   private async refreshTripAfterWrite(): Promise<void> {
@@ -477,15 +549,7 @@ export class App implements OnInit, OnDestroy {
     if (tripId) this.setTripRefreshState(tripId, 'refreshing');
     if (showError) this.error.set('');
     try {
-      let activeSession = await this.sessionForRequest(currentSession);
-      let snapshot: TripSnapshot;
-      try {
-        snapshot = await this.api.refreshTrip(activeSession.accessToken);
-      } catch (error) {
-        if (!(error instanceof HttpErrorResponse) || error.status !== 401) throw error;
-        activeSession = await this.refreshSession(activeSession);
-        snapshot = await this.api.refreshTrip(activeSession.accessToken);
-      }
+      const { result: snapshot, session: activeSession } = await this.sessions.runWithSession(currentSession, (accessToken) => this.api.refreshTrip(accessToken));
       const previous = this.trip();
       this.trip.set(snapshot);
       await this.loadBrandLogo(snapshot, true);
@@ -504,7 +568,7 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  private async initializeOfflineState(): Promise<void> {
+  private async initializeOfflineState(activateSaved = true): Promise<void> {
     const status = await Network.getStatus();
     this.online.set(status.connected);
     this.networkListener = await Network.addListener('networkStatusChange', ({ connected }) => {
@@ -517,7 +581,7 @@ export class App implements OnInit, OnDestroy {
     const saved = (await this.savedTrips.pruneExpired()).sort((a, b) => b.savedAt.localeCompare(a.savedAt));
     this.expiredTripsRemoved.set(Math.max(0, beforePrune - saved.length));
     this.setSavedTripList(saved, status.connected);
-    if (!saved.length || this.trip()) return;
+    if (!activateSaved || !saved.length || this.trip() || this.challenge()) return;
     if (saved.length > 1) {
       await this.activateSavedTrip(saved[0], false);
       this.showTripLibrary.set(true);
@@ -539,8 +603,8 @@ export class App implements OnInit, OnDestroy {
     try {
       const response = await this.api.verifyPostcode(challenge.exchangeId, this.postcode().trim(), this.rememberDevice());
       if (response.status === 'authorized') await this.acceptAuthorized(response);
-    } catch {
-      this.error.set('That postcode did not match the booking. Please check it and try again.');
+    } catch (error) {
+      this.error.set(this.apiError(error, 'That postcode didn’t match the booking. Please check it and try again.'));
     } finally {
       this.submitting.set(false);
     }
@@ -623,10 +687,16 @@ export class App implements OnInit, OnDestroy {
   }
 
   protected toggleAppearance(): void {
-    const next: Appearance = this.appearance() === 'dark' ? 'light' : 'dark';
-    this.appearance.set(next);
-    try { localStorage.setItem('vision-trips:appearance', next); } catch { /* Appearance still applies for this session. */ }
-    this.applyAppearance(next);
+    this.setAppearancePreference(this.appearance() === 'dark' ? 'light' : 'dark');
+  }
+
+  protected setAppearancePreference(preference: AppearancePreference): void {
+    this.appearancePreference.set(preference);
+    try {
+      if (preference === 'system') localStorage.removeItem('vision-trips:appearance');
+      else localStorage.setItem('vision-trips:appearance', preference);
+    } catch { /* Appearance still applies for this session. */ }
+    this.applyAppearance(this.appearance());
   }
 
   protected stageLabel(stage: TripStage): string {
@@ -736,8 +806,13 @@ export class App implements OnInit, OnDestroy {
   }
 
   protected async openSavedTrip(saved: SavedTrip): Promise<void> {
+    this.error.set('');
     this.showTripLibrary.set(false);
     await this.activateSavedTrip(saved, this.online());
+  }
+
+  protected selectAll(event: Event): void {
+    (event.target as HTMLInputElement).select();
   }
 
   protected hideBrokenTripImage(event: Event): void {
@@ -755,15 +830,7 @@ export class App implements OnInit, OnDestroy {
     this.setTripRefreshState(tripId, 'refreshing');
     try {
       const openSession = this.trip()?.tripId === tripId ? this.session() : null;
-      let session = await this.sessionForRequest(openSession ?? saved.session);
-      let snapshot: TripSnapshot;
-      try {
-        snapshot = await this.api.refreshTrip(session.accessToken);
-      } catch (error) {
-        if (!(error instanceof HttpErrorResponse) || error.status !== 401) throw error;
-        session = await this.refreshSession(session);
-        snapshot = await this.api.refreshTrip(session.accessToken);
-      }
+      const { result: snapshot, session } = await this.sessions.runWithSession(openSession ?? saved.session, (accessToken) => this.api.refreshTrip(accessToken));
       await this.savedTrips.save(snapshot, session);
       if (snapshot.brand.logoUrl) await this.brandAssets.cacheLogo(snapshot.tripId, snapshot.brand.logoUrl);
       else await this.brandAssets.remove(snapshot.tripId);
@@ -828,6 +895,7 @@ export class App implements OnInit, OnDestroy {
     this.openingPaymentId.set(null);
     this.blockedPageUrl.set(null);
     this.shareResult.set('');
+    this.shareFallbackUrl.set(null);
     this.documentStatuses.set({});
     this.externalContent.set(null);
     this.externalContentLoading.set(false);
@@ -942,14 +1010,7 @@ export class App implements OnInit, OnDestroy {
     this.externalContentLoading.set(showLoading && !this.externalContent());
     this.externalContentFailed.set(false);
     try {
-      let session = await this.sessionForRequest(currentSession);
-      let content: ExternalTripContent;
-      try { content = await this.api.externalContent(session.accessToken); }
-      catch (error) {
-        if (!(error instanceof HttpErrorResponse) || error.status !== 401) throw error;
-        session = await this.refreshSession(session);
-        content = await this.api.externalContent(session.accessToken);
-      }
+      const content = await this.withSession(currentSession, (accessToken) => this.api.externalContent(accessToken));
       this.externalContent.set(content);
       const pending = content.providers.ai.state === 'pending';
       const delayMs = pending ? 5_000 : Math.max(60, content.refreshAfterSeconds) * 1_000;
@@ -960,22 +1021,9 @@ export class App implements OnInit, OnDestroy {
     } finally { this.externalContentLoading.set(false); }
   }
 
-  private sessionForRequest(session: MobileSession): Promise<MobileSession> {
-    const accessExpiresAt = Date.parse(session.accessExpiresAt);
-    const accessIsExpired = !Number.isFinite(accessExpiresAt) || accessExpiresAt <= Date.now() + 30_000;
-    return accessIsExpired ? this.refreshSession(session) : Promise.resolve(session);
-  }
-
-  private async withSession<T>(session: MobileSession, request: (accessToken: string) => Promise<T>): Promise<T> {
-    let activeSession = await this.sessionForRequest(session);
-    try {
-      return await request(activeSession.accessToken);
-    } catch (error) {
-      if (!(error instanceof HttpErrorResponse) || error.status !== 401) throw error;
-      activeSession = await this.refreshSession(activeSession);
-      return request(activeSession.accessToken);
-    }
-  }
+  private sessionForRequest(session: MobileSession): Promise<MobileSession> { return this.sessions.forRequest(session); }
+  private withSession<T>(session: MobileSession, request: (accessToken: string) => Promise<T>): Promise<T> { return this.sessions.run(session, request); }
+  private refreshSession(expiredSession: MobileSession): Promise<MobileSession> { return this.sessions.renew(expiredSession); }
 
   private trackEngagement(event: CustomerEngagementEvent, detail: string): void {
     const session = this.session();
@@ -989,27 +1037,6 @@ export class App implements OnInit, OnDestroy {
     }, accessToken)).catch(() => undefined);
   }
 
-  private refreshSession(expiredSession: MobileSession): Promise<MobileSession> {
-    const refreshToken = expiredSession.refreshToken;
-    const pending = this.sessionRefreshes.get(refreshToken);
-    if (pending) return pending;
-
-    const request = this.api.refreshSession(refreshToken).then(async (session) => {
-      if (this.session()?.refreshToken === refreshToken) {
-        this.session.set(session);
-        const snapshot = this.trip();
-        if (snapshot) this.storedSecurely.set(await this.savedTrips.save(snapshot, session));
-      }
-      // The old refresh token is now dead server-side; keep the in-memory library in step with storage.
-      this.savedTripList.update((trips) => trips.map((trip) => trip.session.refreshToken === refreshToken ? { ...trip, session } : trip));
-      return session;
-    }).finally(() => {
-      this.sessionRefreshes.delete(refreshToken);
-    });
-    this.sessionRefreshes.set(refreshToken, request);
-    return request;
-  }
-
   protected async downloadCalendar(): Promise<void> {
     const session = this.session();
     const trip = this.trip();
@@ -1021,7 +1048,7 @@ export class App implements OnInit, OnDestroy {
       if (Capacitor.isNativePlatform()) {
         // WebView downloads are ignored on iOS/Android: write the file and hand it to the share sheet ("Add to Calendar").
         const { uri } = await Filesystem.writeFile({ path: `calendar/${filename}`, directory: Directory.Cache, recursive: true, encoding: Encoding.UTF8, data: await blob.text() });
-        await Share.share({ title: `${trip.summary.name} itinerary`, files: [uri], dialogTitle: 'Add to calendar' });
+        await this.shareSheet.share({ title: `${trip.summary.name} itinerary`, files: [uri], dialogTitle: 'Add to calendar' });
       } else {
         this.downloadBlob(blob, filename);
       }
@@ -1042,7 +1069,7 @@ export class App implements OnInit, OnDestroy {
     try {
       if (this.documentStatuses()[document.id] === 'saved') {
         const uri = await this.documentWallet.uri(trip.tripId, document.id);
-        if (uri) { await Share.share({ title: document.title, files: [uri], dialogTitle: 'Open or share document' }); return; }
+        if (uri) { await this.shareSheet.share({ title: document.title, files: [uri], dialogTitle: 'Open or share document' }); return; }
       }
       if (!this.online()) throw new Error('offline');
       const action = document.downloadAction;
@@ -1050,7 +1077,7 @@ export class App implements OnInit, OnDestroy {
       if (await this.documentWallet.save(trip.tripId, document, blob)) {
         await this.refreshDocumentStatuses(trip);
         const uri = await this.documentWallet.uri(trip.tripId, document.id);
-        if (uri) await Share.share({ title: document.title, files: [uri], dialogTitle: 'Document saved offline' });
+        if (uri) await this.shareSheet.share({ title: document.title, files: [uri], dialogTitle: 'Document saved offline' });
       } else {
         this.downloadBlob(blob, `${trip.summary.reference.replace(/[^A-Za-z0-9_-]+/g, '-')}-${document.title.replace(/[^A-Za-z0-9_-]+/g, '-')}${fileExtension(blob.type)}`);
       }
@@ -1083,8 +1110,8 @@ export class App implements OnInit, OnDestroy {
 }
 
 /** Waits between payment-status checks after returning from the payment page (first check is immediate). */
-// Each check reloads the whole trip (~20 Airtable reads), so keep it to six checks over about 70 seconds.
-export const PAYMENT_POLL_DELAYS_MS = [0, 5_000, 10_000, 15_000, 20_000, 20_000];
+// Each check costs 2 Airtable reads (payment-status endpoint): ten checks over about 70 seconds.
+export const PAYMENT_POLL_DELAYS_MS = [0, 3_000, 3_000, 5_000, 5_000, 8_000, 8_000, 10_000, 12_000, 15_000];
 /** How long after opening a payment page a later return to the app still triggers a re-check. */
 const PAYMENT_RECHECK_WINDOW_MS = 30 * 60_000;
 
@@ -1092,12 +1119,16 @@ function isSnapshotStale(snapshot: TripSnapshot): boolean {
   return !snapshot.freshness.nextRefreshAfter || Date.parse(snapshot.freshness.nextRefreshAfter) <= Date.now();
 }
 
-function initialAppearance(): Appearance {
+function initialAppearancePreference(): AppearancePreference {
   try {
     const saved = localStorage.getItem('vision-trips:appearance');
     if (saved === 'light' || saved === 'dark') return saved;
   } catch { /* Fall back to the device preference. */ }
-  return typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  return 'system';
+}
+
+function prefersDark(): boolean {
+  return typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches;
 }
 
 function fileExtension(mimeType: string): string { return mimeType.includes('pdf') ? '.pdf' : mimeType.includes('png') ? '.png' : mimeType.includes('jpeg') ? '.jpg' : '.bin'; }
@@ -1114,11 +1145,34 @@ export function customerErrorMessage(error: unknown, fallback: string): string {
   if (!(error instanceof HttpErrorResponse)) return fallback;
   if (error.status === 0) return 'We can’t reach Vision Trips right now. Check your connection and try again.';
   if (error.status === 401) return 'For your security, please open your trip link again to continue.';
-  if (error.status === 429) return 'Lots of requests at once. Please wait a moment and try again.';
   if (error.status >= 500) return 'Our booking system is busy right now. Please try again in a minute.';
   const raw = error.error?.message;
   const message = typeof raw === 'string' ? raw.trim() : Array.isArray(raw) ? raw.filter((item): item is string => typeof item === 'string').join(' ') : '';
-  return message && !INTERNAL_ERROR_TERMS.test(message) ? message : fallback;
+  const safe = message && !INTERNAL_ERROR_TERMS.test(message) ? message : '';
+  if (error.status === 429) return safe || 'Lots of requests at once. Please wait a moment and try again.';
+  return safe || fallback;
+}
+
+/**
+ * A label for click analytics that never carries personal details. Prefers an explicit data-engagement name, then the
+ * kind of link (call/email/website), and only then the visible text with emails, phone numbers and long digit runs removed.
+ */
+export function engagementLabel(target: HTMLElement): string {
+  const explicit = target.dataset['engagement']?.trim();
+  if (explicit) return explicit.slice(0, 100);
+  const href = target instanceof HTMLAnchorElement ? target.getAttribute('href') ?? '' : '';
+  if (/^tel:/i.test(href)) return 'Phone link';
+  if (/^mailto:/i.test(href)) return 'Email link';
+  if (/^https?:/i.test(href)) { try { return `External link: ${new URL(href).hostname}`; } catch { return 'External link'; } }
+  return redactPersonalDetails(target.getAttribute('aria-label') || target.textContent || '').slice(0, 100);
+}
+
+export function redactPersonalDetails(text: string): string {
+  return text
+    .replace(/[^\s@]+@[^\s@]+\.[^\s@]+/g, '[email]')
+    .replace(/\+?\d[\d\s().-]{5,}\d/g, '[number]')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /** Capacitor Share rejects with "Share canceled" when the user dismisses the sheet; that is not an error. */

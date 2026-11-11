@@ -8,18 +8,18 @@ import { DurableAuthStore } from '../sessions/durable-auth.store.js';
 import { TripsService } from '../trips/trips.service.js';
 import { OtpDeliveryService } from './otp-delivery.service.js';
 
-interface PendingExchange { baseId: string; recordId: string; fellowTraveller: boolean; postcode: string; email: string; forceOtp: boolean; expiresAt: number; otpHash: string | null; otpExpiresAt: number; attempts: number; sends: number; lastSentAt: number }
+interface PendingExchange { baseId: string; recordId: string; fellowTraveller: boolean; postcode: string; email: string; forceOtp: boolean; expiresAt: number; otpHash: string | null; otpExpiresAt: number; attempts: number; postcodeAttempts?: number; sends: number; lastSentAt: number }
 
 @Injectable()
 export class LinkExchangesService {
   constructor(private readonly tokens: LinkTokenService, private readonly trips: TripsService, private readonly sessions: SessionsService, private readonly trust: DeviceTrustService, private readonly delivery: OtpDeliveryService, private readonly store: DurableAuthStore) {}
 
-  async create(linkOrCode: unknown, deviceTrustToken?: unknown): Promise<LinkExchangeResponse> {
+  async create(linkOrCode: unknown, deviceTrustTokens: unknown[] = []): Promise<LinkExchangeResponse> {
     if (typeof linkOrCode !== 'string' || linkOrCode.trim().length < 16) throw new BadRequestException('Enter a valid itinerary link.');
     const token = this.tokens.parseLinkOrToken(linkOrCode);
     if (token.scope === 'agent') throw new BadRequestException('Agent links cannot be saved in the customer app.');
     const exchangeId = randomUUID();
-    if (this.trust.valid(deviceTrustToken, token.baseId, token.recordId)) return this.authorize(exchangeId, token.baseId, token.recordId, token.fellowTraveller, false);
+    if (deviceTrustTokens.slice(0, 20).some((trusted) => this.trust.valid(trusted, token.baseId, token.recordId))) return this.authorize(exchangeId, token.baseId, token.recordId, token.fellowTraveller, false);
     const profile = await this.trips.verificationProfile(token.baseId, token.recordId);
     if (token.legacy || profile.forceOtp) {
       if (profile.forceOtp && !profile.email) throw new ConflictException('Email verification is required, but this booking has no customer email address. Contact your travel agent.');
@@ -65,7 +65,21 @@ export class LinkExchangesService {
   async verifyPostcode(exchangeId: string, postcode: unknown, rememberDevice?: unknown): Promise<LinkExchangeResponse> {
     const pending = this.getPending(exchangeId);
     if (pending.forceOtp) throw new BadRequestException('This booking requires email verification; postcode fallback is not permitted.');
-    if (!pending.postcode || typeof postcode !== 'string' || normalizePostcode(postcode) !== normalizePostcode(pending.postcode)) throw new UnauthorizedException('The postcode did not match the booking.');
+    // Limit guesses per verification attempt and per booking, so starting a new verification doesn't reset the count.
+    const bookingBucket = `postcode-failures:${pending.baseId}:${pending.recordId}`;
+    if (this.store.rateLimitExhausted(bookingBucket, POSTCODE_FAILURES_PER_BOOKING, POSTCODE_FAILURE_WINDOW_MS)) {
+      throw rateLimited('Too many incorrect postcodes for this booking. Try again later or use the email code.');
+    }
+    if ((pending.postcodeAttempts ?? 0) >= POSTCODE_ATTEMPTS_PER_EXCHANGE) {
+      throw rateLimited('Too many incorrect postcodes. Open your trip link again to start over.');
+    }
+    if (!pending.postcode || typeof postcode !== 'string' || normalizePostcode(postcode) !== normalizePostcode(pending.postcode)) {
+      pending.postcodeAttempts = (pending.postcodeAttempts ?? 0) + 1;
+      this.store.putChallenge(exchangeId, pending, pending.expiresAt);
+      this.store.consumeRateLimit(bookingBucket, POSTCODE_FAILURES_PER_BOOKING, POSTCODE_FAILURE_WINDOW_MS);
+      const remaining = POSTCODE_ATTEMPTS_PER_EXCHANGE - pending.postcodeAttempts;
+      throw new UnauthorizedException(remaining > 0 ? `That postcode didn't match the booking. ${remaining} ${remaining === 1 ? 'attempt' : 'attempts'} left.` : 'That postcode didn\'t match the booking.');
+    }
     this.store.deleteChallenge(exchangeId);
     return this.authorize(exchangeId, pending.baseId, pending.recordId, pending.fellowTraveller, rememberDevice === true);
   }
@@ -99,4 +113,8 @@ export class LinkExchangesService {
 function normalizePostcode(value: string): string { return value.toUpperCase().replace(/[^A-Z0-9]/g, ''); }
 function hashCode(value: string): string { return createHash('sha256').update(`vision-otp:${value}`).digest('hex'); }
 function maskEmail(email: string): string | null { const [name, domain] = email.split('@'); return name && domain ? `${name.slice(0, 2)}${'*'.repeat(Math.max(2, name.length - 2))}@${domain}` : null; }
+const POSTCODE_ATTEMPTS_PER_EXCHANGE = 5;
+const POSTCODE_FAILURES_PER_BOOKING = 10;
+const POSTCODE_FAILURE_WINDOW_MS = 60 * 60_000;
+
 function rateLimited(message: string): HttpException { return new HttpException(message, HttpStatus.TOO_MANY_REQUESTS); }

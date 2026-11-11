@@ -232,4 +232,24 @@ describe('TripsService', () => {
     expect(JSON.stringify(snapshot)).not.toContain('Lisbon');
     expect(JSON.stringify(snapshot)).not.toContain('Secret Hotel');
   });
+
+  it('reports payment status from two Airtable reads, with the same ids as the full snapshot', async () => {
+    const booking = { id: 'recABCDEFGHIJKLMN', createdTime: '2026-11-01T10:00:00.000Z', fields: { 'Bookings [Payments]': ['recPAYMENTABCDEFG', 'recPAYMENTHIJKLMN'], 'Total Price': 500, 'Total Paid': 2, 'Balance Outstanding': 498 } };
+    const payments = [
+      { id: 'recPAYMENTABCDEFG', fields: { Amount: 1, Status: 'Complete', 'Customer Payment Type': 'Trip Instalment', 'Payment Completed': '2026-11-02' } },
+      { id: 'recPAYMENTHIJKLMN', fields: { Amount: 1, Status: 'Outstanding', 'Customer Payment Type': 'Deposit Payment', 'Due Date': '2026-10-06' } },
+    ];
+    const airtable = { record: vi.fn().mockResolvedValue(booking), records: vi.fn().mockResolvedValue(payments) };
+    const service = new TripsService(airtable as never);
+
+    const status = await service.paymentStatus('appABCDEFGHIJKLMN', booking.id);
+    const snapshot = service.mapSnapshot('appABCDEFGHIJKLMN', booking as never, { id: 'recBRAND', fields: {} } as never, 'primary_customer', { payments } as never);
+
+    expect(airtable.record).toHaveBeenCalledOnce();
+    expect(airtable.records).toHaveBeenCalledOnce();
+    expect(airtable.records).toHaveBeenCalledWith('appABCDEFGHIJKLMN', 'Bookings [Payments]', ['recPAYMENTABCDEFG', 'recPAYMENTHIJKLMN']);
+    expect(status.tripId).toBe(snapshot.tripId);
+    expect(status.items.map((item) => [item.id, item.status])).toEqual(snapshot.payments!.items.map((item) => [item.id, item.status]));
+    expect(JSON.stringify(status)).not.toContain('rec');
+  });
 });

@@ -478,6 +478,17 @@ export interface PaymentItem {
   actionUrl: string | null;
 }
 
+/** Lightweight payment check used while waiting for a payment to be confirmed (no full trip reload). */
+export interface PaymentStatusResponse {
+  tripId: string;
+  checkedAt: string;
+  currency: string;
+  total: number;
+  paid: number;
+  balance: number;
+  items: Array<Pick<PaymentItem, 'id' | 'status' | 'completedDate'>>;
+}
+
 export interface PaymentSummary {
   currency: string;
   total: number;

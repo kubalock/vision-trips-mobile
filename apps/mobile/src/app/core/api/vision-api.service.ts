@@ -1,16 +1,17 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import type { CustomerAccount, CustomerEngagementRequest, CustomerEngagementResponse, CustomerMessageRequest, CustomerMessageResponse, CustomerPreferences, ExternalTripContent, FellowTravellerLinkResponse, LinkExchangeResponse, MobileSession, OpenCustomerAccountTripResponse, OpenRelatedQuotationResponse, PaymentLinkResponse, QuotationAcceptanceRequest, QuotationAcceptanceResponse, RelatedQuotationsResponse, TripSnapshot, UpdateCustomerPreferencesResponse } from '@vision-trips/contracts';
+import type { CustomerAccount, CustomerEngagementRequest, CustomerEngagementResponse, CustomerMessageRequest, CustomerMessageResponse, CustomerPreferences, ExternalTripContent, FellowTravellerLinkResponse, LinkExchangeResponse, MobileSession, OpenCustomerAccountTripResponse, OpenRelatedQuotationResponse, PaymentLinkResponse, PaymentStatusResponse, QuotationAcceptanceRequest, QuotationAcceptanceResponse, RelatedQuotationsResponse, TripSnapshot, UpdateCustomerPreferencesResponse } from '@vision-trips/contracts';
 import { firstValueFrom } from 'rxjs';
+import { API_BASE_URL } from '../config/api-base-url';
 
 @Injectable({ providedIn: 'root' })
 export class VisionApiService {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = 'http://localhost:3000/v1';
+  private readonly baseUrl = inject(API_BASE_URL);
 
-  exchangeLink(linkOrCode: string, deviceTrustToken?: string | null): Promise<LinkExchangeResponse> {
+  exchangeLink(linkOrCode: string, deviceTrustTokens: string[] = []): Promise<LinkExchangeResponse> {
     return firstValueFrom(
-      this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges`, { linkOrCode, deviceTrustToken }, this.writeOptions()),
+      this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges`, { linkOrCode, deviceTrustTokens }, this.writeOptions()),
     );
   }
 
@@ -64,6 +65,10 @@ export class VisionApiService {
     return firstValueFrom(this.http.get<TripSnapshot>(`${this.baseUrl}/trips/current`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     }));
+  }
+
+  paymentStatus(accessToken: string): Promise<PaymentStatusResponse> {
+    return firstValueFrom(this.http.get<PaymentStatusResponse>(`${this.baseUrl}/trips/current/payment-status`, { headers: { Authorization: `Bearer ${accessToken}` } }));
   }
 
   externalContent(accessToken: string): Promise<ExternalTripContent> {

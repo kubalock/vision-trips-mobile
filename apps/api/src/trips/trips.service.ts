@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { AccessScope, CabinDetail, CruisePort, ItineraryItem, ItineraryKind, PassengerAllocation, PaymentItem, RoomDetail, TravellerSummary, TripDocument, TripSnapshot } from '@vision-trips/contracts';
+import type { AccessScope, PaymentStatusResponse, CabinDetail, CruisePort, ItineraryItem, ItineraryKind, PassengerAllocation, PaymentItem, RoomDetail, TravellerSummary, TripDocument, TripSnapshot } from '@vision-trips/contracts';
 import { createHash, createHmac } from 'node:crypto';
 import { AirtableService, type AirtableRecord } from '../airtable/airtable.service.js';
 import { airlineFields, airportFields, bookingFields, brandFields, brandTemplateFields, cabinFields, communicationFields, cruisePortFields, customerFields, elementFields, firstAttachmentUrl, firstString, locationFields, memberFields, numberValue, passengerFields, paymentFields, personFields, pick, roomFields, shipFields, strings, supplierFields, truthy, upsellFields } from './field-map.js';
@@ -9,6 +9,22 @@ import { themeTokens } from './theme.js';
 @Injectable()
 export class TripsService {
   constructor(private readonly airtable: AirtableService) {}
+
+  /**
+   * Payment totals and per-instalment status from just the booking and its payment records (2 Airtable reads instead
+   * of ~20 for a full snapshot). IDs and statuses match the snapshot, so the app can compare them directly.
+   */
+  async paymentStatus(baseId: string, recordId: string): Promise<PaymentStatusResponse> {
+    const booking = await this.airtable.record(baseId, 'Bookings', recordId);
+    const records = await this.airtable.records(baseId, 'Bookings [Payments]', strings(pick(booking.fields, bookingFields.payments)));
+    const tripId = publicTripId(baseId, booking.id);
+    // Stage and Mint readiness only affect whether "Pay now" is offered, not the status, so neutral values are fine here.
+    const payments = mapPayments(booking, records, 'confirmed', tripId, false, false);
+    return {
+      tripId, checkedAt: new Date().toISOString(), currency: payments.currency, total: payments.total, paid: payments.paid, balance: payments.balance,
+      items: payments.items.map(({ id, status, completedDate }) => ({ id, status, completedDate })),
+    };
+  }
 
   async snapshot(baseId: string, recordId: string, accessScope: AccessScope): Promise<TripSnapshot> {
     const booking = await this.airtable.record(baseId, 'Bookings', recordId);

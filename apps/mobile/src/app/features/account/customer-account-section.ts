@@ -153,7 +153,7 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
 
         <section class="vt-account-danger" aria-labelledby="account-signout-title">
           <span class="vt-account-danger__icon"><vt-icon name="alert" [size]="21" /></span>
-          <div><h2 id="account-signout-title">Sign out of this device</h2><p>Revokes every locally saved Vision Trips session and removes the saved trip list from this device. Downloaded wallet documents are not deleted.</p></div>
+          <div><h2 id="account-signout-title">Sign out of this device</h2><p>Signs out every trip saved on this device and removes them, along with any documents saved for offline use.</p></div>
           <button type="button" (click)="signOut.emit()">Sign out</button>
         </section>
       </section>
