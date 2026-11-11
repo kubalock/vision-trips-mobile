@@ -144,7 +144,8 @@ export class App implements OnInit, OnDestroy {
   private readonly session = this.sessions.session;
   private paymentAwaitingReturn = false;
   private paymentOpenedAt = 0;
-  private paymentPaidBefore = 0;
+  /** Paid total before the payment page opened; null when it wasn't known (then only the instalment's status counts). */
+  private paymentPaidBefore: number | null = null;
   private paymentIdAwaiting: string | null = null;
   private resumeListener: PluginListenerHandle | null = null;
   private backButtonListener: PluginListenerHandle | null = null;
@@ -315,7 +316,7 @@ export class App implements OnInit, OnDestroy {
       } : trip);
       await this.refreshTripAfterWrite();
       if (result.paymentUrl) {
-        this.paymentPaidBefore = currentTrip.payments?.paid ?? 0;
+        this.paymentPaidBefore = currentTrip.payments?.paid ?? null;
         this.paymentIdAwaiting = null;
         this.paymentAwaitingReturn = true;
         this.paymentOpenedAt = Date.now();
@@ -496,7 +497,8 @@ export class App implements OnInit, OnDestroy {
         const status = await this.withSession(this.session() ?? currentSession, (accessToken) => this.api.paymentStatus(accessToken));
         if (!this.isCurrentTrip(generation)) return;
         const itemNow = status.items.find((item) => item.id === this.paymentIdAwaiting);
-        reconciled = status.paid > this.paymentPaidBefore || itemNow?.status === 'paid';
+        const before = this.paymentPaidBefore;
+        reconciled = (before !== null && status.paid !== null && status.paid > before) || itemNow?.status === 'paid';
         if (reconciled) { this.applyPaymentStatus(status); break; }
       }
       // Confirmed: one full reload picks up receipts, documents and notifications that came with the payment.

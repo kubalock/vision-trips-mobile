@@ -46,7 +46,7 @@ export class CustomerNotificationsStore {
       const previousItems = new Map(previous.payments.items.map((item) => [item.id, item]));
       for (const payment of snapshot.payments.items) {
         if (payment.status === 'paid' && previousItems.get(payment.id)?.status !== 'paid') {
-          await this.add(snapshot.tripId, 'payment_received', 'Payment received', `${payment.label} has been received. Your balance is now ${money(snapshot.payments.balance, snapshot.payments.currency)}.`, `payment:${payment.id}:${payment.completedDate ?? snapshot.version}`);
+          await this.add(snapshot.tripId, 'payment_received', 'Payment received', `${payment.label} has been received.${snapshot.payments.balance === null ? '' : ` Your balance is now ${money(snapshot.payments.balance, snapshot.payments.currency)}.`}`, `payment:${payment.id}:${payment.completedDate ?? snapshot.version}`);
         }
       }
     }

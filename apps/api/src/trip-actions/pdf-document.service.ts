@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { TripSnapshot } from '@vision-trips/contracts';
 import PDFDocument from 'pdfkit';
+import { formatMoney } from '../trips/field-map.js';
 
 @Injectable()
 export class PdfDocumentService {
@@ -136,7 +137,7 @@ function section(pdf: PDFKit.PDFDocument, value: string): void { pdf.moveDown().
 function paragraph(pdf: PDFKit.PDFDocument, value: string, compact = false): void { pdf.fillColor('#334155').fontSize(10).text(value, { lineGap: 3 }); pdf.moveDown(compact ? 0.35 : 0.7); }
 function row(pdf: PDFKit.PDFDocument, label: string, value: string): void { const y = pdf.y; pdf.font('Helvetica').fillColor('#64748b').fontSize(10).text(label, 54, y, { width: 235 }); pdf.font('Helvetica-Bold').fillColor('#172033').text(value, 290, y, { width: 251, align: 'right' }).font('Helvetica'); pdf.moveDown(0.8); }
 function footer(pdf: PDFKit.PDFDocument, snapshot: TripSnapshot): void { pdf.moveDown(2).fontSize(8).fillColor('#94a3b8').text(`Generated ${snapshot.serverTime} · ${snapshot.brand.name}`); }
-function money(amount: number, currency: string): string { return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(amount); }
+const money = formatMoney;
 function dateRange(snapshot: TripSnapshot): string { return `${snapshot.summary.departureDate ?? 'To be confirmed'} to ${snapshot.summary.returnDate ?? 'To be confirmed'}`; }
 function longDate(value: string | null): string { if (!value) return ''; const parsed = new Date(`${value.slice(0, 10)}T12:00:00Z`); return Number.isNaN(parsed.getTime()) ? value : new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(parsed); }
 function title(action: string): string { if (action === 'atol') return 'ATOL Certificate'; if (action === 'invoice') return 'Booking invoice'; if (action === 'acceptance') return 'Quotation acceptance receipt'; if (action === 'front-file') return 'Booking front file'; if (action === 'guarantee') return 'Safe Seat Plan guarantee'; if (action.startsWith('letter:')) return 'Customer letter'; if (action.startsWith('receipt:')) return 'Payment receipt'; return 'Booking confirmation'; }

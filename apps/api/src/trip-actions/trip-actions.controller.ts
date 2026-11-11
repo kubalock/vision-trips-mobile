@@ -11,6 +11,7 @@ import { PdfDocumentService } from './pdf-document.service.js';
 import { MintPaymentsService } from './mint-payments.service.js';
 import { RelatedQuotationsService } from './related-quotations.service.js';
 import { CustomerAccountService } from './customer-account.service.js';
+import { formatMoney } from '../trips/field-map.js';
 
 @ApiTags('trip actions')
 @Controller('trips/current')
@@ -275,7 +276,7 @@ export function buildAcceptanceReceipt(snapshot: Awaited<ReturnType<TripsService
 }
 
 export function buildDocument(snapshot: Awaited<ReturnType<TripsService['snapshot']>>, kind: 'confirmation' | 'invoice'): string {
-  const money = (amount: number, currency: string) => new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(amount);
+  const money = formatMoney;
   const body = kind === 'invoice' && snapshot.payments
     ? `<h2>Payment summary</h2><dl><dt>Total</dt><dd>${escapeHtml(money(snapshot.payments.total, snapshot.payments.currency))}</dd><dt>Paid</dt><dd>${escapeHtml(money(snapshot.payments.paid, snapshot.payments.currency))}</dd><dt>Balance</dt><dd>${escapeHtml(money(snapshot.payments.balance, snapshot.payments.currency))}</dd></dl>`
     : `<h2>Itinerary</h2>${snapshot.itinerary.map((item) => `<section><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml([item.startDate, item.startTime, item.from && item.to ? `${item.from} to ${item.to}` : ''].filter(Boolean).join(' · '))}</p></section>`).join('')}`;

@@ -257,6 +257,19 @@ describe('App', () => {
       expect(internals.paymentAwaitingReturn).toBe(false);
     });
 
+    it('does not treat a newly known paid total as a confirmed payment when it was unknown before', async () => {
+      const { app, api } = setup();
+      const internals = app as unknown as { paymentPollDelaysMs: number[]; paymentAwaitingReturn: boolean; paymentOpenedAt: number; paymentPaidBefore: number | null; paymentIdAwaiting: string | null; paymentReturnState: () => string; checkPaymentReturn: () => Promise<void> };
+      internals.paymentPollDelaysMs = [0];
+      app.trip.set({ ...(minimalTrip() as object), payments: { paid: null, balance: null, total: null, items: [{ id: 'pay-1', status: 'outstanding' }] } });
+      vi.spyOn(api, 'paymentStatus').mockResolvedValue({ tripId: 'trip-1', checkedAt: '', currency: 'GBP', total: 500, paid: 2, balance: 498, items: [{ id: 'pay-1', status: 'outstanding', completedDate: null }] });
+      internals.paymentAwaitingReturn = true; internals.paymentOpenedAt = Date.now() - 5_000; internals.paymentPaidBefore = null; internals.paymentIdAwaiting = 'pay-1';
+
+      await internals.checkPaymentReturn();
+
+      expect(internals.paymentReturnState()).toBe('unchanged');
+    });
+
     it('stops re-checking a payment opened more than 30 minutes ago', async () => {
       const { app, api } = setup();
       const internals = app as unknown as { paymentAwaitingReturn: boolean; paymentOpenedAt: number; checkPaymentReturn: () => Promise<void> };

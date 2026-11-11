@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { AccessScope, PaymentStatusResponse, CabinDetail, CruisePort, ItineraryItem, ItineraryKind, PassengerAllocation, PaymentItem, RoomDetail, TravellerSummary, TripDocument, TripSnapshot } from '@vision-trips/contracts';
 import { createHash, createHmac } from 'node:crypto';
 import { AirtableService, type AirtableRecord } from '../airtable/airtable.service.js';
-import { airlineFields, airportFields, bookingFields, brandFields, brandTemplateFields, cabinFields, communicationFields, cruisePortFields, customerFields, elementFields, firstAttachmentUrl, firstString, locationFields, memberFields, numberValue, passengerFields, paymentFields, personFields, pick, roomFields, shipFields, strings, supplierFields, truthy, upsellFields } from './field-map.js';
+import { airlineFields, airportFields, bookingFields, brandFields, brandTemplateFields, cabinFields, communicationFields, cruisePortFields, customerFields, elementFields, firstAttachmentUrl, firstString, locationFields, memberFields, numberValue, passengerFields, paymentFields, personFields, pick, roomFields, shipFields, strings, supplierFields, truthy, upsellFields, currencyCode, moneyValue, paymentAmount, PAYABLE_CURRENCIES, formatMoney } from './field-map.js';
 import { resolveStage } from './stage.js';
 import { themeTokens } from './theme.js';
 
@@ -247,11 +247,13 @@ function mapBookingJourney(input: {
   stage: TripSnapshot['stage']; departure: string | null; returns: string | null; itinerary: ItineraryItem[];
   payments: TripSnapshot['payments']; extras: TripSnapshot['extras']; tasks: TripSnapshot['bookingStatus']['tasks'];
 }): TripSnapshot['bookingJourney'] {
-  const balanceDone = !input.payments || input.payments.balance <= 0;
+  // An unknown balance is neither paid nor owed: say so instead of guessing.
+  const balanceKnown = input.payments?.balance !== null && input.payments?.balance !== undefined;
+  const balanceDone = !input.payments || (balanceKnown && input.payments.balance! <= 0);
   const balanceDate = input.payments?.balanceDueDate ?? input.payments?.nextDueDate ?? null;
   const raw = [
     { id: 'confirmation' as const, title: 'Confirmation', description: 'We confirm every part of your booking with the suppliers.', date: null, done: input.tasks.confirmation || !['quote', 'quote_expired'].includes(input.stage) },
-    { id: 'balance' as const, title: 'Balance payment', description: balanceDone ? 'Your booking balance is paid.' : `Your remaining balance is ${formatMoney(input.payments?.balance ?? 0, input.payments?.currency ?? 'GBP')}.`, date: balanceDate, done: balanceDone },
+    { id: 'balance' as const, title: 'Balance payment', description: balanceDone ? 'Your booking balance is paid.' : balanceKnown ? `Your remaining balance is ${formatMoney(input.payments?.balance, input.payments?.currency ?? 'GBP')}.` : 'Your travel agent will confirm your remaining balance.', date: balanceDate, done: balanceDone },
     { id: 'reconfirmation' as const, title: 'Reconfirmation', description: 'We recheck the important arrangements shortly before travel.', date: shiftDate(input.departure, -14), done: input.tasks.reconfirmed },
     { id: 'documents' as const, title: 'Travel documents', description: 'Your final documents are prepared and added to your travel wallet.', date: shiftDate(input.departure, -10), done: input.tasks.travelDocuments },
     { id: 'pre_departure_call' as const, title: 'Pre-departure call', description: 'Your travel expert checks that you are ready and answers final questions.', date: shiftDate(input.departure, -3), done: input.tasks.preDepartureCall },
@@ -265,7 +267,7 @@ function mapBookingJourney(input: {
   const has = (kind: ItineraryKind) => input.itinerary.some((item) => item.kind === kind);
   const faqs: TripSnapshot['bookingJourney']['faqs'] = [
     { id: 'changes', question: 'Can I make changes to this trip?', answer: input.stage === 'quote' ? 'Yes. Ask your travel expert before accepting and they can revise the quotation, subject to availability.' : 'Ask your travel expert as soon as possible. Supplier availability, amendment charges and fare rules may apply.' },
-    ...(input.payments && input.payments.balance > 0 ? [{ id: 'balance', question: 'When is my balance due?', answer: balanceDate ? `Your current balance due date is ${balanceDate}. The Payments screen shows the latest amount and payment options.` : 'Open the Payments screen for the latest balance, or ask your travel expert to confirm the due date.' }] : []),
+    ...(input.payments && (!balanceKnown || input.payments.balance! > 0) ? [{ id: 'balance', question: 'When is my balance due?', answer: balanceDate ? `Your current balance due date is ${balanceDate}. The Payments screen shows the latest amount and payment options.` : 'Open the Payments screen for the latest balance, or ask your travel expert to confirm the due date.' }] : []),
     { id: 'documents', question: 'When will I receive my travel documents?', answer: input.tasks.travelDocuments ? 'Your available documents are already in the Documents wallet.' : 'Final documents are normally added after supplier reconfirmation, usually around 7–14 days before departure.' },
     ...(hasFlight ? [{ id: 'flight', question: 'What if my flight time changes?', answer: 'The airline or your travel expert will confirm material schedule changes. Live operational updates also appear in the app when the provider is configured.' }] : []),
     { id: 'help', question: 'Who do I contact if I need help?', answer: 'Use Help to message your travel expert. While travelling, the emergency contact is shown prominently on your Today screen.' },
@@ -278,7 +280,7 @@ function mapBookingJourney(input: {
   if (hasStay) add('room_upgrade', 'Room upgrades', 'Explore better room categories, views or board arrangements.');
   if ((hasStay || hasCruise) && !has('attraction')) add('experiences', 'Tours and experiences', 'Pre-book memorable activities and local experiences.');
   if (hasCruise) add('cruise_packages', 'Cruise packages', 'Ask about drinks, dining, Wi-Fi and shore-excursion packages.');
-  if (input.payments && input.payments.balance > 200) add('instalments', 'Instalment payments', 'Spread the remaining balance across manageable payments where available.');
+  if (input.payments && balanceKnown && input.payments.balance! > 200) add('instalments', 'Instalment payments', 'Spread the remaining balance across manageable payments where available.');
   add('insurance', 'Travel insurance', 'Protect the booking with suitable cover from the day you book.');
   if ((input.itinerary.length > 0) && !['departure', 'travelling', 'returning', 'home', 'past'].includes(input.stage)) add('extra_nights', 'Extra nights', 'Extend the trip before departure or after your main itinerary.');
   return { steps, faqs, suggestedExtras: suggestions };
@@ -639,44 +641,54 @@ function resolveProtectionMode(selection: string, hasFlight: boolean, isGlobal: 
 }
 
 function mapPayments(booking: AirtableRecord, records: AirtableRecord[], stage: string, tripId: string, mintReady: boolean, allowCustom: boolean) {
-  const currency = safeCurrency(pick(booking.fields, bookingFields.currency));
+  // Missing currency means the business default (GBP, as in the PHP plugin); a value that isn't a currency makes the
+  // booking-level figures unavailable rather than silently relabelling them.
+  const bookingCode = currencyCode(pick(booking.fields, bookingFields.currency));
+  const currency = bookingCode ?? 'GBP';
+  const bookingMoney = (key: keyof typeof bookingFields) => (bookingCode === null ? null : moneyValue(pick(booking.fields, bookingFields[key])));
   const now = new Date().toISOString().slice(0, 10);
   const items: PaymentItem[] = records.map((record, index) => {
     const value = (key: keyof typeof paymentFields) => pick(record.fields, paymentFields[key]);
-    const amount = numberValue(value('amount'));
-    const type = safeText(value('type')) || (amount < 0 ? 'Customer Refund' : 'Customer Payment');
+    const itemCode = currencyCode(value('currency'));
+    const itemCurrency = itemCode ?? currency;
+    const signed = itemCode === null ? null : paymentAmount(record.fields, itemCurrency);
+    const type = safeText(value('type')) || ((signed ?? 0) < 0 ? 'Customer Refund' : 'Customer Payment');
     const rawStatus = safeText(value('status'));
     const dueDate = dateString(value('due'));
     const paid = /complete|paid|settled/i.test(rawStatus);
     const local = /^\s*resort\s+payment\s*$/i.test(type);
-    const refund = /refund/i.test(type) || amount < 0;
+    const refund = /refund/i.test(type) || (signed ?? 0) < 0;
     const paymentUrl = safeUrl(value('link'));
     const status: PaymentItem['status'] = refund ? 'refund' : local ? 'local' : paid ? 'paid' : dueDate && dueDate < now ? 'overdue' : 'outstanding';
+    // Only offer "Pay now" when the amount is known and in a currency the payment provider supports.
+    const payable = !paid && !local && !refund && signed !== null && signed > 0 && (PAYABLE_CURRENCIES as readonly string[]).includes(itemCurrency) && (stage !== 'quote' || truthy(value('showOnQuote')));
     return {
       id: publicChildId(tripId, record.id || String(index), 'pay'),
       label: safeText(value('customerType')) || (paid ? 'Payment received' : 'Payment due'),
-      amount: Math.abs(amount), currency: safeCurrency(value('currency')) || currency, status, dueDate,
+      amount: signed === null ? null : Math.abs(signed), currency: itemCurrency, status, dueDate,
       completedDate: dateString(value('completed')),
-      canPay: !paid && !local && !refund && amount > 0 && (Boolean(paymentUrl) || mintReady) && (stage !== 'quote' || truthy(value('showOnQuote'))),
-      actionUrl: !paid && !local && !refund && amount > 0 && (stage !== 'quote' || truthy(value('showOnQuote'))) ? paymentUrl : null,
+      canPay: payable && (Boolean(paymentUrl) || mintReady),
+      actionUrl: payable ? paymentUrl : null,
     };
   }).sort((a, b) => (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999'));
   const alternativeType = safeText(pick(booking.fields, bookingFields.alternativeCurrencyType)).toUpperCase();
-  const alternativeAmount = alternativeType === 'USD' ? optionalNumber(pick(booking.fields, bookingFields.usdAmount)) : alternativeType === 'EUR' ? optionalNumber(pick(booking.fields, bookingFields.eurAmount)) : null;
+  const alternativeAmount = alternativeType === 'USD' ? moneyValue(pick(booking.fields, bookingFields.usdAmount)) : alternativeType === 'EUR' ? moneyValue(pick(booking.fields, bookingFields.eurAmount)) : null;
+  const balance = bookingMoney('balance');
   return {
     currency,
-    total: numberValue(pick(booking.fields, bookingFields.total)),
-    paid: numberValue(pick(booking.fields, bookingFields.paid)),
-    balance: numberValue(pick(booking.fields, bookingFields.balance)),
+    total: bookingMoney('total'),
+    paid: bookingMoney('paid'),
+    balance,
     items,
-    totalIncludingResort: optionalNumber(pick(booking.fields, bookingFields.totalIncludingResort)),
-    nextDueAmount: optionalNumber(pick(booking.fields, bookingFields.nextDueAmount)),
+    totalIncludingResort: bookingMoney('totalIncludingResort'),
+    nextDueAmount: bookingMoney('nextDueAmount'),
     nextDueDate: dateString(pick(booking.fields, bookingFields.nextDueDate)),
     balanceDueDate: dateString(pick(booking.fields, bookingFields.balanceDueDate)),
     alternativeCurrency: truthy(pick(booking.fields, bookingFields.alternativeCurrency)) && ['USD', 'EUR'].includes(alternativeType) && alternativeAmount !== null
       ? { currency: alternativeType, amount: alternativeAmount }
       : null,
-    customPayments: { enabled: mintReady && allowCustom && !['quote_expired', 'closed', 'cancelled', 'past'].includes(stage) && numberValue(pick(booking.fields, bookingFields.balance)) > 0, minimum: 0.01, maximum: Math.min(100_000, Math.max(0, numberValue(pick(booking.fields, bookingFields.balance)))) },
+    // Paying "another amount" needs a known balance in a supported currency.
+    customPayments: { enabled: mintReady && allowCustom && !['quote_expired', 'closed', 'cancelled', 'past'].includes(stage) && balance !== null && balance > 0 && (PAYABLE_CURRENCIES as readonly string[]).includes(currency), minimum: 0.01, maximum: Math.min(100_000, Math.max(0, balance ?? 0)) },
   };
 }
 
@@ -688,7 +700,7 @@ function mapQuotationReview(
   protection: TripSnapshot['protection'],
   brandName: string,
 ): TripSnapshot['quotation']['reviewSections'] {
-  const money = (amount: number, currency: string) => new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(amount);
+  const money = formatMoney;
   const terms = new Map<string, string>();
   for (const item of itinerary) {
     if (item.termsUrl) terms.set(`${item.typeLabel} terms`, item.termsUrl);
@@ -750,7 +762,6 @@ function document(id: string, title: string, description: string, kind: TripDocu
   return { id, title, description, kind, url: null, offlineAvailable: true, status: 'ready', downloadAction: action, version: createHash('sha256').update(version).digest('base64url').slice(0, 16), updatedAt: /^\d{4}-/.test(version) ? version.slice(0, 24) : new Date().toISOString(), mimeType: 'application/pdf' };
 }
 
-function formatMoney(amount: number, currency: string): string { return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(amount); }
 
 function publicTripId(baseId: string, recordId: string): string {
   const secret = process.env.VISION_LINK_SECRET;
@@ -844,10 +855,6 @@ function safeText(value: unknown): string {
   return /^(rec|usr)[A-Za-z0-9]{14}$/.test(text) ? '' : text.slice(0, 4000);
 }
 
-function safeCurrency(value: unknown): string {
-  const currency = safeText(value).toUpperCase();
-  return ['GBP', 'EUR', 'USD'].includes(currency) ? currency : 'GBP';
-}
 
 function optionalNumber(value: unknown): number | null {
   const candidate = Array.isArray(value) ? value[0] : value;

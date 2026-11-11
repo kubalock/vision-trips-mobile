@@ -108,7 +108,7 @@ export const communicationFields = { type: ['Type'], subject: ['Custom Subject',
 export const brandTemplateFields = { name: ['Template Name', 'Name'], type: ['Template Type', 'Type'], letter: ['Letter'], subject: ['Subject'] } as const;
 
 export const paymentFields = {
-  amount: ['Amount'], currency: ['Mint: Currency', 'Currency'], type: ['Payment Type'], customerType: ['Customer Payment Type'],
+  amount: ['Amount'], usdAmount: ['USD Amount'], eurAmount: ['EUR Amount'], currency: ['Mint: Currency', 'Currency'], type: ['Payment Type'], customerType: ['Customer Payment Type'],
   status: ['Status'], due: ['Date Due', 'Payment Due'], completed: ['Payment Complete', 'Date Complete', 'Receipt Date'],
   link: ['Payment Link URL', 'Payment Link', 'Payment URL'], showOnQuote: ["Show 'Pay Now' on Quotation", 'Show Pay Now on Quotation'],
   method: ['Payment Method', 'Method'], reference: ['paymentReference', 'Receipt Number', 'Payment Reference'],
@@ -163,4 +163,41 @@ export function numberValue(value: unknown): number {
 export function truthy(value: unknown): boolean {
   const candidate = Array.isArray(value) ? value[0] : value;
   return candidate === true || candidate === 1 || /^(yes|true|1|checked)$/i.test(String(candidate ?? '').trim());
+}
+
+/**
+ * A money amount, or null when the field is empty or unreadable. Unlike numberValue(), it never turns missing
+ * financial data into 0, so the app can show "unavailable" instead of a misleading £0.00.
+ */
+export function moneyValue(value: unknown): number | null {
+  const candidate = Array.isArray(value) ? value[0] : value;
+  if (candidate === undefined || candidate === null || (typeof candidate === 'string' && !candidate.trim())) return null;
+  if (typeof candidate === 'number') return Number.isFinite(candidate) ? candidate : null;
+  const cleaned = String(candidate).replace(/[£$€,\s]|[A-Za-z]{3}/g, '');
+  if (!/^-?\d+(\.\d+)?$/.test(cleaned)) return null;
+  return Number(cleaned);
+}
+
+/** Currencies the Vision Trips payment flow (Mint) supports, matching the PHP plugin. */
+export const PAYABLE_CURRENCIES = ['GBP', 'USD', 'EUR'] as const;
+
+/** An ISO 4217 code as given (never relabelled), undefined when empty, null when present but not a currency. */
+export function currencyCode(value: unknown): string | null | undefined {
+  const text = String((Array.isArray(value) ? value[0] : value) ?? '').trim().toUpperCase();
+  if (!text) return undefined;
+  if (!/^[A-Z]{3}$/.test(text)) return null;
+  try { new Intl.NumberFormat('en-GB', { style: 'currency', currency: text }).format(0); return text; } catch { return null; }
+}
+
+/** A payment record's amount in its own currency: USD/EUR payments use their dedicated fields, as in the PHP plugin. */
+export function paymentAmount(fields: Record<string, unknown>, currency: string): number | null {
+  const field = currency === 'USD' ? paymentFields.usdAmount : currency === 'EUR' ? paymentFields.eurAmount : paymentFields.amount;
+  return moneyValue(pick(fields, field));
+}
+
+/** Formats an amount for customers; a missing amount reads "Unavailable", never £0.00. */
+export function formatMoney(amount: number | null | undefined, currency: string): string {
+  if (amount === null || amount === undefined || !Number.isFinite(amount)) return 'Unavailable';
+  try { return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(amount); }
+  catch { return `${amount.toFixed(2)} ${currency}`; }
 }

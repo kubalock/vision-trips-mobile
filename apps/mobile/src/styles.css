@@ -1574,3 +1574,6 @@ body.vt .vt-app .vt-account-danger button:active { transform: scale(.97); }
 .vt-app .vt-segmented { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-1); padding: var(--sp-1); border-radius: var(--r-s); background: var(--surface-2); }
 .vt-app .vt-segmented button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 var(--sp-2); border: 0; border-radius: var(--r-xs); background: transparent; color: var(--ink-2); font: inherit; font-size: var(--fs-0); font-weight: 600; cursor: pointer; }
 .vt-app .vt-segmented button.is-selected { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-card-sm), 0 0 0 1px var(--card-border); }
+
+/* A figure missing from the booking: shown plainly as unavailable, never as £0.00. */
+.vt-app .vt-money--unavailable { color: var(--ink-3); font-size: 0.85em; font-weight: 600; }

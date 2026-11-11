@@ -469,7 +469,8 @@ export interface ItineraryDetail {
 export interface PaymentItem {
   id: string;
   label: string;
-  amount: number;
+  /** Null when Airtable has no readable amount for this payment; never shown as 0. */
+  amount: number | null;
   currency: string;
   status: 'outstanding' | 'paid' | 'overdue' | 'local' | 'refund';
   dueDate: string | null;
@@ -483,17 +484,18 @@ export interface PaymentStatusResponse {
   tripId: string;
   checkedAt: string;
   currency: string;
-  total: number;
-  paid: number;
-  balance: number;
+  total: number | null;
+  paid: number | null;
+  balance: number | null;
   items: Array<Pick<PaymentItem, 'id' | 'status' | 'completedDate'>>;
 }
 
 export interface PaymentSummary {
   currency: string;
-  total: number;
-  paid: number;
-  balance: number;
+  /** Null when the booking's figure is missing or unreadable (shown as unavailable, never as 0). */
+  total: number | null;
+  paid: number | null;
+  balance: number | null;
   items: PaymentItem[];
   totalIncludingResort: number | null;
   nextDueAmount: number | null;

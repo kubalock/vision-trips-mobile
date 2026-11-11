@@ -3,7 +3,7 @@ import type { PaymentLinkResponse, TripSnapshot } from '@vision-trips/contracts'
 import { createHmac, randomUUID } from 'node:crypto';
 import { AirtableService, type AirtableRecord } from '../airtable/airtable.service.js';
 import { TripsService } from '../trips/trips.service.js';
-import { bookingFields, brandFields, firstString, numberValue, paymentFields, pick, strings, truthy } from '../trips/field-map.js';
+import { PAYABLE_CURRENCIES, bookingFields, brandFields, currencyCode, firstString, paymentAmount, paymentFields, pick, strings, truthy } from '../trips/field-map.js';
 
 @Injectable()
 export class MintPaymentsService {
@@ -13,7 +13,7 @@ export class MintPaymentsService {
     if (customAmount === undefined) {
       // A stored "Payment Link URL" needs no Mint credentials, so answer from the snapshot alone.
       const stored = (await this.trips.snapshot(baseId, recordId, 'primary_customer')).payments?.items.find((item) => item.id === paymentId);
-      if (stored?.actionUrl && stored.canPay && stored.status !== 'paid') return { paymentId: stored.id, url: stored.actionUrl, amount: stored.amount, currency: stored.currency };
+      if (stored?.actionUrl && stored.canPay && stored.status !== 'paid' && stored.amount !== null) return { paymentId: stored.id, url: stored.actionUrl, amount: stored.amount, currency: stored.currency };
     }
     const context = await this.context(baseId, recordId);
     const snapshot = context.snapshot;
@@ -26,6 +26,7 @@ export class MintPaymentsService {
     }
     const payment = snapshot.payments?.items.find((item) => item.id === paymentId);
     if (!payment || !payment.canPay || payment.status === 'paid') throw new NotFoundException('This payment is no longer available. Refresh the trip and try again.');
+    if (payment.amount === null) throw new NotFoundException('This payment is no longer available. Refresh the trip and try again.');
     if (payment.actionUrl) return { paymentId: payment.id, url: payment.actionUrl, amount: payment.amount, currency: payment.currency };
     const source = context.payments.find((record) => publicPaymentId(snapshot.tripId, record.id) === payment.id);
     if (!source) throw new NotFoundException('This payment is no longer available.');
@@ -34,17 +35,21 @@ export class MintPaymentsService {
 
   async depositLink(baseId: string, recordId: string): Promise<string | null> {
     const context = await this.context(baseId, recordId);
+    // A payment's own currency if valid, otherwise the booking's (same rule as the trip snapshot).
+    const recordCurrency = (record: AirtableRecord) => currencyCode(pick(record.fields, paymentFields.currency)) ?? context.snapshot.payments?.currency ?? 'GBP';
     const payable = context.payments.filter((record) => {
       const status = firstString(pick(record.fields, paymentFields.status));
       const type = firstString(pick(record.fields, paymentFields.type));
-      return !/complete|paid|settled/i.test(status) && !/refund|resort/i.test(type) && numberValue(pick(record.fields, paymentFields.amount)) > 0;
+      const amount = paymentAmount(record.fields, recordCurrency(record));
+      return !/complete|paid|settled/i.test(status) && !/refund|resort/i.test(type) && amount !== null && amount > 0 && (PAYABLE_CURRENCIES as readonly string[]).includes(recordCurrency(record));
     });
     const source = payable.find((record) => /deposit/i.test(firstString(pick(record.fields, paymentFields.customerType)))) ?? payable[0];
     if (!source) return null;
     const existingUrl = firstString(pick(source.fields, paymentFields.link));
     if (existingUrl.startsWith('https://')) return existingUrl;
-    const amount = numberValue(pick(source.fields, paymentFields.amount));
-    const currency = firstString(pick(source.fields, paymentFields.currency)).toUpperCase() || context.snapshot.payments?.currency || 'GBP';
+    const currency = recordCurrency(source);
+    const amount = paymentAmount(source.fields, currency);
+    if (amount === null) return null;
     const label = firstString(pick(source.fields, paymentFields.customerType)) || 'Deposit';
     return (await this.create(context, amount, currency, `${context.snapshot.summary.reference} ${label}`, publicPaymentId(context.snapshot.tripId, source.id))).url;
   }

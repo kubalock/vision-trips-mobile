@@ -16,23 +16,23 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
       <section class="vt-payment-card vt-payment-summary" aria-label="Payment summary">
         <div class="vt-payment-summary__total">
           <span>Total trip price</span>
-          <strong>{{ payments().total | currency: payments().currency }}</strong>
+          <strong [class.vt-money--unavailable]="payments().total === null">{{ money(payments().total, payments().currency) }}</strong>
         </div>
         <div class="vt-payment-summary__stats">
           <div>
             <span>Paid</span>
-            <strong>{{ payments().paid | currency: payments().currency }}</strong>
+            <strong [class.vt-money--unavailable]="payments().paid === null">{{ money(payments().paid, payments().currency) }}</strong>
           </div>
-          <div class="vt-payment-summary__balance" [class.is-paid]="payments().balance <= 0">
+          <div class="vt-payment-summary__balance" [class.is-paid]="payments().balance !== null && payments().balance! <= 0">
             <span>Balance</span>
-            <strong>{{ payments().balance | currency: payments().currency }}</strong>
-            <small>{{ payments().balance > 0 ? 'Outstanding' : 'Paid in full' }}</small>
+            <strong [class.vt-money--unavailable]="payments().balance === null">{{ money(payments().balance, payments().currency) }}</strong>
+            <small>{{ payments().balance === null ? 'Ask your travel agent' : payments().balance! > 0 ? 'Outstanding' : 'Paid in full' }}</small>
           </div>
         </div>
         <div class="vt-payment-progress__footer">
-          <div class="vt-payment-progress__meta"><span>Payment progress</span><strong>{{ paidPercent() }}% paid</strong></div>
+          <div class="vt-payment-progress__meta"><span>Payment progress</span><strong>{{ paidPercent() === null ? 'Not available' : paidPercent() + '% paid' }}</strong></div>
           <div class="vt-payment-progress" role="progressbar" aria-label="Trip price paid" aria-valuemin="0" aria-valuemax="100" [attr.aria-valuenow]="paidPercent()">
-            <span [style.width.%]="paidPercent()"></span>
+            <span [style.width.%]="paidPercent() ?? 0"></span>
           </div>
         </div>
       </section>
@@ -50,7 +50,7 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
             <li class="vt-pay" [class.is-paid]="payment.status === 'paid'" [class.is-overdue]="payment.status === 'overdue'" [class.is-refund]="payment.status === 'refund'" [class.is-resort]="payment.status === 'local'">
               <div class="vt-pay__main">
                 <span class="vt-pay__label">{{ payment.label }}</span>
-                <strong>{{ payment.amount | currency: payment.currency }}</strong>
+                <strong [class.vt-money--unavailable]="payment.amount === null">{{ money(payment.amount, payment.currency) }}</strong>
                 @if (payment.dueDate) { <span class="vt-pay__date">Due {{ payment.dueDate | europeanDate }}</span> }
               </div>
               @if (payment.canPay) {
@@ -91,7 +91,13 @@ export class PaymentsSection {
   readonly payCustom = output<number>();
   protected readonly customAmount = signal('');
   protected readonly validCustom = computed(() => { const amount = Number(this.customAmount()); return Number.isFinite(amount) && amount >= 0.01 && amount <= this.payments().customPayments.maximum; });
-  readonly paidPercent = computed(() => this.payments().total > 0 ? Math.min(100, Math.round(this.payments().paid / this.payments().total * 100)) : 0);
+  /** Null when either figure is unknown, so the bar never claims 0% or 100% by accident. */
+  readonly paidPercent = computed(() => { const { total, paid } = this.payments(); return total !== null && paid !== null && total > 0 ? Math.min(100, Math.round(paid / total * 100)) : null; });
+  /** A missing amount reads "Unavailable", never £0.00. */
+  protected money(amount: number | null, currency: string): string {
+    if (amount === null) return 'Unavailable';
+    try { return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(amount); } catch { return `${amount.toFixed(2)} ${currency}`; }
+  }
   protected statusLabel(status: PaymentSummary['items'][number]['status']): string { return status === 'local' ? 'Pay locally' : status; }
   protected updateCustom(event: Event): void { this.customAmount.set((event.target as HTMLInputElement).value); }
   protected submitCustom(event: Event): void { event.preventDefault(); if (this.validCustom()) this.payCustom.emit(Number(this.customAmount())); }
