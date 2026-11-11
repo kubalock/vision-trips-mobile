@@ -101,6 +101,8 @@ export class App implements OnInit, OnDestroy {
   protected readonly showTripLibrary = signal(false);
   /** The open trip's session ended: its saved copy stays readable, but live actions need the trip link again. */
   protected readonly signedOut = signal(false);
+  /** Saved trips being removed right now (their controls are locked until it finishes). */
+  protected readonly removingTrips = signal<ReadonlySet<string>>(new Set());
   protected readonly tripRefreshStates = signal<Record<string, TripRefreshState>>({});
   protected readonly tripGroups = computed(() => groupSavedTrips(this.savedTripList()));
   protected readonly displayedTrip = computed(() => this.showTripLibrary() ? null : this.trip());
@@ -676,7 +678,8 @@ export class App implements OnInit, OnDestroy {
     await this.loadBrandLogo(response.snapshot, true);
     await this.syncCustomerNotifications(null, response.snapshot);
     await this.refreshDocumentStatuses(response.snapshot, generation);
-    this.storedSecurely.set(await this.savedTrips.save(response.snapshot, response.session));
+    // Opening a trip (link, verification, account or related quotation) brings it back even if it was removed earlier.
+    this.storedSecurely.set(await this.savedTrips.save(response.snapshot, response.session, { reopened: true }));
     await this.reloadSavedTrips();
     if (response.trustedDeviceToken) await this.savedTrips.saveDeviceTrust(response.trustedDeviceToken);
   }
@@ -857,7 +860,7 @@ export class App implements OnInit, OnDestroy {
       this.setTripRefreshState(tripId, 'offline');
       return;
     }
-    if (this.tripRefreshStates()[tripId] === 'refreshing') return;
+    if (this.tripBusy(saved)) return;
     const openSession = this.trip()?.tripId === tripId ? this.session() : null;
     const credential = openSession ?? saved.session;
     if (!credential) { this.setTripRefreshState(tripId, 'signed_out'); return; }
@@ -865,6 +868,8 @@ export class App implements OnInit, OnDestroy {
     try {
       const { result: snapshot, session } = await this.sessions.runWithSession(credential, (accessToken) => this.api.refreshTrip(accessToken));
       await this.savedTrips.save(snapshot, session);
+      // Removed while the refresh was in flight (from another screen or tab): the store refused it; drop the result too.
+      if (this.savedTrips.wasRemoved(tripId)) { this.clearTripRefreshState(tripId); return; }
       if (snapshot.brand.logoUrl) await this.brandAssets.cacheLogo(snapshot.tripId, snapshot.brand.logoUrl);
       else await this.brandAssets.remove(snapshot.tripId);
       await this.customerNotifications.sync(saved.snapshot, snapshot);
@@ -879,29 +884,47 @@ export class App implements OnInit, OnDestroy {
         await this.refreshDocumentStatuses(snapshot);
       }
     } catch (error) {
-      this.setTripRefreshState(tripId, isTerminalSessionError(error) ? 'signed_out' : 'error');
+      if (this.savedTrips.wasRemoved(tripId)) this.clearTripRefreshState(tripId);
+      else this.setTripRefreshState(tripId, isTerminalSessionError(error) ? 'signed_out' : 'error');
     }
+  }
+
+  /** A saved trip is busy while it is being refreshed or removed; its refresh and remove controls wait. */
+  protected tripBusy(saved: SavedTrip): boolean {
+    return this.tripRefreshStates()[saved.snapshot.tripId] === 'refreshing' || this.removingTrips().has(saved.snapshot.tripId);
+  }
+
+  private clearTripRefreshState(tripId: string): void {
+    this.tripRefreshStates.update((states) => {
+      const next = { ...states };
+      delete next[tripId];
+      return next;
+    });
   }
 
   protected async removeSavedTrip(saved: SavedTrip, event?: Event): Promise<void> {
     event?.stopPropagation();
+    const tripId = saved.snapshot.tripId;
+    if (this.tripBusy(saved)) return;
     if (!window.confirm(`Remove ${saved.snapshot.summary.name} from this device?`)) return;
-    const openSession = this.trip()?.tripId === saved.snapshot.tripId ? this.session() : null;
-    const revoke = (openSession ?? saved.session)?.refreshToken;
-    if (revoke) void this.api.revokeSession(revoke).catch(() => undefined);
-    await this.savedTrips.remove(saved.snapshot.tripId);
-    await this.brandAssets.remove(saved.snapshot.tripId);
-    await this.documentWallet.remove(saved.snapshot.tripId);
-    this.customerNotifications.clear(saved.snapshot.tripId);
-    this.savedTripList.update((trips) => trips.filter((trip) => trip.snapshot.tripId !== saved.snapshot.tripId));
-    this.tripRefreshStates.update((states) => {
-      const next = { ...states };
-      delete next[saved.snapshot.tripId];
-      return next;
-    });
-    if (this.trip()?.tripId === saved.snapshot.tripId) this.clearOpenTrip();
-    if (!this.savedTripList().length) this.showTripLibrary.set(false);
+    this.removingTrips.update((ids) => new Set(ids).add(tripId));
+    try {
+      const openSession = this.trip()?.tripId === tripId ? this.session() : null;
+      const revoke = (openSession ?? saved.session)?.refreshToken;
+      if (revoke) void this.api.revokeSession(revoke).catch(() => undefined);
+      await this.savedTrips.remove(tripId);
+      await this.brandAssets.remove(tripId);
+      await this.documentWallet.remove(tripId);
+      this.customerNotifications.clear(tripId);
+      this.savedTripList.update((trips) => trips.filter((trip) => trip.snapshot.tripId !== tripId));
+      this.clearTripRefreshState(tripId);
+      if (this.trip()?.tripId === tripId) this.clearOpenTrip();
+      if (!this.savedTripList().length) this.showTripLibrary.set(false);
+    } finally {
+      this.removingTrips.update((ids) => { const next = new Set(ids); next.delete(tripId); return next; });
+    }
   }
+
 
   protected refreshStateLabel(saved: SavedTrip): string {
     const state = this.tripRefreshStates()[saved.snapshot.tripId] ?? 'idle';

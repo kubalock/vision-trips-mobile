@@ -193,6 +193,34 @@ describe('App', () => {
       expect((fixture.nativeElement as HTMLElement).querySelector('.vt-signed-out')?.textContent).toContain('signed out of this trip');
     });
 
+    it('does not bring back a trip that was removed while it was refreshing', async () => {
+      const { app, api } = setup();
+      nativeStorage();
+      const store = TestBed.inject(SavedTripsStore);
+      const tripB = { ...(minimalTrip() as object), tripId: 'trip-B' };
+      await store.save(tripB as never, app.session() as never);
+      app.savedTripList.set(await store.all());
+      const [saved] = app.savedTripList();
+      let finishRefresh!: (value: unknown) => void;
+      vi.spyOn(api, 'refreshTrip').mockReturnValue(new Promise((resolve) => { finishRefresh = resolve; }) as never);
+      vi.spyOn(api, 'revokeSession').mockResolvedValue(undefined);
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      const view = app as unknown as { refreshSavedTrip: (trip: unknown) => Promise<void>; removeSavedTrip: (trip: unknown) => Promise<void>; tripBusy: (trip: unknown) => boolean; tripRefreshStates: () => Record<string, string> };
+
+      const refreshing = view.refreshSavedTrip(saved);
+      await Promise.resolve();
+      expect(view.tripBusy(saved)).toBe(true);
+      await view.removeSavedTrip(saved); // Locked while refreshing: nothing happens.
+      expect(app.savedTripList()).toHaveLength(1);
+
+      await store.remove('trip-B'); // Removed some other way (another screen or tab) while the refresh is in flight.
+      finishRefresh({ ...tripB, summary: { ...(minimalTrip() as { summary: object }).summary, name: 'Late' } });
+      await refreshing;
+
+      expect(await store.all()).toEqual([]);
+      expect(view.tripRefreshStates()['trip-B']).toBeUndefined();
+    });
+
     it('retries a payment link with a renewed token after a 401', async () => {
       const { app, api } = setup();
       app.trip.set({ tripId: 'trip-1', payments: { paid: 0, items: [] } });

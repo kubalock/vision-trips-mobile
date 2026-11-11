@@ -33,6 +33,9 @@ export class SavedTripsStore {
   /** The installed app's secure storage (replaceable in tests: the plugin proxy cannot be spied on). */
   private readonly secure: Pick<typeof SecureStorage, 'get' | 'set' | 'remove'> = SecureStorage;
   private legacyCleared = false;
+  /** Trips removed during this visit (tombstones), so late writes cannot bring them back. */
+  private readonly removed = new Set<string>();
+  private queue: Promise<unknown> = Promise.resolve();
 
   /** Trusted-device tokens, one per booking, so remembering a second booking does not forget the first. Browsers keep these in cookies. */
   async deviceTrusts(now = Date.now()): Promise<string[]> {
@@ -56,32 +59,92 @@ export class SavedTripsStore {
     if (this.native) await this.secure.remove('device:trust');
   }
 
-  async save(snapshot: TripSnapshot, session: MobileSession): Promise<boolean> {
-    const savedAt = new Date().toISOString();
-    if (this.native) {
-      const key = `trip:${snapshot.tripId}`;
-      await this.secure.set(key, { snapshot, session, savedAt } as unknown as Record<string, unknown>);
-      const ids = await this.ids();
-      if (!ids.includes(snapshot.tripId)) await this.secure.set('trip:index', [...ids, snapshot.tripId]);
-    } else {
-      // A raw refresh token must never reach browser storage; only the cookie handle may.
-      if (!isWebSessionHandle(session.refreshToken)) return false;
-      await this.browserDb.set(snapshot.tripId, { snapshot, session: withoutAccessToken(session), savedAt });
-    }
-    return true;
+  /**
+   * Saves a trip. A trip removed during this visit stays removed: a late refresh, token renewal or background
+   * reload that finishes afterwards is ignored. Only opening the trip again (`reopened`, from its link or the
+   * customer's account) brings it back.
+   */
+  save(snapshot: TripSnapshot, session: MobileSession, options: { reopened?: boolean } = {}): Promise<boolean> {
+    return this.exclusive(async () => {
+      const tripId = snapshot.tripId;
+      if (this.removed.has(tripId)) {
+        if (!options.reopened) return false;
+        this.removed.delete(tripId);
+      }
+      const savedAt = new Date().toISOString();
+      if (this.native) {
+        await this.secure.set(`trip:${tripId}`, { snapshot, session, savedAt } as unknown as Record<string, unknown>);
+        const ids = await this.ids();
+        if (!ids.includes(tripId)) await this.secure.set('trip:index', [...ids, tripId]);
+      } else {
+        // A raw refresh token must never reach browser storage; only the cookie handle may.
+        if (!isWebSessionHandle(session.refreshToken)) return false;
+        await this.browserDb.set(tripId, { snapshot, session: withoutAccessToken(session), savedAt });
+      }
+      return true;
+    });
+  }
+
+  /** True when the trip was removed during this visit (and not opened again since). */
+  wasRemoved(tripId: string): boolean {
+    return this.removed.has(tripId);
   }
 
   /**
    * Every saved trip, checked against the current schema. Older versions are migrated (and saved back, so it
    * happens once); entries that cannot be used — an unsupported version or damaged data — are removed.
    */
-  async all(): Promise<SavedTrip[]> {
+  all(): Promise<SavedTrip[]> {
+    return this.exclusive(() => this.readAll());
+  }
+
+  /** All saved trips, with any credential that has passed its expiry dropped (the trip itself is kept). */
+  signOutExpired(now = Date.now()): Promise<SavedTrip[]> {
+    return this.exclusive(async () => {
+      const trips: SavedTrip[] = [];
+      for (const trip of await this.readAll()) {
+        if (trip.session && isSessionExpired(trip.session, now)) {
+          const signedOut = { ...trip, session: null };
+          await this.write(signedOut);
+          trips.push(signedOut);
+        } else trips.push(trip);
+      }
+      return trips;
+    });
+  }
+
+  /** Forgets a trip's unusable credential but keeps the saved trip for offline viewing. */
+  signOut(tripId: string): Promise<void> {
+    return this.exclusive(async () => {
+      const trip = (await this.readAll()).find((saved) => saved.snapshot.tripId === tripId);
+      if (trip?.session) await this.write({ ...trip, session: null });
+    });
+  }
+
+  remove(tripId: string): Promise<void> {
+    this.removed.add(tripId); // Before waiting, so a save already queued behind this is refused too.
+    return this.exclusive(() => this.deleteNow(tripId));
+  }
+
+  // Everything below runs inside `exclusive`, so it must not call the public methods (they would wait on themselves).
+
+  /**
+   * Runs storage changes one at a time. Without this, a save and a remove of the same trip (or two updates of the
+   * native index) can interleave, and a write that lands after a delete brings the trip back.
+   */
+  private exclusive<T>(task: () => Promise<T>): Promise<T> {
+    const run = this.queue.then(task, task);
+    this.queue = run.catch(() => undefined);
+    return run;
+  }
+
+  private async readAll(): Promise<SavedTrip[]> {
     const ids = await this.ids();
     const stored = await Promise.all(ids.map((id) => this.native ? this.secure.get(`trip:${id}`) : this.browserDb.get(id)));
     const trips: SavedTrip[] = [];
     for (const [index, value] of stored.entries()) {
       const decoded = decodeSavedTrip(value);
-      if (!decoded) { await this.remove(ids[index]); continue; }
+      if (!decoded) { await this.deleteNow(ids[index]); continue; }
       if (decoded.migrated) await this.write(decoded.trip);
       trips.push(decoded.trip);
     }
@@ -93,23 +156,7 @@ export class SavedTripsStore {
     else await this.browserDb.set(trip.snapshot.tripId, trip);
   }
 
-  /** All saved trips, with any credential that has passed its expiry dropped (the trip itself is kept). */
-  async signOutExpired(now = Date.now()): Promise<SavedTrip[]> {
-    const saved = await this.all();
-    for (const trip of saved) {
-      if (trip.session && isSessionExpired(trip.session, now)) await this.signOut(trip.snapshot.tripId);
-    }
-    return saved.map((trip) => trip.session && isSessionExpired(trip.session, now) ? { ...trip, session: null } : trip);
-  }
-
-  /** Forgets a trip's unusable credential but keeps the saved trip for offline viewing. */
-  async signOut(tripId: string): Promise<void> {
-    const trip = (await this.all()).find((saved) => saved.snapshot.tripId === tripId);
-    if (!trip?.session) return;
-    await this.write({ ...trip, session: null });
-  }
-
-  async remove(tripId: string): Promise<void> {
+  private async deleteNow(tripId: string): Promise<void> {
     if (!this.native) { await this.browserDb.delete(tripId); return; }
     await this.secure.remove(`trip:${tripId}`);
     await this.secure.set('trip:index', (await this.ids()).filter((id) => id !== tripId));

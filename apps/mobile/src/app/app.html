@@ -198,8 +198,8 @@
                     <div class="vt-saved-trip__aside">
                       <span class="vt-saved-trip__status" [class.vt-saved-trip__status--danger]="saved.snapshot.stage === 'cancelled' || saved.snapshot.stage === 'quote_expired'">{{ stageLabel(saved.snapshot.stage) }}</span>
                       <div class="vt-saved-trip__utilities">
-                        <button type="button" class="vt-saved-trip__icon-button" [class.is-spinning]="tripRefreshStates()[saved.snapshot.tripId] === 'refreshing'" [disabled]="!online() || !saved.session || tripRefreshStates()[saved.snapshot.tripId] === 'refreshing'" [attr.aria-label]="'Refresh ' + saved.snapshot.summary.name" title="Refresh trip" (click)="refreshSavedTrip(saved, $event)"><vt-icon name="refresh" [size]="17" /></button>
-                        <button type="button" class="vt-saved-trip__icon-button vt-saved-trip__icon-button--danger" [attr.aria-label]="'Remove ' + saved.snapshot.summary.name + ' from this device'" title="Remove from device" (click)="removeSavedTrip(saved, $event)"><vt-icon name="trash" [size]="17" /></button>
+                        <button type="button" class="vt-saved-trip__icon-button" [class.is-spinning]="tripRefreshStates()[saved.snapshot.tripId] === 'refreshing'" [disabled]="!online() || !saved.session || tripBusy(saved)" [attr.aria-label]="'Refresh ' + saved.snapshot.summary.name" title="Refresh trip" (click)="refreshSavedTrip(saved, $event)"><vt-icon name="refresh" [size]="17" /></button>
+                        <button type="button" class="vt-saved-trip__icon-button vt-saved-trip__icon-button--danger" [disabled]="tripBusy(saved)" [attr.aria-label]="'Remove ' + saved.snapshot.summary.name + ' from this device'" title="Remove from device" (click)="removeSavedTrip(saved, $event)"><vt-icon name="trash" [size]="17" /></button>
                       </div>
                     </div>
                   </header>
@@ -222,8 +222,8 @@
                     <div class="vt-saved-trip__aside">
                       <span class="vt-saved-trip__status vt-saved-trip__status--past">{{ stageLabel(saved.snapshot.stage) }}</span>
                       <div class="vt-saved-trip__utilities">
-                        <button type="button" class="vt-saved-trip__icon-button" [class.is-spinning]="tripRefreshStates()[saved.snapshot.tripId] === 'refreshing'" [disabled]="!online() || !saved.session || tripRefreshStates()[saved.snapshot.tripId] === 'refreshing'" [attr.aria-label]="'Refresh ' + saved.snapshot.summary.name" title="Refresh trip" (click)="refreshSavedTrip(saved, $event)"><vt-icon name="refresh" [size]="17" /></button>
-                        <button type="button" class="vt-saved-trip__icon-button vt-saved-trip__icon-button--danger" [attr.aria-label]="'Remove ' + saved.snapshot.summary.name + ' from this device'" title="Remove from device" (click)="removeSavedTrip(saved, $event)"><vt-icon name="trash" [size]="17" /></button>
+                        <button type="button" class="vt-saved-trip__icon-button" [class.is-spinning]="tripRefreshStates()[saved.snapshot.tripId] === 'refreshing'" [disabled]="!online() || !saved.session || tripBusy(saved)" [attr.aria-label]="'Refresh ' + saved.snapshot.summary.name" title="Refresh trip" (click)="refreshSavedTrip(saved, $event)"><vt-icon name="refresh" [size]="17" /></button>
+                        <button type="button" class="vt-saved-trip__icon-button vt-saved-trip__icon-button--danger" [disabled]="tripBusy(saved)" [attr.aria-label]="'Remove ' + saved.snapshot.summary.name + ' from this device'" title="Remove from device" (click)="removeSavedTrip(saved, $event)"><vt-icon name="trash" [size]="17" /></button>
                       </div>
                     </div>
                   </header>

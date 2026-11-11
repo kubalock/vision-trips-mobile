@@ -112,6 +112,41 @@ describe('SavedTripsStore schema checks', () => {
   });
 });
 
+describe('SavedTripsStore removal', () => {
+  it('ignores a save that finishes after the trip was removed, whichever order they start in', async () => {
+    for (const order of ['save-first', 'remove-first'] as const) {
+      const store = nativeStore();
+      await store.save(snapshot('trp_1'), session('vrt_1'));
+      const late = order === 'save-first'
+        ? [store.save(snapshot('trp_1'), session('vrt_2')), store.remove('trp_1')]
+        : [store.remove('trp_1'), store.save(snapshot('trp_1'), session('vrt_2'))];
+
+      await Promise.all(late);
+
+      expect(await store.all()).toEqual([]);
+      expect(store.wasRemoved('trp_1')).toBe(true);
+    }
+  });
+
+  it('brings a removed trip back only when it is opened again', async () => {
+    const store = nativeStore();
+    await store.save(snapshot('trp_1'), session('vrt_1'));
+    await store.remove('trp_1');
+
+    expect(await store.save(snapshot('trp_1'), session('vrt_2'))).toBe(false);
+    expect(await store.save(snapshot('trp_1'), session('vrt_3'), { reopened: true })).toBe(true);
+
+    expect((await store.all()).map((trip) => trip.session?.refreshToken)).toEqual(['vrt_3']);
+    expect(store.wasRemoved('trp_1')).toBe(false);
+  });
+
+  it('keeps the native index consistent when several trips are saved at once', async () => {
+    const store = nativeStore();
+    await Promise.all(['a', 'b', 'c', 'd'].map((id) => store.save(snapshot(`trp_${id}`), session(`vrt_${id}`))));
+    expect((await store.all()).map((trip) => trip.snapshot.tripId).sort()).toEqual(['trp_a', 'trp_b', 'trp_c', 'trp_d']);
+  });
+});
+
 describe('SavedTripsStore in the installed app', () => {
   it('remembers one trust token per booking and replaces an older one for the same booking', async () => {
     const store = nativeStore();
