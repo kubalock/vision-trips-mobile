@@ -4,7 +4,7 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import { Network } from '@capacitor/network';
 import type { CustomerAccount, CustomerEngagementEvent, CustomerMessageTopic, CustomerPreferences, ExternalTripContent, LinkExchangeChallenge, LinkExchangeResponse, MobileSession, PaymentStatusResponse, RelatedQuotationSummary, TripDocument, TripSnapshot, TripStage } from '@vision-trips/contracts';
-import { VisionApiService } from './core/api/vision-api.service';
+import { DocumentTooLargeError, VisionApiService } from './core/api/vision-api.service';
 import { SavedTripsStore, type SavedTrip } from './core/storage/saved-trips.store';
 import { BrandAssetsStore } from './core/storage/brand-assets.store';
 import { groupSavedTrips } from './core/storage/trip-library';
@@ -14,6 +14,7 @@ import { ExternalPages, type PendingExternalPage } from './core/platform/externa
 import { ShareSheet } from './core/platform/share-sheet';
 import { SessionManager, isTerminalSessionError } from './core/session/session-manager';
 import { isTripDataError } from './core/api/trip-schema';
+import { IMAGE_SIZES, sourceFor, srcset } from './shared/responsive-image';
 import { Directory, Filesystem, Encoding } from '@capacitor/filesystem';
 import { DocumentsSection } from './features/trip/documents-section';
 import { DestinationsSection } from './features/trip/destinations-section';
@@ -103,6 +104,7 @@ export class App implements OnInit, OnDestroy {
   protected readonly signedOut = signal(false);
   /** Saved trips being removed right now (their controls are locked until it finishes). */
   protected readonly removingTrips = signal<ReadonlySet<string>>(new Set());
+  protected readonly img = { srcset, sizes: IMAGE_SIZES };
   protected readonly tripRefreshStates = signal<Record<string, TripRefreshState>>({});
   protected readonly tripGroups = computed(() => groupSavedTrips(this.savedTripList()));
   protected readonly displayedTrip = computed(() => this.showTripLibrary() ? null : this.trip());
@@ -849,6 +851,11 @@ export class App implements OnInit, OnDestroy {
     (event.target as HTMLInputElement).select();
   }
 
+  /** A hero copy sized for the slot (about `cssWidth` px wide); falls back to the original URL from older data. */
+  protected heroSource(summary: TripSnapshot['summary'], cssWidth: number): string | null {
+    return summary.heroImage ? sourceFor(summary.heroImage, cssWidth) : summary.heroImageUrl;
+  }
+
   protected hideBrokenTripImage(event: Event): void {
     (event.target as HTMLImageElement).hidden = true;
   }
@@ -1253,6 +1260,7 @@ const INTERNAL_ERROR_TERMS = /airtable|token|mint|webhook|schema|api key|base id
  * that our API phrases for customers; infrastructure and configuration failures get a calm, generic message.
  */
 export function customerErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof DocumentTooLargeError) return 'This document is too large to download in the app. Ask your travel agent to email it to you.';
   if (isTripDataError(error)) return error.reason === 'unsupported_version'
     ? 'This trip needs a newer version of the app. Please update the app and try again.'
     : 'We couldn’t read this trip’s details. Please try again in a moment, or contact your travel agent.';

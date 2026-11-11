@@ -48,7 +48,7 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
           @for (quote of related(); track quote.comparisonId) {
             <article class="vt-quotation-card" [class.is-current]="quote.current">
               @if (quote.heroImageUrl) {
-                <img class="vt-quotation-card__image" [src]="quote.heroImageUrl" alt="" />
+                <img class="vt-quotation-card__image" [src]="quote.heroImageUrl" alt="" loading="lazy" decoding="async" />
               }
               <div class="vt-quotation-card__body">
                 @if (quote.current) { <span class="vt-quotation-card__current">Open now</span> }

@@ -10,9 +10,11 @@ export class PersistentRateLimitGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<Request>();
     const response = context.switchToHttp().getResponse<Response>();
     const sensitive = request.path.includes('/link-exchanges') || request.path.includes('/sessions/refresh');
-    const limit = numberEnv(sensitive ? 'RATE_LIMIT_AUTH_PER_MINUTE' : 'RATE_LIMIT_PER_MINUTE', sensitive ? 30 : 180);
+    // Photos load many at a time and are cached by the browser; give them their own allowance.
+    const media = request.path.includes('/media/');
+    const limit = sensitive ? numberEnv('RATE_LIMIT_AUTH_PER_MINUTE', 30) : media ? numberEnv('RATE_LIMIT_MEDIA_PER_MINUTE', 600) : numberEnv('RATE_LIMIT_PER_MINUTE', 180);
     const identity = request.ip || request.socket.remoteAddress || 'unknown';
-    const group = sensitive ? 'auth' : 'api';
+    const group = sensitive ? 'auth' : media ? 'media' : 'api';
     const result = this.store.consumeRateLimit(`${group}:${identity}`, limit, 60_000);
     response.setHeader('RateLimit-Limit', String(limit));
     response.setHeader('RateLimit-Remaining', String(result.remaining));

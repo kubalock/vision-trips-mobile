@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { CruiseProfile, EnrichedDestinationGuide, ExternalProviderStatus, ExternalTripContent, ItineraryItem, LiveFlightStatus, PlaceProfile, PracticalGuide, TripSnapshot, WeatherForecast } from '@vision-trips/contracts';
 import { ExternalCacheService } from './external-cache.service.js';
+import { PLACE_PHOTO_REF, resolvePlacePhoto } from './place-photos.js';
 
 @Injectable()
 export class ExternalContentService {
@@ -8,9 +9,10 @@ export class ExternalContentService {
   private readonly pendingAi = new Set<string>();
   constructor(private readonly cache: ExternalCacheService) {}
 
-  async content(snapshot: TripSnapshot): Promise<ExternalTripContent> {
+  /** `apiBase` is this API's public address (…/v1), used for the signed photo links. */
+  async content(snapshot: TripSnapshot, apiBase = publicApiBase()): Promise<ExternalTripContent> {
     const [flights, weather, stays, cruises, destinations, guides] = await Promise.all([
-      this.flights(snapshot), this.weather(snapshot), this.stays(snapshot), this.cruises(snapshot), this.destinations(snapshot), this.guides(snapshot),
+      this.flights(snapshot), this.weather(snapshot), this.stays(snapshot, apiBase), this.cruises(snapshot), this.destinations(snapshot), this.guides(snapshot),
     ]);
     const aiPending = [...stays, ...destinations, ...guides].some((item) => 'aiPending' in item ? item.aiPending : 'pending' in item && item.pending);
     const aiReady = stays.some((item) => item.aiDescription) || destinations.some((item) => item.overview) || guides.some((item) => item.sections.length);
@@ -97,17 +99,19 @@ export class ExternalContentService {
     catch { return null; }
   }
 
-  private async stays(snapshot: TripSnapshot): Promise<PlaceProfile[]> {
+  private async stays(snapshot: TripSnapshot, apiBase: string): Promise<PlaceProfile[]> {
     const key = process.env.GOOGLE_PLACES_API_KEY?.trim(); if (!key) return [];
     return compact(await Promise.all(snapshot.itinerary.filter((item) => item.kind === 'stay').map(async (item) => {
-      const cacheKey = `place:${entityKey(item.title)}:${entityKey(item.address || '')}`; let profile = this.cache.get<PlaceProfile | null>(cacheKey);
+      const cacheKey = `place-v2:${entityKey(item.title)}:${entityKey(item.address || '')}`; let profile = this.cache.get<PlaceProfile | null>(cacheKey);
       if (profile === undefined) {
         try { profile = await this.googlePlace(item, key); this.cache.set(cacheKey, profile, profile ? 604_800_000 : 1_800_000); }
         catch (error) { this.warn('Google Places', error); profile = null; }
       }
       if (!profile) return null;
       const ai = this.aiText(`property:${entityKey(profile.name)}`, propertyPrompt(profile), 'brochure');
-      return { ...profile, aiDescription: ai.text || profile.summary, aiPending: ai.pending };
+      // Photos are cached as Google photo names and only become (signed, key-free) links here.
+      const images = compact(profile.images.map((image) => resolvePlacePhoto(image, apiBase)));
+      return { ...profile, images, aiDescription: ai.text || profile.summary, aiPending: ai.pending };
     })));
   }
 
@@ -116,7 +120,7 @@ export class ExternalContentService {
     if (!response.ok) throw new Error(`Google Places ${response.status}`); const place = array(obj(await response.json()).places)[0]; if (!object(place)) return null;
     const name = text(obj(place.displayName).text); const address = text(place.formattedAddress);
     if (!safePlaceMatch(item.title, item.address, name, address)) return null;
-    const location = obj(place.location); const placeId = text(place.id); const photos = array(place.photos).flatMap((photo) => { if (!object(photo) || !text(photo.name)) return []; const attribution = text(array(photo.authorAttributions)[0] && obj(array(photo.authorAttributions)[0]).displayName) || null; return [{ url: `https://places.googleapis.com/v1/${text(photo.name)}/media?maxWidthPx=1400&key=${encodeURIComponent(key)}`, attribution, official: Boolean(attribution && entityKey(attribution).includes(entityKey(name))) }]; }).sort((left, right) => Number(right.official) - Number(left.official)).slice(0, 6);
+    const location = obj(place.location); const placeId = text(place.id); const photos = array(place.photos).flatMap((photo) => { if (!object(photo) || !text(photo.name)) return []; const attribution = text(array(photo.authorAttributions)[0] && obj(array(photo.authorAttributions)[0]).displayName) || null; return [{ url: `${PLACE_PHOTO_REF}${text(photo.name)}`, attribution, official: Boolean(attribution && entityKey(attribution).includes(entityKey(name))) }]; }).sort((left, right) => Number(right.official) - Number(left.official)).slice(0, 6);
     const lat = number(location.latitude); const lng = number(location.longitude); const query = encodeURIComponent(`${name}, ${address}`);
     return { itineraryItemId: item.id, placeId, name, address: address || null, rating: place.rating === undefined ? null : number(place.rating), ratingCount: number(place.userRatingCount), websiteUrl: httpUrl(place.websiteUri), phone: text(place.internationalPhoneNumber) || null, summary: text(obj(place.editorialSummary).text) || null, mapsUrl: httpUrl(place.googleMapsUri), directionsUrl: `https://www.google.com/maps/dir/?api=1&destination=${query}${placeId ? `&destination_place_id=${encodeURIComponent(placeId)}` : ''}`, coordinates: { latitude: lat, longitude: lng }, images: photos, aiDescription: null, aiPending: false };
   }
@@ -225,6 +229,12 @@ function numberAt(value: unknown, index: number): number { return number(array(v
 function nestedString(value: Record<string, unknown>, key: string, child: string): string { return text(obj(value[key])[child]); }
 function nestedText(value: Record<string, unknown>, key: string, child: string): string { return nestedString(value, key, child); }
 function clock(value: string): string | null { return value.match(/[T ](\d{2}:\d{2})/)?.[1] || null; }
+/** The API's public address: PUBLIC_API_URL when set (needed behind a proxy), else local development. */
+export function publicApiBase(requestOrigin?: string): string {
+  const configured = process.env.PUBLIC_API_URL?.trim().replace(/\/+$/, '');
+  return configured || `${requestOrigin ?? `http://localhost:${process.env.PORT ?? 3000}`}/v1`;
+}
+
 function compact<T>(values: Array<T | null>): T[] { return values.filter((value): value is T => value !== null); }
 function entityKey(value: string): string { return value.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/\s*[-–—(].*$/, '').replace(/[^a-z0-9]+/g, ' ').trim(); }
 function httpUrl(value: unknown): string | null { const url = text(value); return /^https:\/\//i.test(url) ? url : null; }

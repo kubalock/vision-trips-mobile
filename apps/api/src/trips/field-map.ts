@@ -148,6 +148,44 @@ export function strings(value: unknown): string[] {
   return valueString ? [valueString] : [];
 }
 
+interface AirtableThumbnail { url?: unknown; width?: unknown; height?: unknown }
+interface AirtableAttachment { url?: unknown; filename?: unknown; width?: unknown; height?: unknown; thumbnails?: { large?: AirtableThumbnail; full?: AirtableThumbnail } }
+
+export interface ResponsiveImage { url: string; width: number | null; height: number | null; variants: Array<{ url: string; width: number }> }
+
+/**
+ * An Airtable attachment with the copies Airtable already generates: `large` (512 px tall) and `full` (up to
+ * 3000 px), plus the original. Lets the app choose a size for each place it shows the image instead of always
+ * downloading the original.
+ */
+export function attachmentImage(value: unknown): ResponsiveImage | null {
+  const file = value as AirtableAttachment | null;
+  if (!file || typeof file.url !== 'string' || !file.url.startsWith('https://')) return null;
+  const width = positive(file.width); const height = positive(file.height);
+  const candidates = [file.thumbnails?.large, file.thumbnails?.full, { url: file.url, width: file.width }];
+  const variants = new Map<number, string>();
+  for (const candidate of candidates) {
+    const candidateWidth = positive(candidate?.width);
+    if (candidateWidth && typeof candidate?.url === 'string' && candidate.url.startsWith('https://') && !variants.has(candidateWidth)) variants.set(candidateWidth, candidate.url);
+  }
+  return { url: file.url, width, height, variants: [...variants].sort(([a], [b]) => a - b).map(([variantWidth, url]) => ({ url, width: variantWidth })) };
+}
+
+export function firstAttachmentImage(value: unknown): ResponsiveImage | null {
+  return Array.isArray(value) ? attachmentImage(value[0]) : null;
+}
+
+/** For small cards and logos: Airtable's `large` thumbnail when there is one, otherwise the original. */
+export function firstAttachmentThumbnail(value: unknown): string | null {
+  if (!Array.isArray(value)) return null;
+  const large = (value[0] as AirtableAttachment | undefined)?.thumbnails?.large?.url;
+  return typeof large === 'string' && large.startsWith('https://') ? large : firstAttachmentUrl(value);
+}
+
+function positive(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.round(value) : null;
+}
+
 export function firstAttachmentUrl(value: unknown): string | null {
   if (!Array.isArray(value)) return null;
   const attachment = value[0] as { url?: unknown } | undefined;

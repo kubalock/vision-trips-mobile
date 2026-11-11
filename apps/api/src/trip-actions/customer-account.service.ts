@@ -3,7 +3,7 @@ import type { CustomerAccount, CustomerAccountTrip, CustomerPreferences, OpenCus
 import { createHmac } from 'node:crypto';
 import { AirtableService, type AirtableRecord } from '../airtable/airtable.service.js';
 import { SessionsService, type SessionPrincipal } from '../sessions/sessions.service.js';
-import { bookingFields, customerFields, firstAttachmentUrl, firstString, pick, strings, truthy } from '../trips/field-map.js';
+import { bookingFields, customerFields, firstAttachmentThumbnail, firstString, pick, strings, truthy } from '../trips/field-map.js';
 import { resolveStage } from '../trips/stage.js';
 import { TripsService } from '../trips/trips.service.js';
 
@@ -67,7 +67,7 @@ export class CustomerAccountService {
   private bookings(baseId: string, customers: AirtableRecord[]): Promise<AirtableRecord[]> { return this.airtable.records(baseId, process.env.AIRTABLE_BOOKINGS_TABLE?.trim() || 'Bookings', [...new Set(customers.flatMap((record) => strings(pick(record.fields, customerFields.trips))))]); }
   private trip(principal: SessionPrincipal, record: AirtableRecord): CustomerAccountTrip {
     const departure = date(pick(record.fields, bookingFields.departure)); const returns = date(pick(record.fields, bookingFields.return));
-    return { accountTripId: this.id(principal.baseId, record.id), reference: firstString(pick(record.fields, bookingFields.reference)) || 'Trip', name: firstString(pick(record.fields, bookingFields.name)) || 'Your trip', departureDate: departure, returnDate: returns, status: resolveStage(firstString(pick(record.fields, bookingFields.status)), departure, returns, date(pick(record.fields, bookingFields.quoteExpiry))), heroImageUrl: firstAttachmentUrl(pick(record.fields, bookingFields.hero)), current: record.id === principal.recordId };
+    return { accountTripId: this.id(principal.baseId, record.id), reference: firstString(pick(record.fields, bookingFields.reference)) || 'Trip', name: firstString(pick(record.fields, bookingFields.name)) || 'Your trip', departureDate: departure, returnDate: returns, status: resolveStage(firstString(pick(record.fields, bookingFields.status)), departure, returns, date(pick(record.fields, bookingFields.quoteExpiry))), heroImageUrl: firstAttachmentThumbnail(pick(record.fields, bookingFields.hero)), current: record.id === principal.recordId };
   }
   private id(baseId: string, recordId: string): string { const secret = process.env.VISION_LINK_SECRET?.trim(); if (!secret) throw new ServiceUnavailableException('Customer accounts are not configured.'); return createHmac('sha256', secret).update(`${baseId}:${recordId}:customer-account`).digest('base64url').slice(0, 24); }
 }

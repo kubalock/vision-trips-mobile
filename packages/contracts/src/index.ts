@@ -35,6 +35,8 @@ export interface TripSummary {
   departureDate: string | null;
   returnDate: string | null;
   heroImageUrl: string | null;
+  /** The hero image with its sizes and smaller copies; `heroImageUrl` stays for older clients. */
+  heroImage?: ItineraryImage | null;
   gallery: ItineraryImage[];
   durationDays: number | null;
   countries: string[];
@@ -136,7 +138,7 @@ export interface WeatherForecast {
   destinationId: string; place: string; temperature: number; label: string; icon: string; high: number; low: number;
   days: Array<{ date: string; high: number; low: number; label: string; icon: string }>;
 }
-export interface ExternalImage { url: string; attribution: string | null; official: boolean }
+export interface ExternalImage { url: string; attribution: string | null; official: boolean; variants?: ImageVariant[] }
 export interface PlaceProfile {
   itineraryItemId: string; placeId: string; name: string; address: string | null; rating: number | null; ratingCount: number;
   websiteUrl: string | null; phone: string | null; summary: string | null; mapsUrl: string | null; directionsUrl: string;
@@ -413,9 +415,21 @@ export interface ItinerarySupplier {
   termsUrl: string | null;
 }
 
+/** A smaller copy of an image (for `srcset`). */
+export interface ImageVariant {
+  url: string;
+  width: number;
+}
+
 export interface ItineraryImage {
+  /** The original image (used for full-screen viewing and as the fallback source). */
   url: string;
   alt: string;
+  /** Intrinsic size when known, so the app can reserve space before the image loads. */
+  width?: number | null;
+  height?: number | null;
+  /** Smaller copies, smallest first; the app picks one for the space it shows the image in. */
+  variants?: ImageVariant[];
 }
 
 export interface RoomDetail {

@@ -41,6 +41,12 @@ describe('trip snapshot schema', () => {
     expect(trip.payments?.items.map((item) => item.id)).toEqual(['p1']);
   });
 
+  it('accepts images with and without size information', () => {
+    const trip = parseTripSnapshot(minimal({ summary: { name: 'Lisbon', reference: 'REF-1', heroImageUrl: 'https://cdn/h.jpg', heroImage: { url: 'https://cdn/h.jpg', alt: '', width: 4000, height: 3000, variants: [{ url: 'https://cdn/l.jpg', width: 683 }, { url: '', width: 10 }] }, gallery: [{ url: 'https://cdn/g.jpg', alt: 'Beach' }] } }));
+    expect(trip.summary.heroImage).toEqual({ url: 'https://cdn/h.jpg', alt: '', width: 4000, height: 3000, variants: [{ url: 'https://cdn/l.jpg', width: 683 }] });
+    expect(trip.summary.gallery[0]).toEqual({ url: 'https://cdn/g.jpg', alt: 'Beach', width: null, height: null, variants: [] });
+  });
+
   it('drops fields the app does not know about', () => {
     const trip = parseTripSnapshot(minimal({ airtableBaseId: 'appSECRET', summary: { name: 'Lisbon', reference: 'REF-1', internalNotes: 'x' } }));
     expect(JSON.stringify(trip)).not.toContain('SECRET');

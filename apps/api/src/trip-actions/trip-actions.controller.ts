@@ -12,6 +12,7 @@ import { MintPaymentsService } from './mint-payments.service.js';
 import { RelatedQuotationsService } from './related-quotations.service.js';
 import { CustomerAccountService } from './customer-account.service.js';
 import { formatMoney } from '../trips/field-map.js';
+import { openSupplierDocument, SupplierDocumentError } from './supplier-document.js';
 
 @ApiTags('trip actions')
 @Controller('trips/current')
@@ -242,12 +243,17 @@ export class TripActionsController {
     if (!walletDocument || walletDocument.status !== 'ready') throw new NotFoundException('This document is not available.');
     if (action.startsWith('supplier:')) {
       if (!walletDocument.url?.startsWith('https://')) throw new NotFoundException('This supplier document is not available.');
-      const response = await fetch(walletDocument.url, { signal: AbortSignal.timeout(15_000) });
-      const contentLength = Number(response.headers.get('content-length') || 0);
-      if (!response.ok || contentLength > 20_000_000) throw new BadGatewayException('The supplier document could not be downloaded.');
-      const body = Buffer.from(await response.arrayBuffer());
-      if (body.length > 20_000_000) throw new BadGatewayException('The supplier document is too large.');
-      return new StreamableFile(body, { type: response.headers.get('content-type') || walletDocument.mimeType, disposition: `attachment; filename="${safeFilename(walletDocument.title)}"` });
+      // Streamed through a byte counter rather than read into memory; see openSupplierDocument.
+      const document = await openSupplierDocument(walletDocument.url).catch((error: unknown) => {
+        throw new BadGatewayException(error instanceof SupplierDocumentError && error.reason === 'too_large'
+          ? 'The supplier document is too large to download in the app.'
+          : 'The supplier document could not be downloaded.');
+      });
+      return new StreamableFile(document.stream, {
+        type: document.contentType || walletDocument.mimeType,
+        disposition: `attachment; filename="${safeFilename(walletDocument.title)}"`,
+        ...(document.length !== null ? { length: document.length } : {}),
+      });
     }
     let evidence: AcceptanceEvidence | null = null;
     if (action === 'acceptance') {

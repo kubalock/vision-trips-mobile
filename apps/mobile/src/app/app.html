@@ -2,7 +2,7 @@
   <a class="vt-skip" href="#main-content">Skip to main content</a>
   <header class="vt-top">
     <div class="vt-wrap vt-top__inner">
-      <div class="vt-top__brand">@if (brandLogoUrl(); as logo) { <img class="vt-top__logo" [src]="logo" [alt]="trip()?.brand?.name || 'Vision Trips'" (error)="handleBrandLogoError()" /> } @else { <span class="vt-top__mark">V</span><span class="vt-top__name">{{ trip()?.brand?.name || 'Vision Trips' }}</span> }</div>
+      <div class="vt-top__brand">@if (brandLogoUrl(); as logo) { <img class="vt-top__logo" decoding="async" [src]="logo" [alt]="trip()?.brand?.name || 'Vision Trips'" (error)="handleBrandLogoError()" /> } @else { <span class="vt-top__mark">V</span><span class="vt-top__name">{{ trip()?.brand?.name || 'Vision Trips' }}</span> }</div>
       <div class="vt-top__meta">
         @if (trip(); as headerTrip) {
           <div class="vt-top__booking">
@@ -65,7 +65,7 @@
       }
       @if (activeView() === 'home') {
         <article class="vt-hero" [class.has-image]="currentTrip.summary.heroImageUrl">
-          @if (currentTrip.summary.heroImageUrl) { <img class="vt-hero__img" [src]="currentTrip.summary.heroImageUrl" alt="" /> }
+          @if (currentTrip.summary.heroImageUrl) { <img class="vt-hero__img" [src]="heroSource(currentTrip.summary, 800)" [attr.srcset]="img.srcset(currentTrip.summary.heroImage)" [attr.sizes]="img.sizes.hero" [attr.width]="currentTrip.summary.heroImage?.width ?? null" [attr.height]="currentTrip.summary.heroImage?.height ?? null" alt="" decoding="async" fetchpriority="high" /> }
           <div class="vt-hero__body"><p class="vt-hero__kicker">{{ stageLabel(currentTrip.stage) }}</p><h1 class="vt-hero__title">{{ currentTrip.summary.name }}</h1><p class="vt-hero__sub">{{ currentTrip.summary.reference }} · {{ (currentTrip.summary.departureDate | europeanDate) || 'Dates to be confirmed' }}@if (currentTrip.summary.returnDate) { — {{ currentTrip.summary.returnDate | europeanDate }} }</p>
             <ul class="vt-hero__facts" role="list">@for (type of currentTrip.summary.holidayTypes; track type) { <li>{{ type }}</li> }@if (currentTrip.summary.durationDays !== null) { <li>{{ currentTrip.summary.durationDays }} nights</li> }</ul>
             <p class="vt-small">{{ storedSecurely() ? (savedInBrowser ? 'Saved in this browser for offline viewing.' : 'Saved securely on this device.') : 'This trip has not been saved for offline viewing.' }}</p>
@@ -191,7 +191,7 @@
           <section class="vt-trip-group"><div class="vt-trip-group__heading"><h2>Upcoming trips</h2><span>{{ tripGroups().upcoming.length }} {{ tripGroups().upcoming.length === 1 ? 'trip' : 'trips' }}</span></div>
             <div class="vt-trip-grid">@for (saved of tripGroups().upcoming; track saved.snapshot.tripId) {
               <article class="vt-saved-trip">
-                <div class="vt-saved-trip__media" aria-hidden="true">@if (saved.snapshot.summary.heroImageUrl) { <img class="vt-saved-trip__image" [src]="saved.snapshot.summary.heroImageUrl" alt="" (error)="hideBrokenTripImage($event)" /> }</div>
+                <div class="vt-saved-trip__media" aria-hidden="true">@if (saved.snapshot.summary.heroImageUrl) { <img class="vt-saved-trip__image" [src]="heroSource(saved.snapshot.summary, 360)" [attr.srcset]="img.srcset(saved.snapshot.summary.heroImage)" [attr.sizes]="img.sizes.card" alt="" loading="lazy" decoding="async" (error)="hideBrokenTripImage($event)" /> }</div>
                 <div class="vt-saved-trip__body">
                   <header class="vt-saved-trip__header">
                     <div><h3>{{ saved.snapshot.summary.name }}</h3><p>{{ saved.snapshot.summary.reference }}</p></div>
@@ -215,7 +215,7 @@
           <section class="vt-trip-group"><div class="vt-trip-group__heading"><h2>Past trips</h2><span>{{ tripGroups().past.length }} {{ tripGroups().past.length === 1 ? 'trip' : 'trips' }}</span></div>
             <div class="vt-trip-grid">@for (saved of tripGroups().past; track saved.snapshot.tripId) {
               <article class="vt-saved-trip">
-                <div class="vt-saved-trip__media" aria-hidden="true">@if (saved.snapshot.summary.heroImageUrl) { <img class="vt-saved-trip__image" [src]="saved.snapshot.summary.heroImageUrl" alt="" (error)="hideBrokenTripImage($event)" /> }</div>
+                <div class="vt-saved-trip__media" aria-hidden="true">@if (saved.snapshot.summary.heroImageUrl) { <img class="vt-saved-trip__image" [src]="heroSource(saved.snapshot.summary, 360)" [attr.srcset]="img.srcset(saved.snapshot.summary.heroImage)" [attr.sizes]="img.sizes.card" alt="" loading="lazy" decoding="async" (error)="hideBrokenTripImage($event)" /> }</div>
                 <div class="vt-saved-trip__body">
                   <header class="vt-saved-trip__header">
                     <div><h3>{{ saved.snapshot.summary.name }}</h3><p>{{ saved.snapshot.summary.reference }}</p></div>

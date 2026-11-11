@@ -12,7 +12,7 @@ import { VtIcon } from '../../shared/lucide-icon';
         <div class="vt-upsell-grid">
           @for (extra of extras(); track extra.id) {
             <article class="vt-upsell-card" [class.no-image]="!extra.imageUrl">
-              @if (extra.imageUrl) { <div class="vt-upsell-card__media"><img [src]="extra.imageUrl" [alt]="extra.name" loading="lazy" /></div> }
+              @if (extra.imageUrl) { <div class="vt-upsell-card__media"><img [src]="extra.imageUrl" [alt]="extra.name" loading="lazy" decoding="async" /></div> }
               <div class="vt-upsell-card__body"><h3>{{ extra.name }}</h3>@if (extra.description) { <p>{{ extra.description }}</p> }@if (extra.supplierName) { <small>Provided by {{ extra.supplierName }}</small> }<button type="button" (click)="enquire.emit()">Ask your travel expert <vt-icon name="arrow-right" [size]="15" /></button>
               </div>
             </article>

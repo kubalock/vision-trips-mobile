@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import type { AccessScope, PaymentStatusResponse, CabinDetail, CruisePort, ItineraryItem, ItineraryKind, PassengerAllocation, PaymentItem, RoomDetail, TravellerSummary, TripDocument, TripSnapshot } from '@vision-trips/contracts';
+import type { AccessScope, ItineraryImage, PaymentStatusResponse, CabinDetail, CruisePort, ItineraryItem, ItineraryKind, PassengerAllocation, PaymentItem, RoomDetail, TravellerSummary, TripDocument, TripSnapshot } from '@vision-trips/contracts';
 import { createHash, createHmac } from 'node:crypto';
 import { AirtableService, type AirtableRecord } from '../airtable/airtable.service.js';
-import { airlineFields, airportFields, bookingFields, brandFields, brandTemplateFields, cabinFields, communicationFields, cruisePortFields, customerFields, elementFields, firstAttachmentUrl, firstString, locationFields, memberFields, numberValue, passengerFields, paymentFields, personFields, pick, roomFields, shipFields, strings, supplierFields, truthy, upsellFields, currencyCode, moneyValue, paymentAmount, PAYABLE_CURRENCIES, formatMoney, dateString } from './field-map.js';
+import { airlineFields, airportFields, bookingFields, brandFields, brandTemplateFields, cabinFields, communicationFields, cruisePortFields, customerFields, elementFields, attachmentImage, firstAttachmentImage, firstAttachmentThumbnail, firstAttachmentUrl, firstString, locationFields, memberFields, numberValue, passengerFields, paymentFields, personFields, pick, roomFields, shipFields, strings, supplierFields, truthy, upsellFields, currencyCode, moneyValue, paymentAmount, PAYABLE_CURRENCIES, formatMoney, dateString } from './field-map.js';
 import { resolveStage } from './stage.js';
 import { themeTokens } from './theme.js';
 
@@ -130,14 +130,14 @@ export class TripsService {
     }
     const summary = {
       reference: firstString(bookingValue('reference')) || 'Your trip', name: firstString(bookingValue('name')) || 'Your trip',
-      departureDate: departure, returnDate: returns, heroImageUrl: firstAttachmentUrl(bookingValue('hero')), gallery: attachmentImages(bookingValue('gallery')),
+      departureDate: departure, returnDate: returns, heroImageUrl: firstAttachmentUrl(bookingValue('hero')), heroImage: heroImage(firstAttachmentImage(bookingValue('hero'))), gallery: attachmentImages(bookingValue('gallery')),
       durationDays: tripDuration(bookingValue('duration'), departure, returns), countries: strings(bookingValue('countries')).map(safeText).filter(Boolean),
       holidayTypes: strings(bookingValue('holidayTypes')).map(safeText).filter(Boolean), travellerType: safeText(bookingValue('travellerType')) || null,
       sector: safeText(bookingValue('sector')) || null, totalTravellers: Math.max(numberValue(bookingValue('totalTravellers')), travellers.length),
       groupBooking: truthy(bookingValue('group')), giftVoucher: truthy(bookingValue('giftVoucher')),
     };
     const visibleSummary = surpriseConcealed ? {
-      ...summary, name: 'Your surprise trip', heroImageUrl: null, gallery: [], countries: [], holidayTypes: [], travellerType: null, sector: null,
+      ...summary, name: 'Your surprise trip', heroImageUrl: null, heroImage: null, gallery: [], countries: [], holidayTypes: [], travellerType: null, sector: null,
     } : summary;
     const visibleItinerary = surpriseConcealed ? [] : itinerary;
     const visibleDestinations = surpriseConcealed ? [] : destinations;
@@ -318,7 +318,7 @@ function mapBrandProfile(brandValue: (key: keyof typeof brandFields) => unknown,
   const physical = safeText(brandValue('physicalAddress'));
   const address = physical || [safeText(brandValue('address1')), safeText(brandValue('address2')), safeText(brandValue('town')), safeText(brandValue('postcode')), safeText(brandValue('country'))].filter(Boolean).join(', ');
   const whyBook = ([['reason1', 'reason1Text'], ['reason2', 'reason2Text'], ['reason3', 'reason3Text'], ['reason4', 'reason4Text']] as const).flatMap(([titleKey, textKey]) => { const title = safeText(brandValue(titleKey)); return title ? [{ title, text: safeText(brandValue(textKey)) || null }] : []; });
-  const gallery = (['image1', 'image2', 'image3', 'image4', 'image5', 'image6', 'image7', 'image8', 'image9', 'image10'] as const).flatMap((key) => { const url = firstAttachmentUrl(brandValue(key)); return url ? [{ url, alt: safeText(brandValue('name')) || 'Travel inspiration' }] : []; });
+  const gallery = (['image1', 'image2', 'image3', 'image4', 'image5', 'image6', 'image7', 'image8', 'image9', 'image10'] as const).flatMap((key) => { const image = firstAttachmentImage(brandValue(key)); return image ? [{ ...image, alt: safeText(brandValue('name')) || 'Travel inspiration' }] : []; });
   const reassurance = [
     { title: 'Your own travel expert', text: safeText(brandValue('name')) || 'Personal support before, during and after travel' },
     { title: 'Built around you', text: 'Tailored, not off the shelf' },
@@ -335,7 +335,7 @@ function mapBrandProfile(brandValue: (key: keyof typeof brandFields) => unknown,
     privacyUrl: safeWebUrl(brandValue('privacy')),
     complaintsUrl: safeWebUrl(brandValue('complaints')),
     whyBook,
-    teamPhotoUrl: firstAttachmentUrl(brandValue('teamPhoto')),
+    teamPhotoUrl: firstAttachmentThumbnail(brandValue('teamPhoto')),
     gallery,
     mapUrl: safeWebUrl(brandValue('mapsLink')),
     reassurance,
@@ -387,7 +387,7 @@ function mapDestinations(records: AirtableRecord[], tripId: string): TripSnapsho
       practicalInformation: nullableRecordText(record, locationFields.practical),
       culturalInformation: nullableRecordText(record, locationFields.culture),
       travelAdviceUrl: safeWebUrl(pick(record.fields, locationFields.travelAdvice)),
-      imageUrl: firstAttachmentUrl(pick(record.fields, locationFields.image)),
+      imageUrl: firstAttachmentThumbnail(pick(record.fields, locationFields.image)),
       coordinates: latitude !== null && longitude !== null ? { latitude, longitude } : null,
       directionsUrl: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(latitude !== null && longitude !== null ? `${latitude},${longitude}` : name)}`,
     }];
@@ -403,7 +403,7 @@ function mapExtras(records: AirtableRecord[], suppliers: Map<string, AirtableRec
       id: publicChildId(tripId, record.id || String(index), 'ext'),
       name,
       description: safeText(pick(record.fields, upsellFields.description)) || null,
-      imageUrl: firstAttachmentUrl(pick(record.fields, upsellFields.image)),
+      imageUrl: firstAttachmentThumbnail(pick(record.fields, upsellFields.image)),
       supplierName: hideSupplierInfo ? null : recordText(supplier, supplierFields.name) || null,
     }];
   });
@@ -527,7 +527,7 @@ function mapElement(record: AirtableRecord, tripId: string, index: number, graph
     reference: supplierHidden ? null : safeText(value('supplierReference')) || null,
     address: safeText(value('address')) || null,
     notes: safeText(value('notes')) || null,
-    supplier: supplierHidden || !supplierName ? null : { name: supplierName, logoUrl: firstAttachmentUrl(supplierRecord?.fields ? pick(supplierRecord.fields, supplierFields.logo) : undefined), termsUrl: safeUrl(supplierRecord?.fields ? pick(supplierRecord.fields, supplierFields.terms) : undefined) },
+    supplier: supplierHidden || !supplierName ? null : { name: supplierName, logoUrl: firstAttachmentThumbnail(supplierRecord?.fields ? pick(supplierRecord.fields, supplierFields.logo) : undefined), termsUrl: safeUrl(supplierRecord?.fields ? pick(supplierRecord.fields, supplierFields.terms) : undefined) },
     images: attachmentImages(value('images')),
     rooms, cabins, passengers, cruisePorts,
     emergencyContact: emergencyContact(value('emergencyName'), value('emergencyPhone')),
@@ -535,7 +535,7 @@ function mapElement(record: AirtableRecord, tripId: string, index: number, graph
     fromCode: (recordText(fromAirport, airportFields.iata) || safeText(value('fromCode'))).toUpperCase() || null,
     toCode: (recordText(toAirport, airportFields.iata) || safeText(value('toCode'))).toUpperCase() || null,
     carrierCode,
-    carrierLogoUrl: firstAttachmentUrl(carrierRecord?.fields ? pick(carrierRecord.fields, airlineFields.logo) : undefined),
+    carrierLogoUrl: firstAttachmentThumbnail(carrierRecord?.fields ? pick(carrierRecord.fields, airlineFields.logo) : undefined),
     arrivesNextDay: kind === 'flight' && Boolean(dateString(value('start')) && dateString(value('end')) && dateString(value('start')) !== dateString(value('end'))),
     packageIncluded: truthy(value('package')),
     termsUrl: safeWebUrl(value('termsUrl')),
@@ -800,14 +800,16 @@ function resolveLinkedText(value: unknown, records: Map<string, AirtableRecord>,
   return resolved || safeText(value);
 }
 
-function attachmentImages(value: unknown): Array<{ url: string; alt: string }> {
+function attachmentImages(value: unknown): ItineraryImage[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((attachment) => {
-    const file = attachment as { url?: unknown; filename?: unknown };
-    return typeof file.url === 'string' && file.url.startsWith('https://')
-      ? [{ url: file.url, alt: safeText(file.filename) || 'Trip image' }]
-      : [];
+    const image = attachmentImage(attachment);
+    return image ? [{ ...image, alt: safeText((attachment as { filename?: unknown }).filename) || 'Trip image' }] : [];
   }).slice(0, 12);
+}
+
+function heroImage(image: ReturnType<typeof firstAttachmentImage>): ItineraryImage | null {
+  return image ? { ...image, alt: '' } : null;
 }
 
 function safeUrl(value: unknown): string | null {

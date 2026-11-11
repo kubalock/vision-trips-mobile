@@ -3,7 +3,7 @@ import type { OpenRelatedQuotationResponse, RelatedQuotationSummary, RelatedQuot
 import { createHmac } from 'node:crypto';
 import { AirtableService, type AirtableRecord } from '../airtable/airtable.service.js';
 import { SessionsService, type SessionPrincipal } from '../sessions/sessions.service.js';
-import { bookingFields, customerFields, firstAttachmentUrl, firstString, numberValue, pick, strings, truthy } from '../trips/field-map.js';
+import { bookingFields, customerFields, firstAttachmentThumbnail, firstString, numberValue, pick, strings, truthy } from '../trips/field-map.js';
 import { resolveStage } from '../trips/stage.js';
 import { TripsService } from '../trips/trips.service.js';
 
@@ -55,7 +55,7 @@ export class RelatedQuotationsService {
       durationDays: duration(departure, returns, pick(record.fields, bookingFields.duration)),
       total: numberValue(pick(record.fields, bookingFields.total)),
       currency: firstString(pick(record.fields, bookingFields.currency)) || 'GBP',
-      heroImageUrl: firstAttachmentUrl(pick(record.fields, bookingFields.hero)),
+      heroImageUrl: firstAttachmentThumbnail(pick(record.fields, bookingFields.hero)),
       status: stage === 'quote' ? 'available' : 'expired', current: record.id === principal.recordId,
     };
   }

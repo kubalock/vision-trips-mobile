@@ -1,9 +1,17 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpEventType, type HttpResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import type { CustomerAccount, CustomerEngagementRequest, CustomerEngagementResponse, CustomerMessageRequest, CustomerMessageResponse, CustomerPreferences, ExternalTripContent, FellowTravellerLinkResponse, LinkExchangeResponse, MobileSession, OpenCustomerAccountTripResponse, OpenRelatedQuotationResponse, PaymentLinkResponse, PaymentStatusResponse, QuotationAcceptanceRequest, QuotationAcceptanceResponse, RelatedQuotationsResponse, TripSnapshot, UpdateCustomerPreferencesResponse } from '@vision-trips/contracts';
-import { firstValueFrom } from 'rxjs';
+import { filter, firstValueFrom, map } from 'rxjs';
 import { API_BASE_URL } from '../config/api-base-url';
 import { parseExternalContent, parseTripSnapshot } from './trip-schema';
+
+/** Largest document the app downloads and keeps (the API applies the same limit to supplier documents). */
+export const MAX_DOCUMENT_BYTES = 20_000_000;
+
+export class DocumentTooLargeError extends Error {
+  override readonly name = 'DocumentTooLargeError';
+  constructor() { super('The document is larger than the app can download.'); }
+}
 
 @Injectable({ providedIn: 'root' })
 export class VisionApiService {
@@ -43,11 +51,24 @@ export class VisionApiService {
     }));
   }
 
+  /**
+   * Downloads a document, refusing it as soon as it is known to exceed MAX_DOCUMENT_BYTES: from the declared size
+   * when the headers arrive, or from the running byte count. Unsubscribing aborts the request.
+   */
   downloadDocument(action: string, accessToken: string): Promise<Blob> {
     return firstValueFrom(this.http.get(`${this.baseUrl}/trips/current/documents/${encodeURIComponent(action)}.pdf`, {
       headers: { Authorization: `Bearer ${accessToken}` },
-      responseType: 'blob',
-    }));
+      responseType: 'blob', observe: 'events', reportProgress: true,
+    }).pipe(
+      map((event) => {
+        const declared = event.type === HttpEventType.ResponseHeader || event.type === HttpEventType.Response ? Number(event.headers.get('content-length') ?? NaN) : NaN;
+        const loaded = event.type === HttpEventType.DownloadProgress ? event.loaded : event.type === HttpEventType.Response ? event.body?.size ?? 0 : 0;
+        if (declared > MAX_DOCUMENT_BYTES || loaded > MAX_DOCUMENT_BYTES) throw new DocumentTooLargeError();
+        return event;
+      }),
+      filter((event): event is HttpResponse<Blob> => event.type === HttpEventType.Response),
+      map((response) => response.body ?? new Blob()),
+    ));
   }
 
   acceptQuotation(input: QuotationAcceptanceRequest, accessToken: string): Promise<QuotationAcceptanceResponse> {

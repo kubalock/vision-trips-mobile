@@ -35,7 +35,7 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
           <div class="vt-account-trips">
             @for (trip of data.trips; track trip.accountTripId) {
               <article class="vt-account-trip" [class.vt-account-trip--current]="trip.current">
-                @if (trip.heroImageUrl) { <img class="vt-account-trip__image" [src]="trip.heroImageUrl" alt="" /> }
+                @if (trip.heroImageUrl) { <img class="vt-account-trip__image" [src]="trip.heroImageUrl" alt="" loading="lazy" decoding="async" /> }
                 <div class="vt-account-trip__body">
                   <div class="vt-account-trip__topline">
                     <div>

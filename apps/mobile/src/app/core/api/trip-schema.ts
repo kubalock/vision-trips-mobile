@@ -57,7 +57,8 @@ function list<T extends z.ZodMiniType>(item: T) {
 }
 
 const strings = list(z.string());
-const image = z.object({ url: nonEmpty, alt: text });
+const imageVariant = z.object({ url: nonEmpty, width: z.number().check(z.positive()) });
+const image = z.object({ url: nonEmpty, alt: text, width: optNumber, height: optNumber, variants: list(imageVariant) });
 const coordinates = z.object({ latitude: z.number(), longitude: z.number() });
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -89,6 +90,7 @@ const brandProfile = record({
 const summary = z.object({
   reference: z.string(), name: z.string(),
   departureDate: optText, returnDate: optText, heroImageUrl: optText,
+  heroImage: z.catch(z.nullable(image), null),
   gallery: list(image),
   durationDays: optNumber,
   countries: strings, holidayTypes: strings,
@@ -281,7 +283,7 @@ const providerStatus = record({
   state: oneOf(['ready', 'pending', 'not_configured', 'not_applicable', 'unavailable'], 'unavailable'),
   source: text, message: optText,
 });
-const externalImage = z.object({ url: nonEmpty, attribution: optText, official: flag });
+const externalImage = z.object({ url: nonEmpty, attribution: optText, official: flag, variants: list(imageVariant) });
 const flightTimes = { scheduled: optText, actual: optText, terminal: optText, gate: optText };
 
 const externalContentSchema = z.object({
