@@ -12,7 +12,7 @@ import { CustomerNotificationsStore, type CustomerNotification } from './core/st
 import { DocumentWalletStore, type WalletStatus } from './core/storage/document-wallet.store';
 import { ExternalPages, type PendingExternalPage } from './core/platform/external-pages';
 import { ShareSheet } from './core/platform/share-sheet';
-import { SessionManager } from './core/session/session-manager';
+import { SessionManager, isTerminalSessionError } from './core/session/session-manager';
 import { Directory, Filesystem, Encoding } from '@capacitor/filesystem';
 import { DocumentsSection } from './features/trip/documents-section';
 import { DestinationsSection } from './features/trip/destinations-section';
@@ -30,7 +30,7 @@ import { brandPalette } from './shared/brand-palette';
 import { EuropeanDatePipe, formatEuropeanDate } from './shared/european-date.pipe';
 
 type AppView = 'home' | 'itinerary' | 'payments' | 'documents' | 'help' | 'account';
-type TripRefreshState = 'idle' | 'refreshing' | 'fresh' | 'stale' | 'offline' | 'error';
+type TripRefreshState = 'idle' | 'refreshing' | 'fresh' | 'stale' | 'offline' | 'error' | 'signed_out';
 type Appearance = 'light' | 'dark';
 type AppearancePreference = Appearance | 'system';
 
@@ -98,7 +98,8 @@ export class App implements OnInit, OnDestroy {
   protected readonly downloadingDocumentId = signal<string | null>(null);
   protected readonly savedTripList = signal<SavedTrip[]>([]);
   protected readonly showTripLibrary = signal(false);
-  protected readonly expiredTripsRemoved = signal(0);
+  /** The open trip's session ended: its saved copy stays readable, but live actions need the trip link again. */
+  protected readonly signedOut = signal(false);
   protected readonly tripRefreshStates = signal<Record<string, TripRefreshState>>({});
   protected readonly tripGroups = computed(() => groupSavedTrips(this.savedTripList()));
   protected readonly displayedTrip = computed(() => this.showTripLibrary() ? null : this.trip());
@@ -163,13 +164,14 @@ export class App implements OnInit, OnDestroy {
   constructor() {
     this.sessions.connect({
       tripIdFor: (refreshToken) => (this.session()?.refreshToken === refreshToken ? this.trip()?.tripId : undefined)
-        ?? this.savedTripList().find((trip) => trip.session.refreshToken === refreshToken)?.snapshot.tripId,
+        ?? this.savedTripList().find((trip) => trip.session?.refreshToken === refreshToken)?.snapshot.tripId,
       renewed: async ({ previousRefreshToken, session, fromServer }) => {
         const snapshot = this.trip();
         if (fromServer && snapshot && this.session()?.refreshToken === session.refreshToken) this.storedSecurely.set(await this.savedTrips.save(snapshot, session));
         // The old refresh token is now dead server-side; keep the in-memory library in step with storage.
-        this.savedTripList.update((trips) => trips.map((trip) => trip.session.refreshToken === previousRefreshToken ? { ...trip, session } : trip));
+        this.savedTripList.update((trips) => trips.map((trip) => trip.session?.refreshToken === previousRefreshToken ? { ...trip, session } : trip));
       },
+      expired: (refreshToken) => this.handleSessionExpired(refreshToken),
     });
   }
 
@@ -601,9 +603,7 @@ export class App implements OnInit, OnDestroy {
       else if (this.trip()) void this.refreshCurrentTrip(false);
     });
     if (this.trip()) return;
-    const beforePrune = (await this.savedTrips.all()).length;
-    const saved = (await this.savedTrips.pruneExpired()).sort((a, b) => b.savedAt.localeCompare(a.savedAt));
-    this.expiredTripsRemoved.set(Math.max(0, beforePrune - saved.length));
+    const saved = (await this.savedTrips.signOutExpired()).sort((a, b) => b.savedAt.localeCompare(a.savedAt));
     this.setSavedTripList(saved, status.connected);
     if (!activateSaved || !saved.length || this.trip() || this.challenge()) return;
     if (saved.length > 1) {
@@ -778,7 +778,7 @@ export class App implements OnInit, OnDestroy {
   protected async signOutDevice(): Promise<void> {
     if (!window.confirm('Sign out and remove all locally saved trips from this device?')) return;
     const saved = await this.savedTrips.all();
-    const refreshTokens = [...new Set([this.session()?.refreshToken, ...saved.map((trip) => trip.session.refreshToken)].filter((token): token is string => Boolean(token)))];
+    const refreshTokens = [...new Set([this.session()?.refreshToken, ...saved.map((trip) => trip.session?.refreshToken)].filter((token): token is string => Boolean(token)))];
     await Promise.allSettled(refreshTokens.map((refreshToken) => this.api.revokeSession(refreshToken)));
     for (const trip of saved) { await this.savedTrips.remove(trip.snapshot.tripId); await this.brandAssets.remove(trip.snapshot.tripId); this.customerNotifications.clear(trip.snapshot.tripId); }
     await this.documentWallet.remove();
@@ -857,10 +857,12 @@ export class App implements OnInit, OnDestroy {
       return;
     }
     if (this.tripRefreshStates()[tripId] === 'refreshing') return;
+    const openSession = this.trip()?.tripId === tripId ? this.session() : null;
+    const credential = openSession ?? saved.session;
+    if (!credential) { this.setTripRefreshState(tripId, 'signed_out'); return; }
     this.setTripRefreshState(tripId, 'refreshing');
     try {
-      const openSession = this.trip()?.tripId === tripId ? this.session() : null;
-      const { result: snapshot, session } = await this.sessions.runWithSession(openSession ?? saved.session, (accessToken) => this.api.refreshTrip(accessToken));
+      const { result: snapshot, session } = await this.sessions.runWithSession(credential, (accessToken) => this.api.refreshTrip(accessToken));
       await this.savedTrips.save(snapshot, session);
       if (snapshot.brand.logoUrl) await this.brandAssets.cacheLogo(snapshot.tripId, snapshot.brand.logoUrl);
       else await this.brandAssets.remove(snapshot.tripId);
@@ -875,8 +877,8 @@ export class App implements OnInit, OnDestroy {
         void this.loadExternalContent(false);
         await this.refreshDocumentStatuses(snapshot);
       }
-    } catch {
-      this.setTripRefreshState(tripId, 'error');
+    } catch (error) {
+      this.setTripRefreshState(tripId, isTerminalSessionError(error) ? 'signed_out' : 'error');
     }
   }
 
@@ -884,7 +886,8 @@ export class App implements OnInit, OnDestroy {
     event?.stopPropagation();
     if (!window.confirm(`Remove ${saved.snapshot.summary.name} from this device?`)) return;
     const openSession = this.trip()?.tripId === saved.snapshot.tripId ? this.session() : null;
-    void this.api.revokeSession((openSession ?? saved.session).refreshToken).catch(() => undefined);
+    const revoke = (openSession ?? saved.session)?.refreshToken;
+    if (revoke) void this.api.revokeSession(revoke).catch(() => undefined);
     await this.savedTrips.remove(saved.snapshot.tripId);
     await this.brandAssets.remove(saved.snapshot.tripId);
     await this.documentWallet.remove(saved.snapshot.tripId);
@@ -905,6 +908,7 @@ export class App implements OnInit, OnDestroy {
     if (state === 'fresh') return 'Up to date';
     if (state === 'offline') return 'Saved offline';
     if (state === 'error') return 'Refresh failed';
+    if (state === 'signed_out' || !saved.session) return 'Signed out · open your trip link to refresh';
     if (state === 'stale') return 'May be out of date';
     return `Saved ${formatEuropeanDate(saved.savedAt)}`;
   }
@@ -950,6 +954,7 @@ export class App implements OnInit, OnDestroy {
     this.refreshing.set(false);
     this.messageTopic.set('itinerary');
     this.error.set('');
+    this.signedOut.set(false);
     return generation;
   }
 
@@ -960,6 +965,8 @@ export class App implements OnInit, OnDestroy {
   private async activateSavedTrip(saved: SavedTrip, refresh: boolean): Promise<void> {
     const generation = this.beginTrip();
     this.session.set(saved.session);
+    this.signedOut.set(!saved.session);
+    if (!saved.session) refresh = false;
     const status = refresh && !isSnapshotStale(saved.snapshot) ? 'fresh' as const : refresh ? 'stale' as const : 'offline' as const;
     const snapshot = { ...saved.snapshot, freshness: { ...saved.snapshot.freshness, status } };
     this.trip.set(snapshot);
@@ -973,14 +980,14 @@ export class App implements OnInit, OnDestroy {
   }
 
   private async reloadSavedTrips(): Promise<void> {
-    this.setSavedTripList((await this.savedTrips.pruneExpired()).sort((a, b) => b.savedAt.localeCompare(a.savedAt)), this.online());
+    this.setSavedTripList((await this.savedTrips.signOutExpired()).sort((a, b) => b.savedAt.localeCompare(a.savedAt)), this.online());
   }
 
   private setSavedTripList(saved: SavedTrip[], connected: boolean): void {
     this.savedTripList.set(saved);
     this.tripRefreshStates.update((states) => Object.fromEntries(saved.map((trip) => [
       trip.snapshot.tripId,
-      states[trip.snapshot.tripId] === 'refreshing' ? 'refreshing' : connected ? (isSnapshotStale(trip.snapshot) ? 'stale' : 'fresh') : 'offline',
+      states[trip.snapshot.tripId] === 'refreshing' ? 'refreshing' : !trip.session ? 'signed_out' : connected ? (isSnapshotStale(trip.snapshot) ? 'stale' : 'fresh') : 'offline',
     ])));
   }
 
@@ -1075,6 +1082,29 @@ export class App implements OnInit, OnDestroy {
     } finally { if (this.isCurrentTrip(generation)) this.externalContentLoading.set(false); }
   }
 
+  /**
+   * Central handling for a session that can no longer be renewed. The credential is forgotten so nothing keeps
+   * retrying it, but the saved trip stays on the device for offline viewing; opening the trip link signs in again.
+   */
+  private async handleSessionExpired(refreshToken: string): Promise<void> {
+    const saved = this.savedTripList().find((trip) => trip.session?.refreshToken === refreshToken);
+    const isOpenTrip = this.session()?.refreshToken === refreshToken;
+    const tripId = isOpenTrip ? this.trip()?.tripId : saved?.snapshot.tripId;
+    if (tripId) await this.savedTrips.signOut(tripId);
+    this.savedTripList.update((trips) => trips.map((trip) => trip.session?.refreshToken === refreshToken ? { ...trip, session: null } : trip));
+    if (tripId) this.setTripRefreshState(tripId, 'signed_out');
+    if (!isOpenTrip) return;
+    this.session.set(null);
+    this.signedOut.set(true);
+    this.refreshing.set(false);
+    this.markFreshness('offline');
+  }
+
+  protected getNewTripLink(): void {
+    this.dismissError();
+    this.selectView('help');
+  }
+
   private sessionForRequest(session: MobileSession): Promise<MobileSession> { return this.sessions.forRequest(session); }
   private withSession<T>(session: MobileSession, request: (accessToken: string) => Promise<T>): Promise<T> { return this.sessions.run(session, request); }
   private refreshSession(expiredSession: MobileSession): Promise<MobileSession> { return this.sessions.renew(expiredSession); }
@@ -1159,6 +1189,8 @@ export class App implements OnInit, OnDestroy {
   }
 
   private apiError(error: unknown, fallback: string): string {
+    // The signed-out card already explains what happened and what to do; a toast would repeat it.
+    if (isTerminalSessionError(error) && this.signedOut()) return '';
     return customerErrorMessage(error, fallback);
   }
 
@@ -1197,6 +1229,7 @@ const INTERNAL_ERROR_TERMS = /airtable|token|mint|webhook|schema|api key|base id
  * that our API phrases for customers; infrastructure and configuration failures get a calm, generic message.
  */
 export function customerErrorMessage(error: unknown, fallback: string): string {
+  if (isTerminalSessionError(error)) return 'You’ve been signed out of this trip. Open your trip link again to continue.';
   if (!(error instanceof HttpErrorResponse)) return fallback;
   if (error.status === 0) return 'We can’t reach Vision Trips right now. Check your connection and try again.';
   if (error.status === 401) return 'For your security, please open your trip link again to continue.';

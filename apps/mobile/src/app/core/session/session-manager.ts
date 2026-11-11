@@ -13,11 +13,28 @@ export interface SessionRenewal {
   fromServer: boolean;
 }
 
+/**
+ * The session can no longer be renewed (expired, revoked or ended by the server). Retrying will not help: the
+ * customer has to open their trip link again. Thrown by every call that needed the session.
+ */
+export class SessionExpiredError extends Error {
+  override readonly name = 'SessionExpiredError';
+  constructor(readonly refreshToken: string, cause?: unknown) {
+    super('The trip session has expired.', { cause });
+  }
+}
+
+export function isTerminalSessionError(error: unknown): error is SessionExpiredError {
+  return error instanceof SessionExpiredError;
+}
+
 export interface SessionHooks {
   /** Which saved trip a refresh token belongs to, used to look for a newer copy in storage. */
   tripIdFor(refreshToken: string): string | undefined;
   /** Runs before the renewed session is handed back to callers. */
   renewed(renewal: SessionRenewal): Promise<void> | void;
+  /** Runs once when a session turns out to be unusable, before callers receive `SessionExpiredError`. */
+  expired(refreshToken: string): Promise<void> | void;
 }
 
 /**
@@ -30,7 +47,7 @@ export class SessionManager {
   private readonly api = inject(VisionApiService);
   private readonly savedTrips = inject(SavedTripsStore);
   private readonly inFlight = new Map<string, Promise<MobileSession>>();
-  private hooks: SessionHooks = { tripIdFor: () => undefined, renewed: () => undefined };
+  private hooks: SessionHooks = { tripIdFor: () => undefined, renewed: () => undefined, expired: () => undefined };
 
   /** The open trip's session. */
   readonly session = signal<MobileSession | null>(null);
@@ -69,13 +86,27 @@ export class SessionManager {
     const request = (async () => {
       const newer = await this.newerStoredSession(refreshToken);
       const fromServer = !newer || isAccessExpiring(newer);
-      const session = fromServer ? await this.refreshFromServer(newer?.refreshToken ?? refreshToken) : newer;
+      const current = newer ?? expired;
+      if (fromServer && isRefreshExpired(current)) return this.expire(refreshToken, null);
+      let session: MobileSession;
+      try {
+        session = fromServer ? await this.refreshFromServer(current.refreshToken) : current;
+      } catch (error) {
+        if (isRefusal(error)) return this.expire(refreshToken, error);
+        throw error; // Offline or a server fault: the session may still be fine.
+      }
       if (this.session()?.refreshToken === refreshToken) this.session.set(session);
       await this.hooks.renewed({ previousRefreshToken: refreshToken, session, fromServer });
       return session;
     })().finally(() => this.inFlight.delete(refreshToken));
     this.inFlight.set(refreshToken, request);
     return request;
+  }
+
+  private async expire(refreshToken: string, cause: unknown): Promise<never> {
+    await this.hooks.expired(refreshToken);
+    if (this.session()?.refreshToken === refreshToken) this.session.set(null);
+    throw new SessionExpiredError(refreshToken, cause);
   }
 
   /**
@@ -101,6 +132,16 @@ export class SessionManager {
 }
 
 const WEB_REFRESH_RETRY_MS = 400;
+
+/** The server refused the refresh token itself (as opposed to being unreachable or failing). */
+function isRefusal(error: unknown): boolean {
+  return error instanceof HttpErrorResponse && error.status === 401;
+}
+
+function isRefreshExpired(session: MobileSession): boolean {
+  const expiresAt = Date.parse(session.refreshExpiresAt);
+  return Number.isFinite(expiresAt) && expiresAt <= Date.now();
+}
 
 export function isAccessExpiring(session: MobileSession): boolean {
   const expiresAt = Date.parse(session.accessExpiresAt);

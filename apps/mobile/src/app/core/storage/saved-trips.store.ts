@@ -7,7 +7,9 @@ import { BrowserTripDb } from './browser-trip-db';
 
 export interface SavedTrip {
   snapshot: TripSnapshot;
-  session: MobileSession;
+  /** Null once the customer is signed out (session expired or ended): the trip stays readable offline, but
+   *  refreshing it or acting on it needs the trip link again. */
+  session: MobileSession | null;
   savedAt: string;
 }
 
@@ -75,14 +77,22 @@ export class SavedTripsStore {
     return saved.flatMap((value) => isSavedTrip(value) ? [value as unknown as SavedTrip] : []);
   }
 
-  async pruneExpired(now = Date.now()): Promise<SavedTrip[]> {
+  /** All saved trips, with any credential that has passed its expiry dropped (the trip itself is kept). */
+  async signOutExpired(now = Date.now()): Promise<SavedTrip[]> {
     const saved = await this.all();
-    const valid: SavedTrip[] = [];
     for (const trip of saved) {
-      if (isSessionExpired(trip.session, now)) await this.remove(trip.snapshot.tripId);
-      else valid.push(trip);
+      if (trip.session && isSessionExpired(trip.session, now)) await this.signOut(trip.snapshot.tripId);
     }
-    return valid;
+    return saved.map((trip) => trip.session && isSessionExpired(trip.session, now) ? { ...trip, session: null } : trip);
+  }
+
+  /** Forgets a trip's unusable credential but keeps the saved trip for offline viewing. */
+  async signOut(tripId: string): Promise<void> {
+    const trip = (await this.all()).find((saved) => saved.snapshot.tripId === tripId);
+    if (!trip?.session) return;
+    const signedOut: SavedTrip = { ...trip, session: null };
+    if (this.native) await this.secure.set(`trip:${tripId}`, signedOut as unknown as Record<string, unknown>);
+    else await this.browserDb.set(tripId, signedOut);
   }
 
   async remove(tripId: string): Promise<void> {
@@ -121,7 +131,7 @@ export function isSessionExpired(session: MobileSession, now = Date.now()): bool
 function isSavedTrip(value: unknown): boolean {
   if (!value || typeof value !== 'object') return false;
   const candidate = value as Partial<SavedTrip>;
-  return Boolean(candidate.snapshot?.tripId && candidate.session?.refreshToken);
+  return Boolean(candidate.snapshot?.tripId && (candidate.session === null || candidate.session?.refreshToken));
 }
 
 /** Reads the booking and expiry from a trust token (`payload.signature`); the server still verifies the signature. */

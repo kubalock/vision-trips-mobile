@@ -164,6 +164,35 @@ describe('App', () => {
       return values;
     }
 
+    it('signs out of a trip whose session cannot be renewed, keeps the saved copy and stops retrying', async () => {
+      const { app, api, fixture } = setup();
+      nativeStorage();
+      const store = TestBed.inject(SavedTripsStore);
+      const trip = { ...(minimalTrip() as object), tripId: 'trip-1', payments: { paid: 0, items: [] } };
+      app.trip.set(trip);
+      await store.save(trip as never, app.session() as never);
+      app.savedTripList.set(await store.all());
+      const refresh = vi.spyOn(api, 'refreshSession').mockRejectedValue(unauthorized());
+      const link = vi.spyOn(api, 'paymentLink').mockRejectedValue(unauthorized());
+      vi.spyOn(window, 'open').mockImplementation(() => null);
+
+      await app.openPayment('pay-1');
+      await app.openPayment('pay-1');
+
+      const view = app as unknown as { signedOut: () => boolean };
+      expect(view.signedOut()).toBe(true);
+      expect(app.session()).toBeNull();
+      expect(app.error()).toBe('');
+      expect(refresh).toHaveBeenCalledOnce();
+      expect(link).toHaveBeenCalledOnce();
+      const [saved] = await store.all();
+      expect(saved.snapshot.tripId).toBe('trip-1');
+      expect(saved.session).toBeNull();
+      expect(app.savedTripList()[0].session).toBeNull();
+      fixture.detectChanges();
+      expect((fixture.nativeElement as HTMLElement).querySelector('.vt-signed-out')?.textContent).toContain('signed out of this trip');
+    });
+
     it('retries a payment link with a renewed token after a 401', async () => {
       const { app, api } = setup();
       app.trip.set({ tripId: 'trip-1', payments: { paid: 0, items: [] } });

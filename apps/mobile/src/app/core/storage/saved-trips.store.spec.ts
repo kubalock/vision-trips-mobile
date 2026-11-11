@@ -33,8 +33,8 @@ describe('SavedTripsStore in a browser', () => {
 
     const [saved] = await store.all();
     expect(saved.snapshot.tripId).toBe('trp_1');
-    expect(saved.session.refreshToken).toBe('web:handle123456789012');
-    expect(saved.session.accessToken).toBe('');
+    expect(saved.session?.refreshToken).toBe('web:handle123456789012');
+    expect(saved.session?.accessToken).toBe('');
     expect(JSON.stringify(saved)).not.toContain('vta_secret');
   });
 
@@ -55,6 +55,28 @@ describe('SavedTripsStore in a browser', () => {
     expect(await store.deviceTrusts()).toEqual([]);
     expect(await store.all()).toEqual([]);
     expect(Object.keys(localStorage)).toEqual(['vision-trips:appearance']);
+  });
+});
+
+describe('SavedTripsStore sign-out', () => {
+  it('forgets an unusable credential but keeps the trip for offline viewing', async () => {
+    const store = nativeStore();
+    await store.save(snapshot('trp_1'), session('vrt_raw'));
+
+    await store.signOut('trp_1');
+
+    expect(await store.all()).toEqual([expect.objectContaining({ snapshot: snapshot('trp_1'), session: null })]);
+  });
+
+  it('signs out trips whose refresh token has passed its expiry instead of deleting them', async () => {
+    const store = nativeStore();
+    await store.save(snapshot('trp_old'), { ...session('vrt_old'), refreshExpiresAt: '2020-01-01T00:00:00.000Z' });
+    await store.save(snapshot('trp_new'), session('vrt_new'));
+
+    const trips = await store.signOutExpired();
+
+    expect(trips.map((trip) => [trip.snapshot.tripId, trip.session?.refreshToken ?? null])).toEqual([['trp_old', null], ['trp_new', 'vrt_new']]);
+    expect((await store.all()).find((trip) => trip.snapshot.tripId === 'trp_old')?.session).toBeNull();
   });
 });
 
