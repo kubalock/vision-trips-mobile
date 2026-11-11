@@ -1577,3 +1577,189 @@ body.vt .vt-app .vt-account-danger button:active { transform: scale(.97); }
 
 /* A figure missing from the booking: shown plainly as unavailable, never as £0.00. */
 .vt-app .vt-money--unavailable { color: var(--ink-3); font-size: 0.85em; font-weight: 600; }
+
+/* ---------- Home: quotation comparison ---------- */
+.vt-app .vt-quotation-compare,
+.vt-app .vt-quotation-grid,
+.vt-app .vt-quotation-card,
+.vt-app .vt-quotation-card * { font-family: var(--vt-font-family); }
+
+.vt-app .vt-quotation-compare {
+  margin: 24px var(--vt-flat-gutter, 0) 0;
+  padding: 16px;
+  border: 1px solid var(--card-border, var(--line));
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+.vt-app .vt-quotation-compare__header { display: grid; gap: 6px; }
+.vt-app .vt-quotation-compare__eyebrow {
+  margin: 0;
+  color: var(--vt-accent-text);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .05em;
+  line-height: 16px;
+  text-transform: uppercase;
+}
+.vt-app .vt-quotation-compare__header h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 24px;
+}
+.vt-app .vt-quotation-compare__intro {
+  max-width: 62ch;
+  margin: 2px 0 0;
+  color: var(--ink-2);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+}
+.vt-app .vt-quotation-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 16px;
+  margin-top: 14px;
+}
+.vt-app .vt-quotation-card {
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+  flex-direction: column;
+  border: 1px solid var(--card-border, var(--line));
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card, 0 4px 20px rgba(20, 22, 24, .06));
+}
+.vt-app .vt-quotation-card.is-current {
+  border-color: color-mix(in srgb, var(--vt-accent-text) 62%, var(--line));
+  box-shadow: var(--shadow-card), 0 0 0 1px color-mix(in srgb, var(--vt-accent) 24%, transparent);
+}
+.vt-app .vt-quotation-card__image {
+  width: 100%;
+  height: 112px;
+  object-fit: cover;
+  background: var(--surface-2);
+}
+.vt-app .vt-quotation-card__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+}
+.vt-app .vt-quotation-card__current {
+  align-self: flex-start;
+  padding: 4px 9px;
+  border: 1px solid color-mix(in srgb, var(--vt-accent-text) 30%, var(--line));
+  border-radius: var(--r-pill, 999px);
+  background: var(--accent-status-bg, var(--tint));
+  color: var(--vt-accent-text);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .05em;
+  line-height: 16px;
+  text-transform: uppercase;
+}
+.vt-app .vt-quotation-card__header { display: grid; gap: 3px; }
+.vt-app .vt-quotation-card__header h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 22px;
+}
+.vt-app .vt-quotation-card__header p {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+}
+.vt-app .vt-quotation-card__meta {
+  display: grid;
+  grid-template-rows: repeat(2, minmax(64px, auto));
+  gap: 8px;
+  margin: 0;
+}
+.vt-app .vt-quotation-card__meta > div {
+  display: grid;
+  grid-template-columns: minmax(72px, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px 12px;
+  min-height: 64px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+.vt-app .vt-quotation-card__meta dt {
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+}
+.vt-app .vt-quotation-card__meta dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.vt-app .vt-quotation-card__meta dd span { color: var(--ink-2); font-size: 12px; font-weight: 400; white-space: normal; }
+.vt-app .vt-quotation-card__total dd { color: var(--vt-accent-text); font-size: 16px; font-weight: 400; }
+.vt-app .vt-quotation-card__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  margin-top: auto;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: var(--r-pill, 999px);
+  background: var(--accent-action);
+  color: var(--accent-action-ink);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  cursor: pointer;
+  transition: filter .16s ease, transform .12s ease;
+}
+.vt-app .vt-quotation-card__action:hover { filter: brightness(.9); }
+.vt-app .vt-quotation-card__action:active { filter: brightness(.82); transform: scale(.98); }
+.vt-app .vt-quotation-card__action:disabled {
+  border-color: var(--line);
+  background: var(--surface-2);
+  color: var(--ink-3);
+  cursor: not-allowed;
+  filter: none;
+}
+.vt-app .vt-quotation-card__action vt-icon { flex: 0 0 auto; }
+
+@media (max-width: 768px) {
+  .vt-app .vt-quotation-compare { margin-top: 16px; }
+  .vt-app .vt-quotation-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .vt-app .vt-quotation-card__body { padding: 16px; }
+}
+
+@media (max-width: 380px) {
+  .vt-app .vt-quotation-card__meta > div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .vt-app .vt-quotation-card__meta dd { text-align: left; }
+}
+
+:root[data-theme="dark"] .vt-app .vt-quotation-card {
+  border-color: var(--card-border, var(--line));
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+:root[data-theme="dark"] .vt-app .vt-quotation-compare { border-color: var(--card-border); box-shadow: var(--shadow-card); }
+:root[data-theme="dark"] .vt-app .vt-quotation-card.is-current { border-color: var(--vt-accent-text); }
+:root[data-theme="dark"] .vt-app .vt-quotation-card__meta > div { border-color: var(--line-2); }

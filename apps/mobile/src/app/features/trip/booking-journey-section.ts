@@ -37,7 +37,47 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
       </section>
     }
 
-    @if (related().length > 1) { <section class="vt-section overflow-hidden"><p class="text-xs font-semibold uppercase tracking-widest text-teal-700">Your quotations</p><h2 class="vt-h2">Compare your options</h2><p class="mt-2 text-sm leading-6 text-slate-600">These quotations were found securely through the email verified for this booking.</p><div class="mt-5 overflow-x-auto pb-2"><div class="grid min-w-[42rem] auto-cols-[minmax(13rem,1fr)] grid-flow-col gap-3">@for (quote of related(); track quote.comparisonId) { <article class="flex flex-col overflow-hidden rounded-2xl bg-white ring-1" [class.ring-2]="quote.current" [class.ring-teal-600]="quote.current" [class.ring-slate-200]="!quote.current">@if (quote.heroImageUrl) { <img class="h-28 w-full object-cover" [src]="quote.heroImageUrl" alt="" /> }<div class="flex flex-1 flex-col p-4">@if (quote.current) { <span class="mb-2 self-start rounded-full bg-teal-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-teal-800">Open now</span> }<h3 class="font-semibold">{{ quote.name }}</h3><p class="mt-1 text-xs text-slate-500">{{ quote.reference }}</p><dl class="mt-4 grid gap-2 text-sm"><div><dt class="text-xs text-slate-500">Dates</dt><dd>{{ (quote.departureDate | europeanDate) || 'To be confirmed' }}@if (quote.durationDays !== null) { · {{ quote.durationDays }} nights }</dd></div><div><dt class="text-xs text-slate-500">Total</dt><dd class="text-lg font-bold">{{ money(quote) }}</dd></div></dl><div class="mt-auto pt-4">@if (!quote.current) { <button type="button" class="vt-btn vt-btn--ghost vt-btn--sm w-full" [disabled]="openingId() === quote.comparisonId" (click)="open.emit(quote.comparisonId)">{{ openingId() === quote.comparisonId ? 'Opening…' : 'Open quotation' }}</button> }</div></div></article> }</div></div></section> }
+    @if (related().length > 1) {
+      <section class="vt-quotation-compare" aria-labelledby="quotation-compare-title">
+        <header class="vt-quotation-compare__header">
+          <p class="vt-quotation-compare__eyebrow">Your quotations</p>
+          <h2 id="quotation-compare-title">Compare your options</h2>
+          <p class="vt-quotation-compare__intro">These quotations were found securely through the email verified for this booking.</p>
+        </header>
+        <div class="vt-quotation-grid">
+          @for (quote of related(); track quote.comparisonId) {
+            <article class="vt-quotation-card" [class.is-current]="quote.current">
+              @if (quote.heroImageUrl) {
+                <img class="vt-quotation-card__image" [src]="quote.heroImageUrl" alt="" />
+              }
+              <div class="vt-quotation-card__body">
+                @if (quote.current) { <span class="vt-quotation-card__current">Open now</span> }
+                <header class="vt-quotation-card__header">
+                  <h3>{{ quote.name }}</h3>
+                  <p>{{ quote.reference }}</p>
+                </header>
+                <dl class="vt-quotation-card__meta">
+                  <div>
+                    <dt>Dates</dt>
+                    <dd>{{ (quote.departureDate | europeanDate) || 'To be confirmed' }}@if (quote.durationDays !== null) { <span>· {{ quote.durationDays }} nights</span> }</dd>
+                  </div>
+                  <div class="vt-quotation-card__total">
+                    <dt>Total price</dt>
+                    <dd>{{ money(quote) }}</dd>
+                  </div>
+                </dl>
+                @if (!quote.current) {
+                  <button type="button" class="vt-quotation-card__action" [disabled]="openingId() === quote.comparisonId" (click)="open.emit(quote.comparisonId)">
+                    <span>{{ openingId() === quote.comparisonId ? 'Opening…' : 'Open quotation' }}</span>
+                    @if (openingId() !== quote.comparisonId) { <vt-icon name="arrow-right" [size]="17" /> }
+                  </button>
+                }
+              </div>
+            </article>
+          }
+        </div>
+      </section>
+    }
 
     @if (journey().faqs.length) {
       <section class="vt-faq-card" aria-labelledby="trip-faq-title">
