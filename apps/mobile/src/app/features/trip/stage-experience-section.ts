@@ -12,7 +12,18 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
     @if (surprise().concealed) {
       <section class="vt-section overflow-hidden rounded-3xl bg-gradient-to-br from-violet-950 via-indigo-900 to-teal-800 p-7 text-white"><p class="text-xs font-semibold uppercase tracking-[.25em] text-teal-200">A surprise is waiting</p><h2 class="mt-3 text-3xl font-semibold">Your destination is under wraps</h2><p class="mt-3 max-w-xl leading-7 text-indigo-100">Your travel expert is keeping the destination and itinerary secret for now. Dates, payments, preparation and support remain available.</p>@if (surprise().revealAt) { <p class="mt-5 text-sm font-semibold text-white">Reveal date: {{ surprise().revealAt | europeanDate }}</p> }</section>
     }
-    @if (countdown(); as count) { @if (trip().stage === 'countdown' || trip().stage === 'prep') { <section class="vt-section rounded-3xl bg-slate-900 p-6 text-white"><p class="text-xs font-semibold uppercase tracking-widest text-teal-300">Until you leave</p><div class="mt-4 grid max-w-md grid-cols-3 gap-3 text-center"><div class="rounded-2xl bg-white/10 p-4"><strong class="block text-3xl">{{ count.days }}</strong><span class="text-xs text-slate-300">days</span></div><div class="rounded-2xl bg-white/10 p-4"><strong class="block text-3xl">{{ count.hours }}</strong><span class="text-xs text-slate-300">hours</span></div><div class="rounded-2xl bg-white/10 p-4"><strong class="block text-3xl">{{ count.minutes }}</strong><span class="text-xs text-slate-300">minutes</span></div></div></section> } }
+    @if (countdown(); as count) {
+      @if (trip().stage === 'countdown' || trip().stage === 'prep') {
+        <section class="vt-countdown-card" aria-label="Countdown until departure">
+          <p class="vt-countdown-card__kicker">Until you leave</p>
+          <div class="vt-countdown-card__units">
+            <div class="vt-countdown-card__unit"><strong>{{ count.days }}</strong><span>days</span></div>
+            <div class="vt-countdown-card__unit"><strong>{{ count.hours }}</strong><span>hours</span></div>
+            <div class="vt-countdown-card__unit"><strong>{{ count.minutes }}</strong><span>minutes</span></div>
+          </div>
+        </section>
+      }
+    }
     @if (isAway()) {
       <section class="vt-section rounded-3xl bg-teal-950 p-6 text-white"><div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><p class="text-xs font-semibold uppercase tracking-widest text-teal-300">Today · {{ todayLabel() }}</p><h2 class="mt-2 text-3xl font-semibold">Your day at a glance</h2></div>@if (trip().support.emergencyPhone) { <a class="rounded-full bg-red-500 px-5 py-3 text-center text-sm font-bold text-white" [href]="'tel:' + trip().support.emergencyPhone">Emergency · {{ trip().support.emergencyPhone }}</a> }</div>
         @if (dayPlan().today.length) { <h3 class="mt-6 text-sm font-semibold uppercase tracking-wider text-teal-200">Today</h3><ol class="mt-3 grid gap-3">@for (item of dayPlan().today; track item.id) { <li class="flex gap-4 rounded-2xl bg-white/10 p-4"><time class="font-semibold text-teal-200">{{ item.startTime || 'All day' }}</time><div><strong>{{ item.title }}</strong><p class="mt-1 flex items-center gap-1 text-sm text-teal-50">{{ item.from }}@if (item.to) { <vt-icon name="arrow-right" [size]="15" /> {{ item.to }} }{{ item.address ? item.address : '' }}</p></div></li> }</ol> } @else { <p class="mt-6 text-teal-100">There are no timed itinerary items for today.</p> }

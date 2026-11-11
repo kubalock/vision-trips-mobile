@@ -7,13 +7,51 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
   selector: 'app-booking-journey-section',
   imports: [EuropeanDatePipe, VtIcon],
   template: `
-    <section class="vt-section"><p class="text-xs font-semibold uppercase tracking-widest text-teal-700">Your booking journey</p><h2 class="vt-h2">What happens next</h2><ol class="mt-6 grid gap-0">@for (step of journey().steps; track step.id; let last = $last) { <li class="relative flex gap-4 pb-6"><span class="relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 text-sm font-bold" [class.border-emerald-600]="step.status === 'complete'" [class.bg-emerald-600]="step.status === 'complete'" [class.text-white]="step.status === 'complete'" [class.border-teal-700]="step.status === 'current'" [class.bg-teal-50]="step.status === 'current'" [class.border-slate-300]="step.status === 'upcoming'">@if (step.status === 'complete') { <vt-icon name="check" [size]="18" /> } @else { {{ $index + 1 }} }</span>@if (!last) { <span class="absolute left-[17px] top-9 h-[calc(100%-2.25rem)] w-0.5 bg-slate-200"></span> }<div class="pt-1"><div class="flex flex-wrap items-baseline gap-x-3"><h3 class="font-semibold text-slate-900">{{ step.title }}</h3>@if (step.date) { <time class="text-xs font-medium text-slate-500">{{ step.date | europeanDate }}</time> }</div><p class="mt-1 text-sm leading-6 text-slate-600">{{ step.description }}</p></div></li> }</ol></section>
+    <section class="vt-booking-journey-card" aria-labelledby="booking-journey-title">
+      <header class="vt-booking-journey-card__header"><p>Your booking journey</p><h2 id="booking-journey-title">What happens next</h2></header>
+      <ol class="vt-booking-timeline">
+        @for (step of journey().steps; track step.id) {
+          <li class="vt-booking-step" [class.is-complete]="step.status === 'complete'" [class.is-current]="step.status === 'current'" [class.is-upcoming]="step.status === 'upcoming'">
+            <span class="vt-booking-step__node">@if (step.status === 'complete') { <vt-icon name="check" [size]="18" /> } @else { {{ $index + 1 }} }</span>
+            <div class="vt-booking-step__content">
+              <div class="vt-booking-step__title"><h3>{{ step.title }}</h3>@if (step.date) { <time>{{ step.date | europeanDate }}</time> }</div>
+              <p>{{ step.description }}</p>
+            </div>
+          </li>
+        }
+      </ol>
+    </section>
 
-    @if (journey().suggestedExtras.length) { <section class="vt-section"><p class="text-xs font-semibold uppercase tracking-widest text-teal-700">Tailor your trip</p><h2 class="vt-h2">You might also like</h2><div class="mt-5 grid gap-3 sm:grid-cols-2">@for (extra of journey().suggestedExtras; track extra.id) { <article class="flex flex-col rounded-2xl bg-white p-5 ring-1 ring-slate-200"><h3 class="font-semibold">{{ extra.title }}</h3><p class="mt-2 flex-1 text-sm leading-6 text-slate-600">{{ extra.description }}</p><button type="button" class="mt-4 inline-flex items-center gap-1 self-start text-sm font-bold text-teal-700" (click)="enquire.emit(extra.enquiry)">Ask my travel expert <vt-icon name="arrow-right" [size]="16" /></button></article> }</div></section> }
+    @if (journey().suggestedExtras.length) {
+      <section class="vt-tailor-section" aria-labelledby="tailor-trip-title">
+        <header class="vt-lower-section__header"><p>Tailor your trip</p><h2 id="tailor-trip-title">You might also like</h2></header>
+        <div class="vt-tailor-grid">
+          @for (extra of journey().suggestedExtras; track extra.id) {
+            <article class="vt-tailor-card">
+              <h3>{{ extra.title }}</h3>
+              <p>{{ extra.description }}</p>
+              <button type="button" (click)="enquire.emit(extra.enquiry)">Ask my travel expert <vt-icon name="arrow-right" [size]="16" /></button>
+            </article>
+          }
+        </div>
+      </section>
+    }
 
     @if (related().length > 1) { <section class="vt-section overflow-hidden"><p class="text-xs font-semibold uppercase tracking-widest text-teal-700">Your quotations</p><h2 class="vt-h2">Compare your options</h2><p class="mt-2 text-sm leading-6 text-slate-600">These quotations were found securely through the email verified for this booking.</p><div class="mt-5 overflow-x-auto pb-2"><div class="grid min-w-[42rem] auto-cols-[minmax(13rem,1fr)] grid-flow-col gap-3">@for (quote of related(); track quote.comparisonId) { <article class="flex flex-col overflow-hidden rounded-2xl bg-white ring-1" [class.ring-2]="quote.current" [class.ring-teal-600]="quote.current" [class.ring-slate-200]="!quote.current">@if (quote.heroImageUrl) { <img class="h-28 w-full object-cover" [src]="quote.heroImageUrl" alt="" /> }<div class="flex flex-1 flex-col p-4">@if (quote.current) { <span class="mb-2 self-start rounded-full bg-teal-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-teal-800">Open now</span> }<h3 class="font-semibold">{{ quote.name }}</h3><p class="mt-1 text-xs text-slate-500">{{ quote.reference }}</p><dl class="mt-4 grid gap-2 text-sm"><div><dt class="text-xs text-slate-500">Dates</dt><dd>{{ (quote.departureDate | europeanDate) || 'To be confirmed' }}@if (quote.durationDays !== null) { · {{ quote.durationDays }} nights }</dd></div><div><dt class="text-xs text-slate-500">Total</dt><dd class="text-lg font-bold">{{ money(quote) }}</dd></div></dl><div class="mt-auto pt-4">@if (!quote.current) { <button type="button" class="vt-btn vt-btn--ghost vt-btn--sm w-full" [disabled]="openingId() === quote.comparisonId" (click)="open.emit(quote.comparisonId)">{{ openingId() === quote.comparisonId ? 'Opening…' : 'Open quotation' }}</button> }</div></div></article> }</div></div></section> }
 
-    @if (journey().faqs.length) { <section class="vt-section"><p class="text-xs font-semibold uppercase tracking-widest text-teal-700">Based on this booking</p><h2 class="vt-h2">Questions you may have</h2><div class="mt-5 divide-y divide-slate-200 rounded-2xl bg-white px-5 ring-1 ring-slate-200">@for (faq of journey().faqs; track faq.id) { <details class="py-4"><summary class="cursor-pointer pr-4 font-semibold">{{ faq.question }}</summary><p class="mt-3 text-sm leading-6 text-slate-600">{{ faq.answer }}</p></details> }</div></section> }
+    @if (journey().faqs.length) {
+      <section class="vt-faq-card" aria-labelledby="trip-faq-title">
+        <header class="vt-lower-section__header"><p>Based on this booking</p><h2 id="trip-faq-title">Questions you may have</h2></header>
+        <div class="vt-faq-list">
+          @for (faq of journey().faqs; track faq.id) {
+            <details class="vt-faq-item">
+              <summary><span>{{ faq.question }}</span><span class="vt-faq-item__chevron" aria-hidden="true"><vt-icon name="chevron-down" [size]="18" /></span></summary>
+              <div class="vt-faq-item__answer"><p>{{ faq.answer }}</p></div>
+            </details>
+          }
+        </div>
+      </section>
+    }
   `,
 })
 export class BookingJourneySection {

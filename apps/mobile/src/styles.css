@@ -310,6 +310,296 @@ button { font: inherit; }
     border-radius: 0;
   }
 
+/* Home countdown and booking journey cards. */
+.vt-app .vt-countdown-card { margin: 24px var(--vt-flat-gutter) 0; padding: clamp(20px, 4vw, 26px); border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .04); text-align: center; }
+.vt-app .vt-countdown-card__kicker { margin: 0; color: var(--vt-accent-text); font-size: .7rem; font-weight: 850; letter-spacing: .15em; line-height: 1.2; text-transform: uppercase; }
+.vt-app .vt-countdown-card__units { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(8px, 2.5vw, 14px); width: min(100%, 560px); margin: 17px auto 0; }
+.vt-app .vt-countdown-card__unit { display: grid; place-items: center; gap: 4px; min-width: 0; padding: clamp(13px, 3vw, 18px) 8px; border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent); border-radius: 14px; background: var(--surface-2); box-shadow: 0 4px 14px rgba(0, 0, 0, .035); }
+.vt-app .vt-countdown-card__unit strong { color: var(--ink); font-family: var(--vt-display); font-size: clamp(1.65rem, 7vw, 2.45rem); font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.vt-app .vt-countdown-card__unit span { color: var(--ink-2); font-size: .7rem; font-weight: 700; letter-spacing: .03em; text-transform: lowercase; }
+.vt-app .vt-booking-journey-card { margin: 24px var(--vt-flat-gutter) 0; padding: clamp(20px, 4vw, 24px); border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .04); }
+.vt-app .vt-booking-journey-card__header > p { margin: 0; color: var(--vt-accent-text); font-size: .7rem; font-weight: 850; letter-spacing: .14em; line-height: 1.2; text-transform: uppercase; }
+.vt-app .vt-booking-journey-card__header h2 { margin: 6px 0 0; color: var(--ink); font-size: clamp(1.45rem, 5vw, 1.8rem); font-weight: 700; line-height: 1.15; }
+.vt-app .vt-booking-timeline { display: grid; gap: 0; margin: 24px 0 0; padding: 0; list-style: none; }
+.vt-app .vt-booking-step { position: relative; display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: start; gap: 16px; min-width: 0; padding: 0 0 27px; }
+.vt-app .vt-booking-step:last-child { padding-bottom: 0; }
+.vt-app .vt-booking-step:not(:last-child)::before { content: ""; position: absolute; top: 20px; left: 19px; z-index: 0; width: 2px; height: 100%; border-radius: 999px; background: var(--line-2); }
+.vt-app .vt-booking-step.is-complete:not(:last-child)::before { background: color-mix(in srgb, var(--accent-action) 58%, var(--line-2)); }
+.vt-app .vt-booking-step__node { position: relative; z-index: 1; display: grid; place-items: center; width: 40px; height: 40px; border: 2px solid var(--line-2); border-radius: 50%; background: var(--surface); color: var(--ink-2); font-size: .8rem; font-weight: 850; line-height: 1; box-shadow: 0 0 0 4px var(--surface); }
+.vt-app .vt-booking-step.is-complete .vt-booking-step__node { border-color: var(--accent-action); background: var(--accent-action); color: var(--accent-action-ink); }
+.vt-app .vt-booking-step.is-current .vt-booking-step__node { border-color: var(--vt-accent-text); background: var(--accent-status-bg); color: var(--vt-accent-text); }
+.vt-app .vt-booking-step.is-upcoming .vt-booking-step__node { border-color: var(--line-2); background: var(--surface-2); color: var(--ink-2); }
+.vt-app .vt-booking-step__content { min-width: 0; padding-top: 1px; }
+.vt-app .vt-booking-step__title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px 12px; }
+.vt-app .vt-booking-step__title h3 { margin: 0; color: var(--ink); font-size: .93rem; font-weight: 750; line-height: 1.35; }
+.vt-app .vt-booking-step__title time { padding: 3px 7px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); font-size: .68rem; font-weight: 700; line-height: 1.2; }
+.vt-app .vt-booking-step__content > p { margin: 5px 0 0; color: var(--ink-2); font-size: .8rem; line-height: 1.55; }
+:root[data-theme="dark"] .vt-app :is(.vt-countdown-card, .vt-booking-journey-card) { border-color: rgba(255, 255, 255, .09); box-shadow: 0 8px 28px rgba(0, 0, 0, .22); }
+:root[data-theme="dark"] .vt-app .vt-countdown-card__unit { border-color: rgba(255, 255, 255, .08); background: color-mix(in srgb, var(--surface-2) 92%, #000); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .025); }
+
+/* Home lower-page cards: recommendations, FAQs and trip information. */
+.vt-app .vt-tailor-section { margin: 24px var(--vt-flat-gutter) 0; }
+.vt-app .vt-lower-section__header > p { margin: 0; color: var(--vt-accent-text); font-size: .7rem; font-weight: 850; letter-spacing: .14em; line-height: 1.2; text-transform: uppercase; }
+.vt-app .vt-lower-section__header h2 { margin: 10px 0 0; color: var(--ink); font-size: clamp(1.45rem, 5vw, 1.8rem); font-weight: 700; line-height: 1.15; }
+.vt-app .vt-tailor-grid { display: grid; gap: 12px; margin-top: 18px; }
+.vt-app .vt-tailor-card { display: flex; flex-direction: column; min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .035); transition: border-color .18s ease, box-shadow .18s ease, transform .14s ease; }
+.vt-app .vt-tailor-card:hover { border-color: color-mix(in srgb, var(--vt-accent-text) 30%, var(--line)); box-shadow: 0 7px 24px rgba(0, 0, 0, .06); transform: translateY(-1px); }
+.vt-app .vt-tailor-card h3 { margin: 0; color: var(--ink); font-size: 1rem; font-weight: 750; line-height: 1.35; }
+.vt-app .vt-tailor-card > p { flex: 1; margin: 8px 0 0; color: var(--ink-2); font-size: .82rem; line-height: 1.55; }
+.vt-app .vt-tailor-card button { display: inline-flex; align-items: center; justify-content: flex-start; align-self: flex-start; gap: 7px; min-height: 42px; margin: 13px 0 -9px -8px; padding: 8px; border: 0; border-radius: 8px; background: transparent; color: var(--vt-accent-text); font-size: .78rem; font-weight: 800; cursor: pointer; transition: background-color .18s ease, color .18s ease, transform .12s ease; }
+.vt-app .vt-tailor-card button:hover { background: var(--tint); }
+.vt-app .vt-tailor-card button:active { transform: scale(.97); }
+.vt-app .vt-faq-card { margin: 24px var(--vt-flat-gutter) 0; padding: clamp(20px, 4vw, 24px); border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .04); }
+.vt-app .vt-faq-list { margin-top: 17px; border-top: 1px solid var(--line); }
+.vt-app .vt-faq-item { border-bottom: 1px solid var(--line); }
+.vt-app .vt-faq-item summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 14px; min-height: 60px; padding: 12px 0; color: var(--ink); font-size: .87rem; font-weight: 720; line-height: 1.4; list-style: none; cursor: pointer; }
+.vt-app .vt-faq-item summary::-webkit-details-marker { display: none; }
+.vt-app .vt-faq-item__chevron { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--surface-2); color: var(--vt-accent-text); transition: background-color .18s ease, transform .22s ease; }
+.vt-app .vt-faq-item summary:hover .vt-faq-item__chevron { background: var(--tint); }
+.vt-app .vt-faq-item[open] .vt-faq-item__chevron { background: var(--tint); transform: rotate(180deg); }
+.vt-app .vt-faq-item__answer { padding: 0 48px 17px 0; }
+.vt-app .vt-faq-item__answer p { margin: 0; color: var(--ink-2); font-size: .8rem; line-height: 1.6; }
+.vt-app .vt-home-info-card { margin: 24px var(--vt-flat-gutter) 0; padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .04); }
+.vt-app .vt-home-info-card__kicker { margin: 0; color: var(--vt-accent-text); font-size: .7rem; font-weight: 850; letter-spacing: .15em; line-height: 1.2; text-transform: uppercase; }
+.vt-app .vt-home-info-card h2 { margin: 10px 0 0; color: var(--ink); font-size: 1.2rem; font-weight: 750; line-height: 1.3; }
+.vt-app .vt-home-up-next__date { margin: 10px 0 0; color: var(--ink-2); font-size: .84rem; font-weight: 650; }
+.vt-app .vt-home-up-next__countdown { display: inline-flex; margin: 12px 0 0; padding: 5px 9px; border-radius: 999px; background: var(--accent-status-bg); color: var(--vt-accent-text); font-size: .7rem; font-weight: 800; }
+.vt-app .vt-home-about > p:not(.vt-home-info-card__kicker) { margin: 11px 0 0; color: var(--ink-2); font-size: .88rem; line-height: 1.65; }
+.vt-app .vt-home-about .vt-home-about__agent { color: var(--vt-accent-text); font-size: .78rem; font-weight: 800; }
+@media (min-width: 640px) {
+  .vt-app .vt-tailor-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .vt-app .vt-tailor-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
+@media (min-width: 900px) {
+  .vt-app .vt-tailor-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .vt-app .vt-tailor-card { grid-column: span 2; }
+  .vt-app .vt-tailor-card:last-child:nth-child(odd) { grid-column: span 2; }
+  .vt-app .vt-tailor-card:nth-last-child(2):nth-child(3n + 1),
+  .vt-app .vt-tailor-card:nth-last-child(2):nth-child(3n + 1) + .vt-tailor-card { grid-column: span 3; }
+  .vt-app .vt-tailor-grid:has(> .vt-tailor-card:nth-child(4):last-child) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .vt-app .vt-tailor-grid:has(> .vt-tailor-card:nth-child(4):last-child) .vt-tailor-card { grid-column: auto; }
+}
+:root[data-theme="dark"] .vt-app :is(.vt-tailor-card, .vt-faq-card, .vt-home-info-card) { border-color: rgba(255, 255, 255, .09); box-shadow: 0 8px 28px rgba(0, 0, 0, .22); }
+:root[data-theme="dark"] .vt-app .vt-faq-item__chevron { background: color-mix(in srgb, var(--surface-2) 92%, #000); }
+:root[data-theme="dark"] .vt-app .vt-home-up-next__countdown { background: rgba(115, 208, 194, .16); color: #73d0c2; }
+
+/* Home travellers, weather, practical guides and destination cards. */
+.vt-app :is(.vt-travellers-card, .vt-weather-section, .vt-guide-section, .vt-destination-section) { margin: 24px var(--vt-flat-gutter) 0; }
+.vt-app .vt-travellers-card { padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .04); }
+.vt-app .vt-traveller-list { display: flex; flex-wrap: wrap; gap: 9px; margin: 18px 0 0; padding: 0; list-style: none; }
+.vt-app .vt-traveller-list li { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 5px 13px 5px 6px; border: 1px solid color-mix(in srgb, var(--vt-accent-text) 22%, var(--line)); border-radius: 999px; background: var(--tint); color: var(--ink); font-size: .8rem; font-weight: 700; }
+.vt-app .vt-traveller-list__icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--surface); color: var(--vt-accent-text); box-shadow: 0 1px 5px rgba(0, 0, 0, .06); }
+.vt-app :is(.vt-weather-grid, .vt-guide-grid, .vt-destination-grid) { display: grid; gap: 14px; margin-top: 18px; }
+.vt-app .vt-weather-card { overflow: hidden; padding: 20px; border: 1px solid color-mix(in srgb, #388da0 18%, var(--line)); border-radius: 16px; background: linear-gradient(145deg, color-mix(in srgb, #dff5f7 58%, var(--surface)), var(--surface)); color: var(--ink); box-shadow: 0 4px 20px rgba(0, 0, 0, .04); }
+.vt-app .vt-weather-card__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.vt-app .vt-weather-card__top p { margin: 0; color: var(--ink-2); font-size: .8rem; font-weight: 750; }
+.vt-app .vt-weather-card__top strong { display: block; margin-top: 7px; font-family: var(--vt-display); font-size: 2.7rem; line-height: 1; }
+.vt-app .vt-weather-card__top span:not(.vt-weather-card__icon) { display: block; margin-top: 7px; color: var(--ink-2); font-size: .78rem; }
+.vt-app .vt-weather-card__icon { display: grid; place-items: center; flex: 0 0 auto; width: 54px; height: 54px; border-radius: 15px; background: color-mix(in srgb, #8dd9df 24%, var(--surface)); color: #287b8c; }
+.vt-app .vt-weather-card__forecast { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 18px; padding-top: 15px; border-top: 1px solid color-mix(in srgb, var(--ink) 10%, transparent); }
+.vt-app .vt-weather-card__forecast div { min-width: 0; }
+.vt-app .vt-weather-card__forecast p { margin: 0; color: var(--ink-2); font-size: .68rem; }
+.vt-app .vt-weather-card__forecast strong { display: block; margin-top: 3px; color: var(--ink); font-size: .8rem; }
+.vt-app .vt-weather-skeleton__card { --weather-sk: linear-gradient(90deg, color-mix(in srgb, var(--ink-3) 11%, var(--surface)) 25%, color-mix(in srgb, var(--ink-3) 20%, var(--surface)) 50%, color-mix(in srgb, var(--ink-3) 11%, var(--surface)) 75%); min-height: 190px; }
+.vt-app .vt-weather-skeleton__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.vt-app .vt-weather-skeleton__top > div { display: grid; gap: 10px; flex: 1; }
+.vt-app .vt-weather-skeleton__line, .vt-app .vt-weather-skeleton__icon, .vt-app .vt-weather-skeleton__forecast span, .vt-app .vt-weather-skeleton__forecast strong { display: block; border-radius: 999px; background: var(--weather-sk); background-size: 200% 100%; animation: vt-shimmer 1.3s linear infinite; }
+.vt-app .vt-weather-skeleton__line--place { width: 42%; height: 10px; }
+.vt-app .vt-weather-skeleton__line--temp { width: 38%; height: 42px; margin-top: 1px; border-radius: 10px; }
+.vt-app .vt-weather-skeleton__line--label { width: 70%; height: 10px; }
+.vt-app .vt-weather-skeleton__icon { flex: 0 0 auto; width: 54px; height: 54px; border-radius: 15px; }
+.vt-app .vt-weather-skeleton__forecast { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 18px; padding-top: 15px; border-top: 1px solid color-mix(in srgb, var(--ink) 8%, transparent); }
+.vt-app .vt-weather-skeleton__forecast div { display: grid; gap: 7px; }
+.vt-app .vt-weather-skeleton__forecast span { width: 62%; height: 8px; }
+.vt-app .vt-weather-skeleton__forecast strong { width: 75%; height: 11px; }
+.vt-app .vt-guide-card { padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .04); }
+.vt-app .vt-guide-card__header { display: flex; align-items: center; gap: 12px; }
+.vt-app .vt-guide-card__icon { display: grid; place-items: center; flex: 0 0 auto; width: 44px; height: 44px; overflow: hidden; border-radius: 12px; background: var(--tint); color: var(--vt-accent-text); }
+.vt-app .vt-guide-card__icon img { width: 34px; height: 28px; object-fit: contain; }
+.vt-app .vt-guide-card__header p { margin: 0 0 3px; color: var(--vt-accent-text); font-size: .66rem; font-weight: 850; letter-spacing: .11em; text-transform: uppercase; }
+.vt-app .vt-guide-card__header h3 { margin: 0; color: var(--ink); font-size: 1rem; font-weight: 750; line-height: 1.3; }
+.vt-app .vt-guide-card__details { display: grid; gap: 10px; margin: 16px 0 0; }
+.vt-app .vt-guide-card__details > div { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface-2); }
+.vt-app .vt-guide-card__detail-icon { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; background: var(--tint); color: var(--vt-accent-text); }
+.vt-app .vt-guide-card__details dt { color: var(--ink); font-size: .82rem; font-weight: 800; line-height: 1.35; }
+.vt-app .vt-guide-card__details dd { margin: 4px 0 0; color: var(--ink-2); font-size: .77rem; line-height: 1.55; }
+.vt-app .vt-guide-card__pending, .vt-app .vt-destination-card__pending { margin: 16px 0 0; color: var(--ink-3); font-size: .78rem; }
+.vt-app .vt-destination-card { overflow: hidden; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .045); }
+.vt-app .vt-destination-card__media { height: 210px; overflow: hidden; background: var(--surface-2); }
+.vt-app .vt-destination-card__media app-photo-gallery { display: block; height: 100%; }
+.vt-app .vt-destination-card__media app-photo-gallery > .vt-photo-grid { display: block; height: 100%; border-radius: 0; }
+.vt-app .vt-destination-card__media app-photo-gallery > .vt-photo-grid > button { display: block; width: 100%; height: 100%; min-height: 0; }
+.vt-app .vt-destination-card__media app-photo-gallery img { width: 100%; height: 100%; min-height: 0; object-fit: cover; }
+.vt-app .vt-destination-card__body { display: grid; gap: 16px; padding: 20px; }
+.vt-app .vt-destination-card__header { display: flex; align-items: center; gap: 12px; }
+.vt-app .vt-destination-card__icon { display: grid; place-items: center; flex: 0 0 auto; width: 42px; height: 42px; border-radius: 12px; background: var(--tint); color: var(--vt-accent-text); }
+.vt-app .vt-destination-card__header p { margin: 0 0 2px; color: var(--ink-2); font-size: .7rem; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
+.vt-app .vt-destination-card__header h3 { margin: 0; color: var(--ink); font-size: 1.3rem; font-weight: 760; line-height: 1.2; }
+.vt-app .vt-destination-card__overview-wrap { position: relative; overflow: hidden; }
+.vt-app .vt-destination-card__overview { margin: 0; color: var(--ink-2); font-size: .84rem; line-height: 1.65; }
+.vt-app .vt-destination-card__overview-wrap.is-truncated .vt-destination-card__overview { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
+.vt-app .vt-destination-card__overview-wrap.is-truncated::after { content: ""; position: absolute; right: 0; bottom: 0; left: 0; height: 2.4em; background: linear-gradient(to bottom, transparent, var(--surface)); pointer-events: none; }
+.vt-app .vt-destination-card__read-more { display: inline-flex; align-items: center; justify-self: start; gap: 5px; min-height: 38px; margin-top: -12px; padding: 7px 4px; border: 0; border-radius: 7px; background: transparent; color: var(--vt-accent-text); font-size: .75rem; font-weight: 800; cursor: pointer; }
+.vt-app .vt-destination-card__read-more vt-icon { transition: transform .2s ease; }
+.vt-app .vt-destination-card__read-more[aria-expanded="true"] vt-icon { transform: rotate(180deg); }
+.vt-app .vt-destination-card__read-more:hover { text-decoration: underline; text-underline-offset: 3px; }
+.vt-app .vt-destination-fold { border: 1px solid var(--line); border-radius: 13px; background: var(--surface-2); }
+.vt-app .vt-destination-fold summary, .vt-app .vt-destination-map summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 11px 16px; color: var(--ink); font-size: .82rem; font-weight: 800; line-height: 1.35; list-style: none; cursor: pointer; }
+.vt-app .vt-destination-fold summary::-webkit-details-marker, .vt-app .vt-destination-map summary::-webkit-details-marker { display: none; }
+.vt-app .vt-destination-fold summary vt-icon:last-child, .vt-app .vt-destination-map summary > vt-icon { display: grid; place-items: center; align-self: center; color: var(--vt-accent-text); transition: transform .2s ease; }
+.vt-app .vt-destination-fold[open] summary vt-icon:last-child, .vt-app .vt-destination-map[open] summary > vt-icon { transform: rotate(180deg); }
+.vt-app .vt-destination-fold__content { max-height: 320px; overflow-y: auto; padding: 16px; border-top: 1px solid var(--line); overscroll-behavior: contain; scrollbar-gutter: stable; }
+.vt-app .vt-destination-fold ul { display: grid; gap: 11px; margin: 0; padding: 0 0 0 18px; color: var(--ink-2); font-size: .78rem; line-height: 1.55; }
+.vt-app .vt-destination-fold li::marker { color: var(--vt-accent-text); }
+.vt-app .vt-destination-fold li strong { display: block; color: var(--ink); font-size: .8rem; }
+.vt-app .vt-destination-fold li span { display: block; margin-top: 2px; }
+.vt-app .vt-destination-empty { display: inline-flex; align-items: center; justify-self: start; gap: 7px; margin: 0; padding: 7px 11px; border: 1px solid color-mix(in srgb, var(--ink-3) 15%, var(--line)); border-radius: 999px; background: color-mix(in srgb, var(--ink-3) 7%, var(--surface)); color: var(--ink-2); font-size: .74rem; font-weight: 750; }
+.vt-app .vt-destination-empty vt-icon { color: var(--ink-3); }
+.vt-app .vt-destination-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.vt-app .vt-destination-actions a, .vt-app .vt-destination-map__actions a { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 8px 13px; border: 1px solid color-mix(in srgb, var(--vt-accent-text) 35%, var(--line)); border-radius: 999px; background: var(--tint); color: var(--vt-accent-text); font-size: .75rem; font-weight: 800; text-decoration: none; transition: background-color .18s ease, transform .12s ease; }
+.vt-app .vt-destination-actions a:hover, .vt-app .vt-destination-map__actions a:hover { background: var(--tint-2); }
+.vt-app .vt-destination-actions a:active, .vt-app .vt-destination-map__actions a:active { transform: scale(.97); }
+.vt-app .vt-destination-map { overflow: hidden; border: 1px solid var(--line); border-radius: 14px 14px 16px 16px; background: var(--surface); }
+.vt-app .vt-destination-map summary span { display: inline-flex; align-items: center; gap: 8px; }
+.vt-app .vt-destination-map__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding: 0 12px 12px; border-top: 1px solid var(--line); padding-top: 12px; }
+.vt-app .vt-destination-map__frame { height: 250px; overflow: hidden; border-top: 1px solid var(--line); border-radius: 0 0 15px 15px; background: var(--surface-2); }
+.vt-app .vt-destination-map__frame iframe { width: 100%; height: 100%; border: 0; }
+@media (min-width: 640px) {
+  .vt-app :is(.vt-weather-grid, .vt-guide-grid, .vt-destination-grid) { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .vt-app .vt-destination-card__media { height: 230px; }
+}
+:root[data-theme="dark"] .vt-app :is(.vt-travellers-card, .vt-weather-card, .vt-guide-card, .vt-destination-card) { border-color: rgba(255, 255, 255, .09); box-shadow: 0 8px 28px rgba(0, 0, 0, .22); }
+:root[data-theme="dark"] .vt-app .vt-weather-card { background: linear-gradient(145deg, color-mix(in srgb, #164e58 34%, var(--surface)), var(--surface)); }
+:root[data-theme="dark"] .vt-app .vt-weather-card__icon { background: rgba(115, 208, 194, .13); color: #8adbd0; }
+:root[data-theme="dark"] .vt-app .vt-weather-skeleton__card { --weather-sk: linear-gradient(90deg, rgba(255, 255, 255, .055) 25%, rgba(255, 255, 255, .115) 50%, rgba(255, 255, 255, .055) 75%); }
+:root[data-theme="dark"] .vt-app :is(.vt-guide-card__details > div, .vt-destination-fold, .vt-destination-map) { border-color: rgba(255, 255, 255, .09); }
+:root[data-theme="dark"] .vt-app .vt-destination-fold__content, :root[data-theme="dark"] .vt-app .vt-destination-map__actions { border-color: rgba(255, 255, 255, .09); }
+:root[data-theme="dark"] .vt-app .vt-destination-actions a, :root[data-theme="dark"] .vt-app .vt-destination-map__actions a { border-color: rgba(115, 208, 194, .38); color: #8adbd0; }
+
+/* Home value props, inspiration gallery and supporting footer. */
+.vt-app :is(.vt-value-props, .vt-inspiration) { margin: 24px var(--vt-flat-gutter) 0; }
+.vt-app .vt-value-props { padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .04); }
+.vt-app .vt-value-props__grid { display: grid; gap: 10px; margin: 18px 0 0; padding: 0; list-style: none; }
+.vt-app .vt-value-props__grid li { display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: center; gap: 12px; min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-2); }
+.vt-app .vt-value-props__icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--tint); color: var(--vt-accent-text); }
+.vt-app .vt-value-props__grid li > span:last-child { display: grid; gap: 3px; min-width: 0; }
+.vt-app .vt-value-props__grid strong { color: var(--ink); font-size: .84rem; font-weight: 800; line-height: 1.35; }
+.vt-app .vt-value-props__grid small { color: var(--ink-2); font-size: .74rem; line-height: 1.5; }
+.vt-app .vt-inspiration-gallery { margin-top: 18px; }
+.vt-app .vt-inspiration-gallery app-photo-gallery > .vt-photo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; overflow: visible; border-radius: 0; }
+.vt-app .vt-inspiration-gallery app-photo-gallery > .vt-photo-grid > button { grid-column: auto !important; min-height: 0; aspect-ratio: 4 / 3; border: 0; border-radius: 16px; background: var(--surface-2); box-shadow: 0 4px 20px rgba(0, 0, 0, .08); cursor: pointer; transform: translateZ(0); transition: box-shadow .2s ease, transform .16s ease; }
+.vt-app .vt-inspiration-gallery app-photo-gallery > .vt-photo-grid > button:hover { box-shadow: 0 9px 26px rgba(0, 0, 0, .13); transform: translateY(-2px); }
+.vt-app .vt-inspiration-gallery app-photo-gallery > .vt-photo-grid > button:active { transform: scale(.98); }
+.vt-app .vt-inspiration-gallery app-photo-gallery img { min-height: 0; transition: transform .35s ease; }
+.vt-app .vt-inspiration-gallery app-photo-gallery button:hover img { transform: scale(1.045); }
+.vt-app .vt-gallery-caption { position: absolute; right: 0; bottom: 0; left: 0; z-index: 1; padding: 28px 12px 10px; background: linear-gradient(to top, rgba(0, 0, 0, .72), transparent); color: #fff; font-size: .72rem; font-weight: 750; line-height: 1.3; text-align: left; text-shadow: 0 1px 3px rgba(0, 0, 0, .5); }
+.vt-app .vt-photo-lightbox__nav, .vt-app .vt-photo-lightbox__close { position: absolute; z-index: 2; display: grid; place-items: center; padding: 0; border: 1px solid rgba(255, 255, 255, .34); border-radius: 50%; color: #fff; cursor: pointer; backdrop-filter: blur(10px) saturate(1.25); -webkit-backdrop-filter: blur(10px) saturate(1.25); transition: background-color .18s ease, border-color .18s ease, transform .12s ease; }
+.vt-app .vt-photo-lightbox__nav { top: 50%; width: 44px; height: 44px; background: rgba(18, 22, 23, .62); box-shadow: 0 6px 22px rgba(0, 0, 0, .3); transform: translateY(-50%); }
+.vt-app .vt-photo-lightbox__nav--previous { left: clamp(12px, 3vw, 32px); }
+.vt-app .vt-photo-lightbox__nav--next { right: clamp(12px, 3vw, 32px); }
+.vt-app .vt-photo-lightbox__close { top: 16px; right: 16px; width: 36px; height: 36px; background: rgba(18, 22, 23, .82); box-shadow: 0 4px 16px rgba(0, 0, 0, .3); }
+.vt-app .vt-photo-lightbox__nav:hover, .vt-app .vt-photo-lightbox__close:hover { border-color: rgba(255, 255, 255, .7); background: rgba(67, 183, 167, .78); }
+.vt-app .vt-photo-lightbox__nav:active { transform: translateY(-50%) scale(.93); }
+.vt-app .vt-photo-lightbox__close:active { transform: scale(.9); }
+.vt-app .vt-home-footer { margin: 24px var(--vt-flat-gutter) 32px; padding: clamp(20px, 4vw, 26px); border: 1px solid var(--line); border-radius: 16px; background: color-mix(in srgb, var(--surface-2) 72%, var(--surface)); color: var(--ink); box-shadow: 0 7px 26px rgba(0, 0, 0, .06); }
+.vt-app .vt-home-footer__grid { display: grid; gap: 24px; }
+.vt-app .vt-home-footer__eyebrow { margin: 0; color: var(--vt-accent-text); font-size: .68rem; font-weight: 850; letter-spacing: .13em; text-transform: uppercase; }
+.vt-app .vt-home-footer__brand h2 { margin: 8px 0 0; color: var(--ink); font-size: 1.45rem; font-weight: 760; }
+.vt-app .vt-home-footer__brand > p:last-of-type:not(.vt-home-footer__eyebrow) { margin: 8px 0 0; color: var(--ink-2); font-size: .82rem; line-height: 1.55; }
+.vt-app .vt-home-footer__socials { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-top: 18px; }
+.vt-app .vt-home-footer__socials > a:not(.vt-home-footer__review) { display: grid; place-items: center; width: 42px; height: 42px; padding: 0; border: 1px solid var(--line-2); border-radius: 50%; background: var(--surface); color: var(--ink-2); text-decoration: none; transition: border-color .18s ease, background-color .18s ease, color .18s ease, transform .12s ease; }
+.vt-app .vt-home-footer__socials > a:not(.vt-home-footer__review) svg { width: 19px; height: 19px; fill: currentColor; }
+.vt-app .vt-home-footer__socials > a:not(.vt-home-footer__review):hover { border-color: color-mix(in srgb, var(--vt-accent-text) 45%, var(--line)); background: var(--tint); color: var(--vt-accent-text); }
+.vt-app .vt-home-footer__socials > a:not(.vt-home-footer__review):active { transform: scale(.94); }
+.vt-app .vt-home-footer__review { display: inline-flex; align-items: center; gap: 6px; min-height: 42px; padding: 8px 12px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--surface); color: var(--ink-2); font-size: .72rem; font-weight: 750; text-decoration: none; text-transform: capitalize; }
+.vt-app .vt-home-footer__review vt-icon { color: var(--warn); }
+.vt-app .vt-home-footer__contacts { display: grid; gap: 8px; }
+.vt-app .vt-home-footer__contacts > :is(a, div) { display: grid; grid-template-columns: 38px minmax(0, 1fr); align-items: center; gap: 11px; min-width: 0; min-height: 60px; padding: 10px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); color: var(--ink); text-decoration: none; transition: border-color .18s ease, background-color .18s ease, transform .12s ease; }
+.vt-app .vt-home-footer__contacts > a:hover { border-color: color-mix(in srgb, var(--vt-accent-text) 38%, var(--line)); background: var(--tint); }
+.vt-app .vt-home-footer__contacts > a:active { transform: scale(.99); }
+.vt-app .vt-home-footer__contacts > :is(a, div) > span:first-child { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 11px; background: var(--tint); color: var(--vt-accent-text); }
+.vt-app .vt-home-footer__contacts > :is(a, div) > span:last-child { display: grid; gap: 2px; min-width: 0; }
+.vt-app .vt-home-footer__contacts small { color: var(--ink-3); font-size: .66rem; font-weight: 750; text-transform: uppercase; letter-spacing: .06em; }
+.vt-app .vt-home-footer__contacts strong { overflow: hidden; color: var(--ink); font-size: .78rem; font-weight: 720; line-height: 1.35; overflow-wrap: anywhere; }
+.vt-app .vt-home-footer__fine-print { display: grid; gap: 8px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.vt-app .vt-home-footer__fine-print p { margin: 0; color: var(--ink-3); font-size: .68rem; line-height: 1.55; white-space: pre-line; }
+.vt-app .vt-home-footer__fine-print strong { color: var(--ink-2); }
+.vt-app .vt-home-footer__hours { display: grid; gap: 9px; }
+.vt-app .vt-home-footer__hours h3 { color: var(--ink); font-size: .75rem; font-weight: 800; }
+.vt-app .vt-home-footer__hours dl { display: grid; gap: 6px; margin: 0; }
+.vt-app .vt-home-footer__hours dl > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 14px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); font-size: .7rem; line-height: 1.4; }
+.vt-app .vt-home-footer__hours dt { color: var(--ink); font-weight: 780; }
+.vt-app .vt-home-footer__hours dd { margin: 0; color: var(--ink-2); font-weight: 650; text-align: right; }
+@media (min-width: 640px) {
+  .vt-app .vt-value-props__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .vt-app .vt-inspiration-gallery app-photo-gallery > .vt-photo-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .vt-app .vt-home-footer__grid { grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); align-items: start; }
+}
+:root[data-theme="dark"] .vt-app :is(.vt-value-props, .vt-home-footer) { border-color: rgba(255, 255, 255, .09); box-shadow: 0 8px 28px rgba(0, 0, 0, .22); }
+:root[data-theme="dark"] .vt-app .vt-home-footer { border-color: var(--line-2); background: var(--surface); color: var(--ink); }
+:root[data-theme="dark"] .vt-app .vt-home-footer__contacts > :is(a, div), :root[data-theme="dark"] .vt-app .vt-home-footer__socials > a { background: var(--surface-2); color: var(--ink); }
+:root[data-theme="dark"] .vt-app .vt-home-footer__contacts > :is(a, div) > span:first-child { background: rgba(115, 208, 194, .15); color: #8adbd0; }
+:root[data-theme="dark"] .vt-app .vt-home-footer__fine-print p { color: var(--ink-2); }
+:root[data-theme="dark"] .vt-app .vt-home-footer__hours dl > div { border-color: rgba(255, 255, 255, .09); background: var(--surface-2); }
+:root[data-theme="dark"] .vt-app :is(.vt-value-props__grid li, .vt-home-footer__contacts > a, .vt-home-footer__contacts > div, .vt-home-footer__socials > a) { border-color: rgba(255, 255, 255, .09); }
+:root[data-theme="dark"] .vt-app .vt-inspiration-gallery app-photo-gallery > .vt-photo-grid > button { box-shadow: 0 7px 24px rgba(0, 0, 0, .25); }
+
+/* Home upsells, communication updates and agency story. */
+.vt-app :is(.vt-upsell-section, .vt-updates-section, .vt-why-book-card) { margin: 24px var(--vt-flat-gutter) 0; }
+.vt-app :is(.vt-upsell-grid, .vt-update-feed) { display: grid; gap: 12px; margin-top: 18px; }
+.vt-app .vt-upsell-card { display: grid; grid-template-columns: 112px minmax(0, 1fr); min-width: 0; min-height: 190px; overflow: hidden; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .04); }
+.vt-app .vt-upsell-card.no-image { grid-template-columns: 1fr; min-height: 0; }
+.vt-app .vt-upsell-card__media { min-width: 0; min-height: 100%; overflow: hidden; background: var(--surface-2); }
+.vt-app .vt-upsell-card__media img { display: block; width: 100%; height: 100%; min-height: 190px; object-fit: cover; transition: transform .35s ease; }
+.vt-app .vt-upsell-card:hover .vt-upsell-card__media img { transform: scale(1.035); }
+.vt-app .vt-upsell-card__body { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; padding: 17px; }
+.vt-app .vt-upsell-card__body h3 { margin: 0; color: var(--ink); font-size: .98rem; font-weight: 780; line-height: 1.35; }
+.vt-app .vt-upsell-card__body > p { margin: 7px 0 0; color: var(--ink-2); font-size: .78rem; line-height: 1.55; }
+.vt-app .vt-upsell-card__body small { margin-top: 8px; color: var(--ink-3); font-size: .68rem; line-height: 1.4; }
+.vt-app .vt-upsell-card__body button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; margin-top: auto; padding: 8px 13px; border: 1px solid color-mix(in srgb, var(--vt-accent-text) 38%, var(--line)); border-radius: 999px; background: var(--tint); color: var(--vt-accent-text); font-size: .73rem; font-weight: 800; cursor: pointer; transition: background-color .18s ease, transform .12s ease; }
+.vt-app .vt-upsell-card__body button:hover { background: var(--tint-2); }
+.vt-app .vt-upsell-card__body button:active { transform: scale(.97); }
+.vt-app .vt-update-card { min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .045); }
+.vt-app .vt-update-card > header { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: start; gap: 12px; }
+.vt-app .vt-update-card__icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; background: var(--tint); color: var(--vt-accent-text); }
+.vt-app .vt-update-card header > div { min-width: 0; padding-top: 1px; }
+.vt-app .vt-update-card h3 { margin: 0; color: var(--ink); font-size: .9rem; font-weight: 800; line-height: 1.35; }
+.vt-app .vt-update-card header p { margin: 4px 0 0; color: var(--ink-3); font-size: .68rem; line-height: 1.4; text-transform: capitalize; }
+.vt-app .vt-update-card__status { display: inline-flex; align-items: center; min-height: 27px; padding: 5px 9px; border-radius: 999px; background: color-mix(in srgb, var(--ok) 13%, var(--surface)); color: var(--ok); font-size: .62rem; font-weight: 850; letter-spacing: .06em; line-height: 1; text-transform: uppercase; }
+.vt-app .vt-update-card__status.is-pending { background: color-mix(in srgb, var(--warn) 12%, var(--surface)); color: var(--warn); }
+.vt-app .vt-update-card__preview { position: relative; margin-top: 14px; overflow: hidden; }
+.vt-app .vt-update-card__preview p { margin: 0; color: var(--ink-2); font-size: .79rem; line-height: 1.6; white-space: pre-line; }
+.vt-app .vt-update-card__preview.is-long:not(.is-expanded) p { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.vt-app .vt-update-card__preview.is-long:not(.is-expanded)::after { content: ""; position: absolute; right: 0; bottom: 0; left: 0; height: 2.2em; background: linear-gradient(to bottom, transparent, var(--surface)); pointer-events: none; }
+.vt-app .vt-update-card__toggle { display: inline-flex; align-items: center; gap: 5px; min-height: 38px; margin: 4px 0 -7px -4px; padding: 7px 4px; border: 0; border-radius: 7px; background: transparent; color: var(--vt-accent-text); font-size: .72rem; font-weight: 800; cursor: pointer; }
+.vt-app .vt-update-card__toggle vt-icon { transition: transform .2s ease; }
+.vt-app .vt-update-card__toggle[aria-expanded="true"] vt-icon { transform: rotate(180deg); }
+.vt-app .vt-update-card__toggle:hover { text-decoration: underline; text-underline-offset: 3px; }
+.vt-app .vt-why-book-card { padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 20px rgba(0, 0, 0, .04); }
+.vt-app .vt-why-book-card__bio { margin-top: 18px; padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface-2); }
+.vt-app .vt-why-book-card__bio p { margin: 0; color: var(--ink-2); font-size: .84rem; line-height: 1.65; }
+.vt-app .vt-why-book-card__reasons { display: grid; gap: 9px; margin-top: 17px; }
+.vt-app .vt-why-book-card__reasons article { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 11px; padding: 13px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface-2); }
+.vt-app .vt-why-book-card__reasons article > span { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--tint); color: var(--vt-accent-text); font-size: .72rem; font-weight: 850; }
+.vt-app .vt-why-book-card__reasons h3 { margin: 0; color: var(--ink); font-size: .82rem; font-weight: 800; line-height: 1.4; }
+.vt-app .vt-why-book-card__reasons p { margin: 4px 0 0; color: var(--ink-2); font-size: .75rem; line-height: 1.55; }
+.vt-app .vt-why-book-card__review { display: inline-flex; align-items: center; gap: 7px; min-height: 40px; margin-top: 17px; padding: 8px 13px; border: 1px solid color-mix(in srgb, var(--vt-accent-text) 35%, var(--line)); border-radius: 999px; background: var(--tint); color: var(--vt-accent-text); font-size: .74rem; font-weight: 800; text-decoration: none; }
+@media (min-width: 640px) {
+  .vt-app :is(.vt-upsell-grid, .vt-update-feed, .vt-why-book-card__reasons) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .vt-app .vt-upsell-grid > .vt-upsell-card:only-child { grid-column: 1 / -1; }
+}
+@media (max-width: 420px) {
+  .vt-app .vt-upsell-card { grid-template-columns: 96px minmax(0, 1fr); }
+  .vt-app .vt-upsell-card__body { padding: 14px; }
+  .vt-app .vt-update-card > header { grid-template-columns: 38px minmax(0, 1fr); }
+  .vt-app .vt-update-card__icon { width: 38px; height: 38px; }
+  .vt-app .vt-update-card__status { grid-column: 2; justify-self: start; }
+}
+:root[data-theme="dark"] .vt-app :is(.vt-upsell-card, .vt-update-card, .vt-why-book-card) { border-color: rgba(255, 255, 255, .09); box-shadow: 0 8px 28px rgba(0, 0, 0, .22); }
+:root[data-theme="dark"] .vt-app :is(.vt-why-book-card__bio, .vt-why-book-card__reasons article) { border-color: rgba(255, 255, 255, .09); }
+:root[data-theme="dark"] .vt-app .vt-update-card__status { background: rgba(74, 222, 128, .13); color: #78e8a0; }
+:root[data-theme="dark"] .vt-app .vt-update-card__status.is-pending { background: rgba(251, 191, 36, .12); color: #fbd266; }
+
 /* Itinerary-specific day and event hierarchy. */
 .vt-app .vt-main--itinerary .vt-section:first-child { border-top: 0; }
 .vt-app .vt-main--itinerary #itinerary-title { margin-bottom: 24px; }

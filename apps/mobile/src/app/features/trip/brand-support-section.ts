@@ -6,11 +6,24 @@ import { VtIcon, type VtIconName } from '../../shared/lucide-icon';
 @Component({
   selector: 'app-brand-support-section', imports: [PhotoGallery, VtIcon],
   template: `
-    <section class="vt-section"><ul class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Why you can relax">@for (item of trip().brand.profile.reassurance; track item.title; let i = $index) { <li class="flex gap-3 rounded-2xl bg-white p-4 ring-1 ring-slate-200"><span class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-teal-50 text-lg text-teal-800"><vt-icon [name]="reassuranceIcon(i)" [size]="20" /></span><span><strong class="block">{{ item.title }}</strong><small class="mt-1 block leading-5 text-slate-500">{{ item.text }}</small></span></li> }</ul></section>
-    @if (trip().brand.profile.whyBook.length || trip().brand.profile.about) { <section class="vt-section"><p class="text-xs font-semibold uppercase tracking-widest text-teal-700">Travel with confidence</p><h2 class="vt-h2">Why book with {{ trip().brand.name }}</h2><div class="mt-5 grid gap-3 sm:grid-cols-2">@for (reason of trip().brand.profile.whyBook; track reason.title) { <article class="rounded-2xl bg-white p-5 ring-1 ring-slate-200"><h3 class="font-semibold">{{ reason.title }}</h3>@if (reason.text) { <p class="mt-2 text-sm leading-6 text-slate-600">{{ reason.text }}</p> }</article> }</div>@if (trip().brand.profile.about) { <p class="mt-5 max-w-3xl leading-7 text-slate-600">{{ trip().brand.profile.about }}</p> }@if (reviewUrl()) { <a class="vt-btn vt-btn--ghost mt-5" [href]="reviewUrl()" target="_blank" rel="noopener">See what our customers say <vt-icon name="external" [size]="16" /></a> }</section> }
+    <section class="vt-value-props" aria-labelledby="value-props-title"><header class="vt-lower-section__header"><p>Travel with confidence</p><h2 id="value-props-title">Why you can relax</h2></header><ul class="vt-value-props__grid">@for (item of trip().brand.profile.reassurance; track item.title; let i = $index) { <li><span class="vt-value-props__icon"><vt-icon [name]="reassuranceIcon(i)" [size]="21" /></span><span><strong>{{ item.title }}</strong><small>{{ item.text }}</small></span></li> }</ul></section>
+    @if (trip().brand.profile.whyBook.length || trip().brand.profile.about) { <section class="vt-why-book-card" aria-labelledby="why-book-title"><header class="vt-lower-section__header"><p>Your travel agency</p><h2 id="why-book-title">Why book with {{ trip().brand.name }}</h2></header>@if (trip().brand.profile.about) { <div class="vt-why-book-card__bio"><p>{{ trip().brand.profile.about }}</p></div> }@if (trip().brand.profile.whyBook.length) { <div class="vt-why-book-card__reasons">@for (reason of trip().brand.profile.whyBook; track reason.title; let i = $index) { <article><span>{{ i + 1 }}</span><div><h3>{{ reason.title }}</h3>@if (reason.text) { <p>{{ reason.text }}</p> }</div></article> }</div> }@if (reviewUrl()) { <a class="vt-why-book-card__review" [href]="reviewUrl()" target="_blank" rel="noopener">See what our customers say <vt-icon name="external" [size]="15" /></a> }</section> }
     @if (trip().brand.profile.teamPhotoUrl) { <section class="vt-section overflow-hidden rounded-3xl bg-white ring-1 ring-slate-200"><div class="grid md:grid-cols-2"><img class="h-full min-h-64 w-full object-cover" [src]="trip().brand.profile.teamPhotoUrl" [alt]="'The team at ' + trip().brand.name" /><div class="p-6 md:p-8"><p class="text-xs font-semibold uppercase tracking-widest text-teal-700">Your travel experts</p><h2 class="mt-2 text-2xl font-semibold">Real people, here when you need us</h2><p class="mt-3 leading-7 text-slate-600">{{ trip().experience.agentName ? trip().experience.agentName + ' and the wider team' : 'Our team' }} will look after your journey from planning through to your return home.</p></div></div></section> }
-    @if (trip().summary.gallery.length || trip().brand.profile.gallery.length) { <section class="vt-section"><h2 class="vt-h2">Travel inspiration</h2><app-photo-gallery [photos]="combinedGallery()" /></section> }
-    <footer class="vt-section mb-8 overflow-hidden rounded-3xl bg-slate-900 p-6 text-white"><div class="grid gap-6 md:grid-cols-2"><div><h2 class="text-2xl font-semibold">{{ trip().brand.name }}</h2>@if (trip().brand.profile.slogan) { <p class="mt-2 text-slate-200">{{ trip().brand.profile.slogan }}</p> }<div class="mt-5 flex flex-wrap gap-2">@for (social of trip().brand.profile.socialLinks; track social.url) { <a class="rounded-full border border-white/25 px-4 py-2 text-sm font-semibold" [href]="social.url" target="_blank" rel="noopener">{{ social.network }}</a> }@for (review of trip().brand.profile.reviewLinks; track review.url) { <a class="rounded-full border border-white/25 px-4 py-2 text-sm font-semibold" [href]="review.url" target="_blank" rel="noopener">{{ review.provider }} reviews</a> }</div></div><div class="grid gap-4 text-sm">@if (trip().brand.profile.address) { <div><strong class="block text-teal-200">Visit us</strong><span>{{ trip().brand.profile.address }}</span>@if (trip().brand.profile.mapUrl) { <a class="ml-2 inline-flex items-center gap-1 underline" [href]="trip().brand.profile.mapUrl" target="_blank" rel="noopener">Map <vt-icon name="external" [size]="14" /></a> }</div> }@if (trip().brand.profile.openingHours) { <div><strong class="block text-teal-200">Opening hours</strong><span>{{ trip().brand.profile.openingHours }}</span></div> }<div class="flex flex-wrap gap-x-4 gap-y-2">@if (trip().support.phone) { <a [href]="'tel:' + trip().support.phone">{{ trip().support.phone }}</a> }@if (trip().support.email) { <a [href]="'mailto:' + trip().support.email">{{ trip().support.email }}</a> }@if (trip().support.whatsappUrl) { <a [href]="trip().support.whatsappUrl" target="_blank" rel="noopener">WhatsApp</a> }</div></div></div>@if (trip().brand.profile.footerImages.length) { <div class="mt-6 flex flex-wrap items-center gap-4 border-t border-white/15 pt-5">@for (image of trip().brand.profile.footerImages; track image) { <img class="max-h-10 max-w-32 object-contain" [src]="image" alt="" /> }</div> }@if (trip().brand.profile.footerText) { <p class="mt-5 border-t border-white/15 pt-4 text-xs leading-5 text-slate-300">{{ trip().brand.profile.footerText }}</p> }</footer>
+    @if (trip().summary.gallery.length || trip().brand.profile.gallery.length) { <section class="vt-inspiration" aria-labelledby="inspiration-title"><header class="vt-lower-section__header"><p>Dream a little</p><h2 id="inspiration-title">Travel inspiration</h2></header><div class="vt-inspiration-gallery"><app-photo-gallery [photos]="combinedGallery()" [showCaptions]="true" /></div></section> }
+    <footer class="vt-home-footer">
+      <div class="vt-home-footer__grid">
+        <div class="vt-home-footer__brand"><p class="vt-home-footer__eyebrow">Here when you need us</p><h2>{{ trip().brand.name }}</h2>@if (trip().brand.profile.slogan) { <p>{{ trip().brand.profile.slogan }}</p> }
+          @if (trip().brand.profile.socialLinks.length || trip().brand.profile.reviewLinks.length) { <div class="vt-home-footer__socials" aria-label="Social media and reviews">@for (social of trip().brand.profile.socialLinks; track social.url) { <a [href]="social.url" target="_blank" rel="noopener" [attr.aria-label]="socialLabel(social.network)">@switch (social.network) { @case ('instagram') { <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.1"/></svg> } @case ('facebook') { <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.5 22v-9h3l.5-3h-3.5V8.1c0-.9.3-1.6 1.7-1.6H17V4c-.8-.1-1.8-.2-3-.2-3 0-5 1.8-5 5.1V10H6v3h3v9h4.5Z"/></svg> } @case ('linkedin') { <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.2 7.8A2.3 2.3 0 1 0 5.2 3a2.3 2.3 0 0 0 0 4.7ZM3.3 21h3.8V9.2H3.3V21Zm6.1 0h3.8v-6.6c0-1.7.3-3.4 2.5-3.4 2.2 0 2.2 2 2.2 3.5V21h3.8v-7.3c0-3.6-.8-6.3-4.9-6.3-2 0-3.3 1.1-3.8 2.1h-.1V9.2H9.4V21Z"/></svg> } @default { <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.2 2h3.7l-8 9.2L23.3 22H16l-5.7-7.5L3.8 22H.1l8.5-9.7L-.3 2H7l5.2 6.8L18.2 2Zm-1.3 18h2L5.9 3.9H3.8L16.9 20Z"/></svg> } }</a> }@for (review of trip().brand.profile.reviewLinks; track review.url) { <a class="vt-home-footer__review" [href]="review.url" target="_blank" rel="noopener"><vt-icon name="star" [size]="15" /> {{ review.provider }} reviews</a> }</div> }
+        </div>
+        <div class="vt-home-footer__contacts">
+          @if (trip().support.phone) { <a [href]="'tel:' + trip().support.phone"><span><vt-icon name="phone" [size]="19" /></span><span><small>Call us</small><strong>{{ trip().support.phone }}</strong></span></a> }
+          @if (trip().support.email) { <a [href]="'mailto:' + trip().support.email"><span><vt-icon name="mail" [size]="19" /></span><span><small>Email us</small><strong>{{ trip().support.email }}</strong></span></a> }
+          @if (trip().support.whatsappUrl) { <a [href]="trip().support.whatsappUrl" target="_blank" rel="noopener"><span><vt-icon name="message" [size]="19" /></span><span><small>WhatsApp</small><strong>Start a conversation</strong></span></a> }
+          @if (trip().brand.profile.address) { @if (trip().brand.profile.mapUrl) { <a [href]="trip().brand.profile.mapUrl" target="_blank" rel="noopener"><span><vt-icon name="map-pin" [size]="19" /></span><span><small>Visit us</small><strong>{{ trip().brand.profile.address }}</strong></span></a> } @else { <div><span><vt-icon name="map-pin" [size]="19" /></span><span><small>Visit us</small><strong>{{ trip().brand.profile.address }}</strong></span></div> } }
+        </div>
+      </div>
+      @if (trip().brand.profile.openingHours || trip().brand.profile.footerText) { <div class="vt-home-footer__fine-print">@if (openingHours().length) { <section class="vt-home-footer__hours" aria-labelledby="opening-hours-title"><h3 id="opening-hours-title">Opening hours</h3><dl>@for (row of openingHours(); track $index) { <div><dt>{{ row.label }}</dt><dd>{{ row.value }}</dd></div> }</dl></section> }@if (trip().brand.profile.footerText) { <p>{{ trip().brand.profile.footerText }}</p> }</div> }
+    </footer>
   `,
 })
 export class BrandSupportSection implements OnInit {
@@ -18,5 +31,44 @@ export class BrandSupportSection implements OnInit {
   reassuranceIcon(index: number): VtIconName { return (['compass', 'circle-dot', 'badge-check', 'phone-call'] as const)[index % 4]; }
   ngOnInit(): void { const profile = this.trip().brand.profile; profile.whyBook ??= []; profile.gallery ??= []; profile.reassurance ??= [{ title: 'Your own travel expert', text: 'Personal support throughout your journey' }, { title: 'Built around you', text: 'Tailored, not off the shelf' }]; profile.footerImages ??= []; }
   reviewUrl(): string | null { return this.trip().brand.profile.reviewLinks.find((link) => link.provider === 'google')?.url ?? this.trip().brand.profile.reviewLinks[0]?.url ?? null; }
-  combinedGallery() { return [...this.trip().summary.gallery, ...(this.trip().brand.profile.gallery ?? [])].filter((photo, index, all) => all.findIndex((candidate) => candidate.url === photo.url) === index); }
+  combinedGallery() {
+    return [...this.trip().summary.gallery, ...(this.trip().brand.profile.gallery ?? [])]
+      .filter((photo, index, all) => all.findIndex((candidate) => candidate.url === photo.url) === index)
+      .map((photo) => ({ ...photo, alt: this.cleanCaption(photo.alt) }));
+  }
+  socialLabel(network: string): string { return `Open ${network === 'x' ? 'X' : network} profile`; }
+  openingHours(): Array<{ label: string; value: string }> {
+    const source = this.trip().brand.profile.openingHours?.trim();
+    if (!source) return [];
+    const cleaned = source.replace(/\*\*/g, '').replace(/\r/g, '').trim();
+    const dayBracket = '(Monday\\s*[–—-]\\s*Tuesday|Wednesday|Thursday\\s*[–—-]\\s*Friday|Saturday|Sunday\\s*(?:&|and)\\s*Bank\\s+Holidays)';
+    const schedulePattern = new RegExp(`${dayBracket}\\s*:\\s*([\\s\\S]*?)(?=${dayBracket}\\s*:|$)`, 'gi');
+    const schedule = Array.from(cleaned.matchAll(schedulePattern), (match) => ({
+      label: match[1].replace(/\s*[–—-]\s*/g, ' – ').replace(/\band\b/gi, '&').replace(/\s+/g, ' ').trim(),
+      value: match[2].replace(/^[\s;,.]+|[\s;,.]+$/g, '').replace(/\s*[–—-]\s*/g, ' – ').replace(/\s+/g, ' ').trim() || 'Contact us',
+    }));
+    if (schedule.length) return schedule;
+    return cleaned
+      .replace(/\s+(?=\*\*[^*]+(?::\*\*|\*\*\s*:))/g, '\n')
+      .split(/\n+|\s*;\s*/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const separator = line.indexOf(':');
+        return separator >= 0
+          ? { label: line.slice(0, separator).trim(), value: line.slice(separator + 1).trim() || 'Contact us' }
+          : { label: line, value: '' };
+      });
+  }
+  private cleanCaption(value: string): string {
+    const caption = value.trim();
+    if (!caption || /^(?:trip image|travel inspiration|photo|image)$/i.test(caption)) return '';
+    if (!/\.(?:jpe?g|png|webp|gif|heic)$/i.test(caption) && !/[_-].*[_-]/.test(caption)) return caption;
+    const filename = (caption.split(/[\\/]/).pop() ?? caption).replace(/%20/gi, ' ').replace(/\.(?:jpe?g|png|webp|gif|heic)$/i, '');
+    const tokens = filename.split(/[_-]+/).filter(Boolean);
+    while (tokens.length && (/^\d+$/.test(tokens[0]) || /^[A-Z]{2,5}\d*$/.test(tokens[0]))) tokens.shift();
+    while (tokens.length && (/^\d+$/.test(tokens.at(-1) ?? '') || /^\d{2,4}x\d{2,4}$/i.test(tokens.at(-1) ?? ''))) tokens.pop();
+    const human = tokens.join(' ').replace(/\band\b/gi, '&').replace(/\s+/g, ' ').trim();
+    return human.length >= 3 && human.length <= 72 ? human : '';
+  }
 }
