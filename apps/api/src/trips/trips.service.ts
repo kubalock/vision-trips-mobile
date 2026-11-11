@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { AccessScope, PaymentStatusResponse, CabinDetail, CruisePort, ItineraryItem, ItineraryKind, PassengerAllocation, PaymentItem, RoomDetail, TravellerSummary, TripDocument, TripSnapshot } from '@vision-trips/contracts';
 import { createHash, createHmac } from 'node:crypto';
 import { AirtableService, type AirtableRecord } from '../airtable/airtable.service.js';
-import { airlineFields, airportFields, bookingFields, brandFields, brandTemplateFields, cabinFields, communicationFields, cruisePortFields, customerFields, elementFields, firstAttachmentUrl, firstString, locationFields, memberFields, numberValue, passengerFields, paymentFields, personFields, pick, roomFields, shipFields, strings, supplierFields, truthy, upsellFields, currencyCode, moneyValue, paymentAmount, PAYABLE_CURRENCIES, formatMoney } from './field-map.js';
+import { airlineFields, airportFields, bookingFields, brandFields, brandTemplateFields, cabinFields, communicationFields, cruisePortFields, customerFields, elementFields, firstAttachmentUrl, firstString, locationFields, memberFields, numberValue, passengerFields, paymentFields, personFields, pick, roomFields, shipFields, strings, supplierFields, truthy, upsellFields, currencyCode, moneyValue, paymentAmount, PAYABLE_CURRENCIES, formatMoney, dateString } from './field-map.js';
 import { resolveStage } from './stage.js';
 import { themeTokens } from './theme.js';
 
@@ -894,11 +894,6 @@ function kindFor(type: string): ItineraryKind {
   if (/train|rail/.test(value)) return 'train';
   if (/attraction|excursion|tour/.test(value)) return 'attraction';
   return 'misc';
-}
-
-function dateString(value: unknown): string | null {
-  const raw = firstString(value);
-  return /^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0, 10) : null;
 }
 
 function dateTimeString(value: unknown): string | null {

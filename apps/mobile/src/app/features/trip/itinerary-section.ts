@@ -2,6 +2,9 @@ import { Component, input } from '@angular/core';
 import type { ItineraryItem } from '@vision-trips/contracts';
 import { PhotoGallery } from '../../shared/photo-gallery';
 import { VtIcon } from '../../shared/lucide-icon';
+import { calendarDate } from '../../shared/european-date.pipe';
+
+const TO_BE_CONFIRMED = 'to-be-confirmed';
 
 @Component({
   selector: 'app-itinerary-section',
@@ -67,13 +70,15 @@ export class ItinerarySection {
   readonly items = input.required<ItineraryItem[]>();
 
   groupedItems() {
+    // A start date that is not a real calendar date is treated as not yet confirmed rather than breaking the view.
+    const dated = this.items().map((item) => ({ item, date: calendarDate(item.startDate) ? item.startDate : null }));
     const groups = new Map<string, ItineraryItem[]>();
-    for (const item of [...this.items()].sort((a, b) => `${a.startDate ?? '9999'}${a.startTime ?? ''}`.localeCompare(`${b.startDate ?? '9999'}${b.startTime ?? ''}`))) {
-      const key = item.startDate ?? 'To be confirmed';
+    for (const { item, date } of dated.sort((a, b) => `${a.date ?? '9999'}${a.item.startTime ?? ''}`.localeCompare(`${b.date ?? '9999'}${b.item.startTime ?? ''}`))) {
+      const key = date ?? TO_BE_CONFIRMED;
       groups.set(key, [...(groups.get(key) ?? []), item]);
     }
-    const firstDate = this.items().map((item) => item.startDate).filter((date): date is string => Boolean(date)).sort()[0];
-    return [...groups].map(([date, groupItems]) => ({ date, items: groupItems, dateLabel: this.dateLabel(date), dayLabel: firstDate && date !== 'To be confirmed' ? `Day ${this.daysBetween(firstDate, date) + 1}` : 'Trip plan' }));
+    const firstDate = dated.map(({ date }) => date).filter((date): date is string => Boolean(date)).sort()[0];
+    return [...groups].map(([date, groupItems]) => ({ date, items: groupItems, dateLabel: this.dateLabel(date), dayLabel: firstDate && date !== TO_BE_CONFIRMED ? `Day ${this.daysBetween(firstDate, date) + 1}` : 'Trip plan' }));
   }
 
   joined(values: Array<string | null>): string { return values.filter(Boolean).join(' · '); }
@@ -82,8 +87,13 @@ export class ItinerarySection {
   telephoneLink(phone: string): string { return `tel:${phone.replace(/[^0-9+]/g, '')}`; }
 
   private dateLabel(date: string): string {
-    if (date === 'To be confirmed') return date;
-    return new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(`${date}T12:00:00`));
+    const parsed = calendarDate(date);
+    if (!parsed) return 'Date to be confirmed';
+    try {
+      return new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }).format(parsed);
+    } catch {
+      return 'Date to be confirmed';
+    }
   }
 
   private daysBetween(start: string, end: string): number { return Math.round((Date.parse(`${end}T12:00:00Z`) - Date.parse(`${start}T12:00:00Z`)) / 86_400_000); }

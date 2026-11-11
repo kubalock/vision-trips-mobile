@@ -201,3 +201,11 @@ export function formatMoney(amount: number | null | undefined, currency: string)
   try { return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(amount); }
   catch { return `${amount.toFixed(2)} ${currency}`; }
 }
+
+/** A calendar date as YYYY-MM-DD, or null when the value is missing or not a real date (such as 2026-02-30). */
+export function dateString(value: unknown): string | null {
+  const raw = firstString(value).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+  const date = new Date(`${raw}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === raw ? raw : null;
+}
