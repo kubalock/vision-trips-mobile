@@ -79,4 +79,70 @@ describe('AirtableService', () => {
     expect(url).toContain('fields%5B%5D=Trips');
     expect(url).not.toContain('alex@example.com');
   });
+
+  describe('records()', () => {
+    const id = (n: number) => `rec${String(n).padStart(14, '0')}`;
+    const listResponse = (ids: string[]) => new Response(JSON.stringify({ records: ids.map((recordId) => ({ id: recordId, fields: { Name: recordId } })) }), { status: 200 });
+    const requestedIds = (url: string) => [...decodeURIComponent(new URL(url).searchParams.get('filterByFormula') ?? '').matchAll(/RECORD_ID\(\)='(rec[A-Za-z0-9]{14})'/g)].map((match) => match[1]);
+
+    it('fetches linked records in chunks of 30 and keeps the requested order', async () => {
+      const ids = Array.from({ length: 65 }, (_, index) => id(index));
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => listResponse(requestedIds(String(input)).reverse()));
+
+      const records = await new AirtableService().records('appABCDEFGHIJKLMN', 'Bookings [Elements]', [...ids, ids[0], 'not-a-record-id']);
+
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(fetchMock.mock.calls.map(([url]) => requestedIds(String(url)).length)).toEqual([30, 30, 5]);
+      expect(records.map((record) => record.id)).toEqual(ids);
+    });
+
+    it('omits deleted records and failed chunks instead of failing', async () => {
+      const ids = Array.from({ length: 35 }, (_, index) => id(index));
+      vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+        const requested = requestedIds(String(input));
+        if (requested.includes(id(30))) return new Response('{"error":"NOT_AUTHORIZED"}', { status: 403 });
+        return listResponse(requested.filter((recordId) => recordId !== id(3)));
+      });
+
+      const records = await new AirtableService().records('appABCDEFGHIJKLMN', 'CMS [Locations]', ids);
+
+      expect(records).toHaveLength(29);
+      expect(records.map((record) => record.id)).not.toContain(id(3));
+    });
+
+    it('makes no request when there are no valid ids', async () => {
+      const fetchMock = vi.spyOn(globalThis, 'fetch');
+      await expect(new AirtableService().records('appABCDEFGHIJKLMN', 'Suppliers', ['', 'x'])).resolves.toEqual([]);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
+  it('retries a rate-limited list request', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('{"error":"RATE_LIMIT_REACHED"}', { status: 429, headers: { 'retry-after': '0' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ records: [] }), { status: 200 }));
+
+    await expect(new AirtableService().list('appABCDEFGHIJKLMN', 'Bookings')).resolves.toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('spaces requests per base, so one base does not wait behind another', async () => {
+    process.env.AIRTABLE_MIN_REQUEST_INTERVAL_MS = '150';
+    const startedAt: Record<string, number[]> = {};
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const base = new URL(String(input)).pathname.split('/')[2];
+      (startedAt[base] ??= []).push(Date.now());
+      return new Response(JSON.stringify({ id: 'recABCDEFGHIJKLMN', fields: {} }), { status: 200 });
+    });
+    const service = new AirtableService();
+    const begin = Date.now();
+
+    await Promise.all([
+      service.record('appAAAAAAAAAAAAAA', 'Bookings', 'recABCDEFGHIJKLMN'), service.record('appAAAAAAAAAAAAAA', 'Bookings', 'recABCDEFGHIJKLMN'),
+      service.record('appBBBBBBBBBBBBBB', 'Bookings', 'recABCDEFGHIJKLMN'), service.record('appBBBBBBBBBBBBBB', 'Bookings', 'recABCDEFGHIJKLMN'),
+    ]);
+
+    expect(startedAt['appBBBBBBBBBBBBBB'][0] - begin).toBeLessThan(100); // Not queued behind base A.
+    expect(startedAt['appAAAAAAAAAAAAAA'][1] - startedAt['appAAAAAAAAAAAAAA'][0]).toBeGreaterThanOrEqual(140); // Still spaced within a base.
+  });
 });

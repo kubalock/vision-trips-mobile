@@ -15,11 +15,31 @@ export interface AirtableListOptions {
 @Injectable()
 export class AirtableService {
   private readonly logger = new Logger(AirtableService.name);
-  private requestQueue: Promise<void> = Promise.resolve();
-  private nextRequestAt = 0;
+  /** Airtable allows 5 requests per second per base, so requests are spaced out per base, not globally. */
+  private readonly baseQueues = new Map<string, { queue: Promise<void>; nextRequestAt: number }>();
 
-  records(baseId: string, table: string, recordIds: string[]): Promise<AirtableRecord[]> {
-    return Promise.all([...new Set(recordIds)].filter(isRecordId).map((id) => this.record(baseId, table, id)));
+  /**
+   * Linked records by ID, in the order given, fetched in bulk (30 IDs per request, like the PHP client) instead of
+   * one request per record. Linked records are optional context: a deleted record or a failed chunk is logged and
+   * left out rather than failing the whole trip. Load the primary record with `record()`, which does throw.
+   */
+  async records(baseId: string, table: string, recordIds: string[]): Promise<AirtableRecord[]> {
+    const ids = [...new Set(recordIds)].filter(isRecordId);
+    if (!ids.length) return [];
+    const chunks: string[][] = [];
+    for (let index = 0; index < ids.length; index += RECORDS_PER_REQUEST) chunks.push(ids.slice(index, index + RECORDS_PER_REQUEST));
+    const results = await Promise.all(chunks.map(async (chunk) => {
+      try {
+        return await this.list(baseId, table, { maxRecords: chunk.length, filterByFormula: `OR(${chunk.map((id) => `RECORD_ID()='${id}'`).join(',')})` });
+      } catch (error) {
+        this.logger.warn(`Omitting ${chunk.length} linked ${table} record(s): ${error instanceof Error ? error.message : 'request failed'}`);
+        return [];
+      }
+    }));
+    const byId = new Map(results.flat().map((record) => [record.id, record]));
+    const found = ids.flatMap((id) => { const record = byId.get(id); return record ? [record] : []; });
+    if (found.length < ids.length) this.logger.warn(`${ids.length - found.length} linked ${table} record(s) were not found and were omitted.`);
+    return found;
   }
 
   async list(baseId: string, table: string, options: AirtableListOptions = {}): Promise<AirtableRecord[]> {
@@ -30,8 +50,7 @@ export class AirtableService {
     if (options.filterByFormula) params.set('filterByFormula', options.filterByFormula);
     for (const field of options.fields ?? []) params.append('fields[]', field);
     const url = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(table)}?${params}`;
-    await this.throttle();
-    const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(Number(process.env.AIRTABLE_REQUEST_TIMEOUT_MS ?? 10_000)) });
+    const response = await this.fetchWithRetry(baseId, url, token, `listing ${table}`);
     if (!response.ok) {
       const detail = await responseText(response);
       this.logger.warn(`Airtable ${response.status} listing ${table}: ${detail}`);
@@ -51,52 +70,54 @@ export class AirtableService {
     const token = process.env.AIRTABLE_TOKEN;
     if (!token) throw new ServiceUnavailableException('Airtable is not configured.');
 
-    const timeoutMs = Number(process.env.AIRTABLE_REQUEST_TIMEOUT_MS ?? 10_000);
     const url = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(table)}/${recordId}`;
-    const maxAttempts = positiveInteger(process.env.AIRTABLE_MAX_ATTEMPTS, 3);
+    const response = await this.fetchWithRetry(baseId, url, token, `for ${table}/${recordId}`);
+    if (response.ok) return this.parseRecord(response);
 
-    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      await this.throttle();
+    const detail = await responseText(response);
+    this.logger.warn(`Airtable ${response.status} for ${table}/${recordId}: ${detail}`);
+    if (response.status === 401) throw new ServiceUnavailableException('The Airtable token is invalid or expired.');
+    if (response.status === 403) throw new ServiceUnavailableException('The Airtable token does not have access to this base or table.');
+    if (response.status === 404) throw new NotFoundException(`Airtable could not find the ${table} record.`);
+    if (response.status === 422) {
+      throw new BadGatewayException(`Airtable rejected the ${table} request. Check that this base uses the Vision schema.`);
+    }
+    if (response.status === 429) {
+      throw new ServiceUnavailableException('Airtable is rate limiting requests. Wait a moment and try again.');
+    }
+    if (response.status >= 500) {
+      throw new ServiceUnavailableException('Airtable is temporarily unavailable. Try again shortly.');
+    }
+    throw new BadGatewayException(`Airtable rejected the ${table} request (status ${response.status}).`);
+  }
+
+  /**
+   * One Airtable GET, spaced per base and retried on network errors, 429 and 5xx (honouring Retry-After).
+   * Returns the final response, successful or not; callers map failures to their own messages.
+   */
+  private async fetchWithRetry(baseId: string, url: string, token: string, label: string): Promise<Response> {
+    const timeoutMs = Number(process.env.AIRTABLE_REQUEST_TIMEOUT_MS ?? 10_000);
+    const maxAttempts = positiveInteger(process.env.AIRTABLE_MAX_ATTEMPTS, 3);
+    for (let attempt = 1; ; attempt += 1) {
+      await this.throttle(baseId);
       let response: Response;
       try {
-        response = await fetch(url, {
-          headers: { Authorization: `Bearer ${token}` },
-          signal: AbortSignal.timeout(timeoutMs),
-        });
+        response = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(timeoutMs) });
       } catch (error) {
-        if (attempt < maxAttempts) {
-          await sleep(backoffMs(attempt));
-          continue;
-        }
-        this.logger.warn(`Airtable request failed after ${attempt} attempts: ${errorName(error)}`);
+        if (attempt < maxAttempts) { await sleep(backoffMs(attempt)); continue; }
+        this.logger.warn(`Airtable request ${label} failed after ${attempt} attempts: ${errorName(error)}`);
         throw new BadGatewayException('Airtable could not be reached.');
       }
-
-      if (response.ok) return this.parseRecord(response);
-
-      const detail = await responseText(response);
-      this.logger.warn(`Airtable ${response.status} for ${table}/${recordId}: ${detail}`);
+      if (response.ok) return response;
       if (isRetryable(response.status) && attempt < maxAttempts) {
+        this.logger.warn(`Airtable ${response.status} ${label}; retrying.`);
+        await responseText(response);
         await sleep(retryDelayMs(response, attempt));
         continue;
       }
-
-      if (response.status === 401) throw new ServiceUnavailableException('The Airtable token is invalid or expired.');
-      if (response.status === 403) throw new ServiceUnavailableException('The Airtable token does not have access to this base or table.');
-      if (response.status === 404) throw new NotFoundException(`Airtable could not find the ${table} record.`);
-      if (response.status === 422) {
-        throw new BadGatewayException(`Airtable rejected the ${table} request. Check that this base uses the Vision schema.`);
-      }
-      if (response.status === 429) {
-        throw new ServiceUnavailableException('Airtable is rate limiting requests. Wait a moment and try again.');
-      }
-      if (response.status >= 500) {
-        throw new ServiceUnavailableException('Airtable is temporarily unavailable. Try again shortly.');
-      }
-      throw new BadGatewayException(`Airtable rejected the ${table} request (status ${response.status}).`);
+      // Leave the body unread so the caller can include it in its own log line.
+      return response;
     }
-
-    throw new ServiceUnavailableException('Airtable is temporarily unavailable. Try again shortly.');
   }
 
   async updateRecord(baseId: string, table: string, recordId: string, fields: Record<string, unknown>): Promise<AirtableRecord> {
@@ -107,7 +128,7 @@ export class AirtableService {
     const token = process.env.AIRTABLE_TOKEN;
     if (!token) throw new ServiceUnavailableException('Airtable is not configured.');
     const url = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(table)}`;
-    await this.throttle();
+    await this.throttle(baseId);
     const response = await fetch(url, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -137,7 +158,7 @@ export class AirtableService {
     const token = process.env.AIRTABLE_TOKEN;
     if (!token) throw new ServiceUnavailableException('Airtable is not configured.');
     const url = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(table)}/${recordId}${suffix ? `/${suffix}` : ''}`;
-    await this.throttle();
+    await this.throttle(baseId);
     const response = await fetch(url, {
       method,
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -157,19 +178,22 @@ export class AirtableService {
     return this.parseRecord(response);
   }
 
-  private async throttle(): Promise<void> {
-    const previous = this.requestQueue;
+  private async throttle(baseId: string): Promise<void> {
+    const state = this.baseQueues.get(baseId) ?? { queue: Promise.resolve(), nextRequestAt: 0 };
+    this.baseQueues.set(baseId, state);
+    const previous = state.queue;
     let release: () => void = () => {};
-    this.requestQueue = new Promise<void>((resolve) => { release = resolve; });
+    state.queue = new Promise<void>((resolve) => { release = resolve; });
     await previous;
     try {
       const intervalMs = nonNegativeInteger(process.env.AIRTABLE_MIN_REQUEST_INTERVAL_MS, 220);
-      await sleep(Math.max(0, this.nextRequestAt - Date.now()));
-      this.nextRequestAt = Date.now() + intervalMs;
+      await sleep(Math.max(0, state.nextRequestAt - Date.now()));
+      state.nextRequestAt = Date.now() + intervalMs;
     } finally {
       release();
     }
   }
+
 
   private async parseRecord(response: Response): Promise<AirtableRecord> {
     try {
@@ -185,6 +209,9 @@ export class AirtableService {
 function isRecordId(value: string): boolean {
   return /^rec[A-Za-z0-9]{14}$/.test(value);
 }
+
+/** Same chunk size as the PHP client; keeps the OR(RECORD_ID()=...) formula URL well under Airtable's length limit. */
+const RECORDS_PER_REQUEST = 30;
 
 function isRetryable(status: number): boolean {
   return status === 429 || status >= 500;

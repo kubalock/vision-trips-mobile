@@ -30,7 +30,8 @@ export class TripsService {
     const booking = await this.airtable.record(baseId, 'Bookings', recordId);
     const brandId = strings(pick(booking.fields, bookingFields.brand))[0];
     const [brand, members, elements, payments, people, customers, upsells, communications] = await Promise.all([
-      brandId ? this.airtable.record(baseId, 'Brands & Branches', brandId) : Promise.resolve(emptyRecord()),
+      // Only the booking itself is required; an unreadable brand falls back to defaults like a booking without one.
+      brandId ? this.airtable.record(baseId, 'Brands & Branches', brandId).catch(() => emptyRecord()) : Promise.resolve(emptyRecord()),
       this.airtable.records(baseId, 'Members', strings(pick(booking.fields, bookingFields.member))),
       this.airtable.records(baseId, 'Bookings [Elements]', strings(pick(booking.fields, bookingFields.elements))),
       this.airtable.records(baseId, 'Bookings [Payments]', strings(pick(booking.fields, bookingFields.payments))),
