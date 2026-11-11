@@ -41,7 +41,10 @@
         <button type="button" class="vt-trip-status-card__refresh" [disabled]="refreshing() || !online()" (click)="refreshCurrentTrip()">{{ refreshing() ? 'Refreshing…' : 'Refresh' }}</button>
       </aside>
       @if (error()) {
-        <div class="vt-notice vt-notice--bad vt-trip-error" role="alert"><p>{{ error() }}</p><button type="button" class="vt-trip-error__close" aria-label="Dismiss message" data-engagement="Dismiss error" (click)="dismissError()"><vt-icon name="close" [size]="18" /></button></div>
+        <div class="vt-trip-error" role="alert"><span class="vt-trip-error__icon" aria-hidden="true"><vt-icon name="alert" [size]="18" /></span><p>{{ error() }}</p><button type="button" class="vt-trip-error__close" aria-label="Dismiss message" data-engagement="Dismiss error" (click)="dismissError()"><vt-icon name="close" [size]="18" /></button></div>
+      }
+      @if (blockedPageUrl(); as blockedUrl) {
+        <div class="vt-notice vt-notice--warn vt-blocked-page" role="status"><p>Your browser blocked the payment page from opening.</p><a class="vt-btn vt-btn--primary vt-primary-action" [href]="blockedUrl" target="_blank" rel="noopener noreferrer" data-engagement="Open blocked payment page" (click)="openBlockedPage()">Open secure payment page</a></div>
       }
       @if (showNotifications()) {
         <section id="customer-notifications" class="vt-notifications" aria-label="Customer notifications">
@@ -95,10 +98,15 @@
       } @else if (activeView() === 'itinerary') {
         <app-itinerary-section [items]="currentTrip.itinerary" />
       } @else if (activeView() === 'payments') {
-        @if (paymentReturnState() === 'updated') { <p class="vt-notice vt-notice--ok">Payment received. Your balance has been updated.</p> }
-        @else if (paymentReturnState() === 'unchanged') { <p class="vt-notice vt-notice--warn">Your payment is still awaiting confirmation. Pull the latest trip details again shortly if you completed it.</p> }
-        @else if (paymentReturnState() === 'checking') { <p class="vt-notice">Checking for your payment…</p> }
-        @else if (paymentReturnState() === 'error') { <p class="vt-notice vt-notice--bad">We could not check the latest payment status. Your travel agent can confirm whether it was received.</p> }
+        @if (paymentStatus(); as status) {
+          <section class="vt-status-card" [attr.data-tone]="status.tone" [attr.role]="status.tone === 'info' ? 'status' : 'alert'" aria-live="polite">
+            <span class="vt-status-card__icon" aria-hidden="true"><vt-icon [name]="status.icon" [size]="20" /></span>
+            <div class="vt-status-card__copy"><strong>{{ status.title }}</strong><p>{{ status.body }}</p>
+              @if (status.action) { <button type="button" class="vt-status-card__action" data-engagement="Check payment again" (click)="recheckPayment()">{{ status.action }}</button> }
+            </div>
+            @if (status.tone !== 'info') { <button type="button" class="vt-status-card__close" aria-label="Dismiss" data-engagement="Dismiss payment status" (click)="dismissPaymentStatus()"><vt-icon name="close" [size]="18" /></button> }
+          </section>
+        }
         @if (currentTrip.payments; as payments) { <app-payments-section [payments]="payments" [openingPaymentId]="openingPaymentId()" [actionsDisabled]="!online()" (pay)="openPayment($event)" (payCustom)="openCustomPayment($event)" /> } @else { <p class="mt-5 rounded-2xl bg-white p-5 text-slate-600 ring-1 ring-slate-200">Payment information is only available to the lead customer.</p> }
       } @else if (activeView() === 'documents') {
         <app-documents-section [documents]="currentTrip.documents" [statuses]="documentStatuses()" [downloadingId]="downloadingDocumentId()" (download)="downloadDocument($event)" />

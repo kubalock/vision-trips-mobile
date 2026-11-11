@@ -11,6 +11,8 @@ import { BrandAssetsStore } from './core/storage/brand-assets.store';
 import { groupSavedTrips } from './core/storage/trip-library';
 import { CustomerNotificationsStore, type CustomerNotification } from './core/storage/customer-notifications.store';
 import { DocumentWalletStore, type WalletStatus } from './core/storage/document-wallet.store';
+import { ExternalPages, type PendingExternalPage } from './core/platform/external-pages';
+import { Directory, Filesystem, Encoding } from '@capacitor/filesystem';
 import { DocumentsSection } from './features/trip/documents-section';
 import { DestinationsSection } from './features/trip/destinations-section';
 import { CommunicationsSection } from './features/trip/communications-section';
@@ -22,7 +24,7 @@ import { StageExperienceSection } from './features/trip/stage-experience-section
 import { BookingJourneySection } from './features/trip/booking-journey-section';
 import { CustomerAccountSection } from './features/account/customer-account-section';
 import { BrandSupportSection } from './features/trip/brand-support-section';
-import { VtIcon } from './shared/lucide-icon';
+import { VtIcon, type VtIconName } from './shared/lucide-icon';
 import { EuropeanDatePipe, formatEuropeanDate } from './shared/european-date.pipe';
 
 type AppView = 'home' | 'itinerary' | 'payments' | 'documents' | 'help' | 'account';
@@ -41,6 +43,9 @@ export class App implements OnInit, OnDestroy {
   private readonly brandAssets = inject(BrandAssetsStore);
   private readonly documentWallet = inject(DocumentWalletStore);
   private readonly customerNotifications = inject(CustomerNotificationsStore);
+  private readonly externalPages = inject(ExternalPages);
+  /** Set when the browser blocked a payment page; the template offers a direct link instead. */
+  protected readonly blockedPageUrl = signal<string | null>(null);
   protected readonly baseId = signal('');
   protected readonly recordId = signal('');
   protected readonly submitting = signal(false);
@@ -66,6 +71,15 @@ export class App implements OnInit, OnDestroy {
   protected readonly messageSent = signal(false);
   protected readonly openingPaymentId = signal<string | null>(null);
   protected readonly paymentReturnState = signal<'idle' | 'checking' | 'updated' | 'unchanged' | 'error'>('idle');
+  protected readonly paymentStatus = computed<PaymentStatusView | null>(() => {
+    switch (this.paymentReturnState()) {
+      case 'checking': return { tone: 'info', icon: 'loader', title: 'Checking your payment', body: 'This usually takes less than a minute. You can keep using the app.', action: null };
+      case 'updated': return { tone: 'ok', icon: 'check', title: 'Payment received', body: 'Thank you. Your balance has been updated.', action: null };
+      case 'unchanged': return { tone: 'warn', icon: 'pound', title: 'Waiting for confirmation', body: 'Payments can take a few minutes to show here. We’ll check again when you come back to the app.', action: 'Check now' };
+      case 'error': return { tone: 'warn', icon: 'alert', title: 'We couldn’t confirm your payment yet', body: 'If you’ve paid, there’s nothing more to do. It will appear here once it has been processed.', action: 'Check again' };
+      default: return null;
+    }
+  });
   protected readonly online = signal(true);
   protected readonly refreshing = signal(false);
   protected readonly sharing = signal(false);
@@ -101,6 +115,8 @@ export class App implements OnInit, OnDestroy {
   private paymentIdAwaiting: string | null = null;
   private resumeListener: PluginListenerHandle | null = null;
   private backButtonListener: PluginListenerHandle | null = null;
+  private browserClosedListener: { remove: () => Promise<void> } | null = null;
+  private readonly paymentPollDelaysMs: readonly number[] = PAYMENT_POLL_DELAYS_MS;
   private networkListener: PluginListenerHandle | null = null;
   private resendTimer: ReturnType<typeof setInterval> | null = null;
   private externalContentTimer: ReturnType<typeof setTimeout> | null = null;
@@ -117,6 +133,7 @@ export class App implements OnInit, OnDestroy {
       void CapacitorApp.addListener('appStateChange', ({ isActive }) => {
         if (isActive) void this.checkPaymentReturn();
       }).then((listener) => { this.resumeListener = listener; });
+      void this.externalPages.onClosed(() => void this.checkPaymentReturn()).then((listener) => { this.browserClosedListener = listener; });
       if (Capacitor.getPlatform() === 'android') {
         void CapacitorApp.addListener('backButton', () => this.handleAndroidBack()).then((listener) => {
           this.backButtonListener = listener;
@@ -129,6 +146,7 @@ export class App implements OnInit, OnDestroy {
     document.body.classList.remove('vt');
     void this.resumeListener?.remove();
     void this.backButtonListener?.remove();
+    void this.browserClosedListener?.remove();
     void this.networkListener?.remove();
     if (this.resendTimer) clearInterval(this.resendTimer);
     if (this.externalContentTimer) clearTimeout(this.externalContentTimer);
@@ -244,9 +262,11 @@ export class App implements OnInit, OnDestroy {
       await this.refreshTripAfterWrite();
       if (result.paymentUrl) {
         this.paymentPaidBefore = currentTrip.payments?.paid ?? 0;
+        this.paymentIdAwaiting = null;
         this.paymentAwaitingReturn = true;
         this.paymentOpenedAt = Date.now();
-        window.open(result.paymentUrl, '_blank', 'noopener,noreferrer');
+        // Not reserved up front (acceptance may not return a payment link), so a blocked page falls back to a link.
+        await this.openPaymentPage(result.paymentUrl, null);
       }
     } catch (error) {
       this.error.set(this.apiError(error, 'We could not record your acceptance. Please try again or contact your travel agent.'));
@@ -290,6 +310,19 @@ export class App implements OnInit, OnDestroy {
     const currentSession = this.session();
     const payments = this.trip()?.payments;
     if (!currentSession || !payments || this.openingPaymentId() || !this.online()) return;
+    const item = payments.items.find((payment) => payment.id === paymentId);
+    if (item?.actionUrl) {
+      // The booking already has a payment link: open it straight from the tap, no API or Airtable round trip.
+      this.paymentReturnState.set('idle');
+      this.error.set('');
+      this.paymentPaidBefore = payments.paid;
+      this.paymentIdAwaiting = paymentId;
+      this.paymentAwaitingReturn = true;
+      this.paymentOpenedAt = Date.now();
+      await this.openPaymentPage(item.actionUrl, null);
+      return;
+    }
+    const page = this.externalPages.reserve(); // Must happen during the tap, before any await.
     this.openingPaymentId.set(paymentId);
     this.paymentReturnState.set('idle');
     this.error.set('');
@@ -299,8 +332,9 @@ export class App implements OnInit, OnDestroy {
       this.paymentIdAwaiting = paymentId;
       this.paymentAwaitingReturn = true;
       this.paymentOpenedAt = Date.now();
-      window.open(link.url, '_blank', 'noopener,noreferrer');
+      await this.openPaymentPage(link.url, page);
     } catch (error) {
+      page.cancel();
       this.error.set(this.apiError(error, 'This payment link is no longer available. Refresh the trip and try again.'));
       this.paymentReturnState.set('error');
     } finally {
@@ -311,13 +345,25 @@ export class App implements OnInit, OnDestroy {
   protected async openCustomPayment(amount: number): Promise<void> {
     const currentSession = this.session(); const payments = this.trip()?.payments;
     if (!currentSession || !payments?.customPayments.enabled || this.openingPaymentId() || !this.online()) return;
+    const page = this.externalPages.reserve(); // Must happen during the tap, before any await.
     this.openingPaymentId.set('custom'); this.paymentReturnState.set('idle'); this.error.set('');
     try {
       const link = await this.withSession(currentSession, (accessToken) => this.api.customPaymentLink(amount, accessToken));
       this.paymentPaidBefore = payments.paid; this.paymentIdAwaiting = null; this.paymentAwaitingReturn = true; this.paymentOpenedAt = Date.now();
-      window.open(link.url, '_blank', 'noopener,noreferrer');
-    } catch (error) { this.error.set(this.apiError(error, 'We could not create that payment link. Check the amount and try again.')); this.paymentReturnState.set('error'); }
+      await this.openPaymentPage(link.url, page);
+    } catch (error) { page.cancel(); this.error.set(this.apiError(error, 'We could not create that payment link. Check the amount and try again.')); this.paymentReturnState.set('error'); }
     finally { this.openingPaymentId.set(null); }
+  }
+
+  private async openPaymentPage(url: string, page: PendingExternalPage | null): Promise<void> {
+    this.blockedPageUrl.set(null);
+    const opened = page ? await page.open(url) : await this.externalPages.open(url);
+    if (!opened) this.blockedPageUrl.set(url);
+  }
+
+  protected openBlockedPage(): void {
+    // A real tap on the fallback link, so the browser allows the new tab; the anchor's own href does the navigation.
+    this.blockedPageUrl.set(null);
   }
 
   protected async shareWithTraveller(): Promise<void> {
@@ -364,13 +410,16 @@ export class App implements OnInit, OnDestroy {
     if (!this.paymentAwaitingReturn || Date.now() - this.paymentOpenedAt < 1_000) return;
     const currentSession = this.session();
     if (!currentSession) return;
+    if (Date.now() - this.paymentOpenedAt > PAYMENT_RECHECK_WINDOW_MS) { this.paymentAwaitingReturn = false; this.paymentIdAwaiting = null; return; }
     this.paymentAwaitingReturn = false;
     this.paymentReturnState.set('checking');
+    let reconciled = false;
     try {
       let latest: TripSnapshot | null = null;
-      let reconciled = false;
-      for (let attempt = 0; attempt < 6; attempt += 1) {
-        if (attempt > 0) await delay(2_000);
+      // Mint reports to Airtable via a webhook, which can take a minute or more; back off over roughly 70 seconds.
+      for (const [attempt, waitMs] of this.paymentPollDelaysMs.entries()) {
+        if (attempt > 0) await delay(waitMs);
+        if (!this.session()) return; // Trip closed or signed out while waiting.
         latest = await this.withSession(this.session() ?? currentSession, (accessToken) => this.api.refreshTrip(accessToken));
         const paidNow = latest.payments?.paid ?? 0;
         const itemNow = latest.payments?.items.find((item) => item.id === this.paymentIdAwaiting);
@@ -391,7 +440,9 @@ export class App implements OnInit, OnDestroy {
     } catch {
       this.paymentReturnState.set('error');
     } finally {
-      this.paymentIdAwaiting = null;
+      // Not confirmed yet: check again the next time the user comes back to the app, within the recheck window.
+      if (!reconciled && this.session() && Date.now() - this.paymentOpenedAt <= PAYMENT_RECHECK_WINDOW_MS) this.paymentAwaitingReturn = true;
+      else this.paymentIdAwaiting = null;
     }
   }
 
@@ -539,6 +590,21 @@ export class App implements OnInit, OnDestroy {
     this.storedSecurely.set(await this.savedTrips.save(response.snapshot, response.session));
     await this.reloadSavedTrips();
     if (response.trustedDeviceToken) await this.savedTrips.saveDeviceTrust(response.trustedDeviceToken);
+  }
+
+  protected dismissPaymentStatus(): void {
+    this.paymentReturnState.set('idle');
+  }
+
+  protected recheckPayment(): void {
+    if (this.paymentReturnState() === 'checking') return;
+    if (Date.now() - this.paymentOpenedAt <= PAYMENT_RECHECK_WINDOW_MS) {
+      this.paymentAwaitingReturn = true;
+      void this.checkPaymentReturn();
+    } else {
+      this.paymentReturnState.set('idle');
+      void this.refreshCurrentTrip();
+    }
   }
 
   protected dismissError(): void {
@@ -760,6 +826,7 @@ export class App implements OnInit, OnDestroy {
     this.paymentAwaitingReturn = false;
     this.paymentReturnState.set('idle');
     this.openingPaymentId.set(null);
+    this.blockedPageUrl.set(null);
     this.shareResult.set('');
     this.documentStatuses.set({});
     this.externalContent.set(null);
@@ -950,13 +1017,16 @@ export class App implements OnInit, OnDestroy {
     this.error.set('');
     try {
       const blob = await this.withSession(session, (accessToken) => this.api.downloadCalendar(accessToken));
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `${trip.summary.reference.replace(/[^A-Za-z0-9_-]+/g, '-')}-itinerary.ics`;
-      anchor.click();
-      URL.revokeObjectURL(url);
+      const filename = `${trip.summary.reference.replace(/[^A-Za-z0-9_-]+/g, '-')}-itinerary.ics`;
+      if (Capacitor.isNativePlatform()) {
+        // WebView downloads are ignored on iOS/Android: write the file and hand it to the share sheet ("Add to Calendar").
+        const { uri } = await Filesystem.writeFile({ path: `calendar/${filename}`, directory: Directory.Cache, recursive: true, encoding: Encoding.UTF8, data: await blob.text() });
+        await Share.share({ title: `${trip.summary.name} itinerary`, files: [uri], dialogTitle: 'Add to calendar' });
+      } else {
+        this.downloadBlob(blob, filename);
+      }
     } catch (error) {
+      if (isShareCancelled(error)) return;
       this.error.set(this.apiError(error, 'We could not create the calendar file. Please try again.'));
     }
   }
@@ -985,6 +1055,7 @@ export class App implements OnInit, OnDestroy {
         this.downloadBlob(blob, `${trip.summary.reference.replace(/[^A-Za-z0-9_-]+/g, '-')}-${document.title.replace(/[^A-Za-z0-9_-]+/g, '-')}${fileExtension(blob.type)}`);
       }
     } catch (error) {
+      if (isShareCancelled(error)) return;
       this.error.set(this.online() ? this.apiError(error, 'We could not create that document. Please try again.') : 'This document has not been saved for offline use yet. Connect to download it.');
     } finally {
       this.downloadingDocumentId.set(null);
@@ -1001,18 +1072,21 @@ export class App implements OnInit, OnDestroy {
     anchor.href = url;
     anchor.download = filename;
     anchor.click();
-    URL.revokeObjectURL(url);
+    // Revoking straight away can cancel the download in Safari/Firefox; give the browser time to start it.
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 
   private apiError(error: unknown, fallback: string): string {
-    if (!(error instanceof HttpErrorResponse)) return fallback;
-    if (error.status === 0) return 'The local API is not reachable. Make sure npm run start:api is running on port 3000.';
-    const message = error.error?.message;
-    if (typeof message === 'string' && message.trim()) return message;
-    if (Array.isArray(message)) return message.filter((item): item is string => typeof item === 'string').join(' ');
-    return fallback;
+    return customerErrorMessage(error, fallback);
   }
+
 }
+
+/** Waits between payment-status checks after returning from the payment page (first check is immediate). */
+// Each check reloads the whole trip (~20 Airtable reads), so keep it to six checks over about 70 seconds.
+export const PAYMENT_POLL_DELAYS_MS = [0, 5_000, 10_000, 15_000, 20_000, 20_000];
+/** How long after opening a payment page a later return to the app still triggers a re-check. */
+const PAYMENT_RECHECK_WINDOW_MS = 30 * 60_000;
 
 function isSnapshotStale(snapshot: TripSnapshot): boolean {
   return !snapshot.freshness.nextRefreshAfter || Date.parse(snapshot.freshness.nextRefreshAfter) <= Date.now();
@@ -1027,4 +1101,29 @@ function initialAppearance(): Appearance {
 }
 
 function fileExtension(mimeType: string): string { return mimeType.includes('pdf') ? '.pdf' : mimeType.includes('png') ? '.png' : mimeType.includes('jpeg') ? '.jpg' : '.bin'; }
+interface PaymentStatusView { tone: 'info' | 'ok' | 'warn'; icon: VtIconName; title: string; body: string; action: string | null }
+
+/** Words that mean a message was written for developers, not customers. */
+const INTERNAL_ERROR_TERMS = /airtable|token|mint|webhook|schema|api key|base id|record id|npm |port \d|status \d{3}/i;
+
+/**
+ * Turns an API failure into something a traveller can act on. Server text is only shown for client errors (4xx)
+ * that our API phrases for customers; infrastructure and configuration failures get a calm, generic message.
+ */
+export function customerErrorMessage(error: unknown, fallback: string): string {
+  if (!(error instanceof HttpErrorResponse)) return fallback;
+  if (error.status === 0) return 'We can’t reach Vision Trips right now. Check your connection and try again.';
+  if (error.status === 401) return 'For your security, please open your trip link again to continue.';
+  if (error.status === 429) return 'Lots of requests at once. Please wait a moment and try again.';
+  if (error.status >= 500) return 'Our booking system is busy right now. Please try again in a minute.';
+  const raw = error.error?.message;
+  const message = typeof raw === 'string' ? raw.trim() : Array.isArray(raw) ? raw.filter((item): item is string => typeof item === 'string').join(' ') : '';
+  return message && !INTERNAL_ERROR_TERMS.test(message) ? message : fallback;
+}
+
+/** Capacitor Share rejects with "Share canceled" when the user dismisses the sheet; that is not an error. */
+export function isShareCancelled(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+  return /cancel/i.test(message) || (error instanceof DOMException && error.name === 'AbortError');
+}
 function delay(milliseconds: number): Promise<void> { return new Promise((resolve) => setTimeout(resolve, milliseconds)); }

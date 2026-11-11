@@ -10,6 +10,11 @@ export class MintPaymentsService {
   constructor(private readonly airtable: AirtableService, private readonly trips: TripsService) {}
 
   async link(baseId: string, recordId: string, paymentId: string, customAmount?: unknown): Promise<PaymentLinkResponse> {
+    if (customAmount === undefined) {
+      // A stored "Payment Link URL" needs no Mint credentials, so answer from the snapshot alone.
+      const stored = (await this.trips.snapshot(baseId, recordId, 'primary_customer')).payments?.items.find((item) => item.id === paymentId);
+      if (stored?.actionUrl && stored.canPay && stored.status !== 'paid') return { paymentId: stored.id, url: stored.actionUrl, amount: stored.amount, currency: stored.currency };
+    }
     const context = await this.context(baseId, recordId);
     const snapshot = context.snapshot;
     if (customAmount !== undefined) {
@@ -64,7 +69,7 @@ export class MintPaymentsService {
     if (!brandId) throw new ServiceUnavailableException('This booking does not have a payment brand.');
     const [brand, payments, snapshot] = await Promise.all([
       this.airtable.record(baseId, 'Brands & Branches', brandId),
-      this.airtable.records(baseId, process.env.AIRTABLE_PAYMENTS_TABLE?.trim() || 'Payments', strings(pick(booking.fields, bookingFields.payments))),
+      this.airtable.records(baseId, process.env.AIRTABLE_PAYMENTS_TABLE?.trim() || 'Bookings [Payments]', strings(pick(booking.fields, bookingFields.payments))),
       this.trips.snapshot(baseId, recordId, 'primary_customer'),
     ]);
     return { baseId, booking, payments, snapshot, config: { apiKey: firstString(pick(brand.fields, brandFields.mintApiKey)), businessUnit: firstString(pick(brand.fields, brandFields.mintBusinessUnit)), allowCustom: truthy(pick(brand.fields, brandFields.mintAllowCustom)), methods: strings(pick(brand.fields, brandFields.mintMethods)).map((item) => item.toUpperCase()), webhookUrl: firstString(pick(brand.fields, brandFields.mintWebhook)), bookingId: firstString(pick(booking.fields, bookingFields.mintBookingId)) } };

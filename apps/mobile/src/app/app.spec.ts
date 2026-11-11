@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
-import { App } from './app';
+import { App, customerErrorMessage, isShareCancelled } from './app';
 import { VisionApiService } from './core/api/vision-api.service';
 
 describe('App', () => {
@@ -127,8 +127,14 @@ describe('App', () => {
       const fixture = TestBed.createComponent(App);
       const app = fixture.componentInstance as unknown as Internals;
       app.session.set({ accessToken: 'old-access', accessExpiresAt: future(), refreshToken: 'old-refresh', refreshExpiresAt: future() });
-      return { app, api: TestBed.inject(VisionApiService), fixture };
+      app.activeView.set('documents'); // Lightest tab to render with the minimal snapshot used here.
+      const api = TestBed.inject(VisionApiService);
+      vi.spyOn(api, 'externalContent').mockReturnValue(new Promise(() => undefined)); // Background refresh not under test.
+      vi.spyOn(api, 'relatedQuotations').mockReturnValue(new Promise(() => undefined));
+      return { app, api, fixture };
     }
+
+    afterEach(() => { localStorage.clear(); vi.restoreAllMocks(); });
 
     it('retries a payment link with a renewed token after a 401', async () => {
       const { app, api } = setup();
@@ -181,6 +187,67 @@ describe('App', () => {
       }
     });
 
+    it('opens a stored payment link straight from the tap without calling the API', async () => {
+      const { app, api } = setup();
+      app.trip.set({ tripId: 'trip-1', payments: { paid: 0, items: [{ id: 'pay-1', actionUrl: 'https://pay.example/balance' }] } });
+      const link = vi.spyOn(api, 'paymentLink');
+      const page = { opener: {} as unknown };
+      const open = vi.spyOn(window, 'open').mockReturnValue(page as unknown as Window);
+
+      await app.openPayment('pay-1');
+
+      expect(link).not.toHaveBeenCalled();
+      expect(open).toHaveBeenCalledWith('https://pay.example/balance', '_blank');
+      expect(page.opener).toBeNull();
+    });
+
+    it('offers a direct link when the browser blocks the payment page', async () => {
+      const { app, api } = setup();
+      app.trip.set({ tripId: 'trip-1', payments: { paid: 0, items: [] } });
+      vi.spyOn(api, 'paymentLink').mockResolvedValue({ url: 'https://pay.example/x' } as never);
+      vi.spyOn(window, 'open').mockReturnValue(null);
+
+      await app.openPayment('pay-1');
+
+      expect((app as unknown as { blockedPageUrl: () => string | null }).blockedPageUrl()).toBe('https://pay.example/x');
+    });
+
+    it('keeps checking for an unconfirmed payment the next time the app is opened', async () => {
+      const { app, api } = setup();
+      const internals = app as unknown as {
+        paymentPollDelaysMs: number[]; paymentAwaitingReturn: boolean; paymentOpenedAt: number; paymentPaidBefore: number;
+        paymentReturnState: () => string; checkPaymentReturn: () => Promise<void>;
+      };
+      internals.paymentPollDelaysMs = [0, 0];
+      const unpaid = { ...(minimalTrip() as object), payments: { paid: 0, items: [] } };
+      const paid = { ...(minimalTrip() as object), payments: { paid: 100, items: [] } };
+      app.trip.set(unpaid);
+      const refresh = vi.spyOn(api, 'refreshTrip').mockResolvedValue(unpaid as never);
+      internals.paymentAwaitingReturn = true; internals.paymentOpenedAt = Date.now() - 5_000; internals.paymentPaidBefore = 0;
+
+      await internals.checkPaymentReturn();
+      expect(refresh).toHaveBeenCalledTimes(2);
+      expect(internals.paymentReturnState()).toBe('unchanged');
+      expect(internals.paymentAwaitingReturn).toBe(true);
+
+      refresh.mockResolvedValue(paid as never);
+      await internals.checkPaymentReturn();
+      expect(internals.paymentReturnState()).toBe('updated');
+      expect(internals.paymentAwaitingReturn).toBe(false);
+    });
+
+    it('stops re-checking a payment opened more than 30 minutes ago', async () => {
+      const { app, api } = setup();
+      const internals = app as unknown as { paymentAwaitingReturn: boolean; paymentOpenedAt: number; checkPaymentReturn: () => Promise<void> };
+      const refresh = vi.spyOn(api, 'refreshTrip');
+      internals.paymentAwaitingReturn = true; internals.paymentOpenedAt = Date.now() - 31 * 60_000;
+
+      await internals.checkPaymentReturn();
+
+      expect(refresh).not.toHaveBeenCalled();
+      expect(internals.paymentAwaitingReturn).toBe(false);
+    });
+
     it('forgets the trusted-device token on sign-out', async () => {
       const { app, api } = setup();
       localStorage.setItem('vision-trips:device-trust', 'trust-token');
@@ -192,6 +259,33 @@ describe('App', () => {
       expect(localStorage.getItem('vision-trips:device-trust')).toBeNull();
       expect(app.session()).toBeNull();
     });
+  });
+});
+
+describe('customerErrorMessage', () => {
+  const http = (status: number, message?: string) => new HttpErrorResponse({ status, error: message ? { message } : null });
+
+  it('never shows infrastructure or configuration details to travellers', () => {
+    expect(customerErrorMessage(http(503, 'The Airtable token does not have access to this base or table.'), 'fallback')).toBe('Our booking system is busy right now. Please try again in a minute.');
+    expect(customerErrorMessage(http(404, 'Airtable could not find the Bookings record.'), 'Fallback copy.')).toBe('Fallback copy.');
+  });
+
+  it('keeps customer-facing validation messages from the API', () => {
+    expect(customerErrorMessage(http(400, 'Enter an amount between 0.01 and 498.00.'), 'fallback')).toBe('Enter an amount between 0.01 and 498.00.');
+  });
+
+  it('explains offline and expired-session cases plainly', () => {
+    expect(customerErrorMessage(http(0), 'fallback')).toContain('Check your connection');
+    expect(customerErrorMessage(http(401), 'fallback')).toContain('open your trip link again');
+    expect(customerErrorMessage(new Error('boom'), 'Fallback copy.')).toBe('Fallback copy.');
+  });
+});
+
+describe('isShareCancelled', () => {
+  it('treats a dismissed share sheet as a non-error', () => {
+    expect(isShareCancelled(new Error('Share canceled'))).toBe(true);
+    expect(isShareCancelled(new DOMException('aborted', 'AbortError'))).toBe(true);
+    expect(isShareCancelled(new Error('Network failure'))).toBe(false);
   });
 });
 

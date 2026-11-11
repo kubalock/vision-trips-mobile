@@ -22,5 +22,18 @@ describe('MintPaymentsService', () => {
     const request = vi.mocked(fetch).mock.calls[0]?.[1];
     expect(typeof request?.body).toBe('string');
     expect(JSON.parse(request?.body as string)).toMatchObject({ webhook_url: 'https://airtable.com/app/webhook', amount: '250.00', booking: 'BK.123' });
+    expect(airtable.records).toHaveBeenCalledWith('appABCDEFGHIJKLMN', 'Bookings [Payments]', [paymentRecordId]);
+  });
+
+  it('returns a stored payment link without reading Mint settings from Airtable', async () => {
+    const airtable = { record: vi.fn(), records: vi.fn() };
+    const trips = { snapshot: vi.fn().mockResolvedValue({ tripId: 'trp_public', payments: { currency: 'GBP', items: [{ id: 'pay_1', label: 'Balance', amount: 498, currency: 'GBP', canPay: true, status: 'outstanding', actionUrl: 'https://pay.example/balance' }] } }) };
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const service = new MintPaymentsService(airtable as never, trips as never);
+
+    await expect(service.link('appABCDEFGHIJKLMN', 'recBOOKINGABCDEFG', 'pay_1')).resolves.toEqual({ paymentId: 'pay_1', url: 'https://pay.example/balance', amount: 498, currency: 'GBP' });
+    expect(airtable.record).not.toHaveBeenCalled();
+    expect(airtable.records).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
