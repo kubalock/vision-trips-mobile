@@ -122,6 +122,11 @@ export class App implements OnInit, OnDestroy {
   protected readonly accountLoading = signal(false);
   protected readonly accountSaving = signal(false);
   protected readonly accountNotice = signal('');
+  /** Failures shown beside the thing that failed, each with its own retry (not in the global banner). */
+  protected readonly accountError = signal('');
+  protected readonly documentFailure = signal<{ id: string; message: string } | null>(null);
+  protected readonly calendarError = signal('');
+  protected readonly creatingCalendar = signal(false);
   protected readonly openingAccountTripId = signal<string | null>(null);
   /** What the traveller chose; 'system' follows the device setting live. */
   protected readonly appearancePreference = signal<AppearancePreference>(initialAppearancePreference());
@@ -793,12 +798,15 @@ export class App implements OnInit, OnDestroy {
     this.clearOpenTrip(); this.savedTripList.set([]); this.showTripLibrary.set(false); this.storedSecurely.set(false);
   }
 
+  protected retryAccount(): void { void this.loadCustomerAccount(); }
+
   private async loadCustomerAccount(): Promise<void> {
     const generation = this.tripGeneration;
     const currentSession = this.session(); if (!currentSession || this.accountLoading() || this.trip()?.accessScope !== 'primary_customer') return;
-    this.accountLoading.set(true); this.accountNotice.set(''); this.error.set('');
+    this.accountLoading.set(true); this.accountNotice.set(''); this.accountError.set('');
     try { const account = await this.withSession(currentSession, (accessToken) => this.api.customerAccount(accessToken)); if (this.isCurrentTrip(generation)) this.customerAccount.set(account); }
-    catch (error) { if (this.isCurrentTrip(generation)) { this.customerAccount.set(null); this.error.set(this.apiError(error, 'We could not load your customer account.')); } }
+    // Keep an account that is already on screen (and the traveller's unsaved edits); just offer a retry.
+    catch (error) { if (this.isCurrentTrip(generation)) this.accountError.set(this.apiError(error, 'Check your connection and try again.')); }
     finally { if (this.isCurrentTrip(generation)) this.accountLoading.set(false); }
   }
 
@@ -986,6 +994,7 @@ export class App implements OnInit, OnDestroy {
     this.messageTopic.set('itinerary');
     this.error.set('');
     this.signedOut.set(false);
+    this.accountError.set(''); this.documentFailure.set(null); this.calendarError.set(''); this.creatingCalendar.set(false);
     return generation;
   }
 
@@ -1155,8 +1164,9 @@ export class App implements OnInit, OnDestroy {
   protected async downloadCalendar(): Promise<void> {
     const session = this.session();
     const trip = this.trip();
-    if (!session || !trip) return;
-    this.error.set('');
+    if (!session || !trip || this.creatingCalendar()) return;
+    this.calendarError.set('');
+    this.creatingCalendar.set(true);
     try {
       const blob = await this.withSession(session, (accessToken) => this.api.downloadCalendar(accessToken));
       const filename = `${trip.summary.reference.replace(/[^A-Za-z0-9_-]+/g, '-')}-itinerary.ics`;
@@ -1169,7 +1179,9 @@ export class App implements OnInit, OnDestroy {
       }
     } catch (error) {
       if (isShareCancelled(error)) return;
-      this.error.set(this.apiError(error, 'We could not create the calendar file. Please try again.'));
+      this.calendarError.set(this.online() ? this.apiError(error, 'Something went wrong creating it.') : 'You’re offline. Connect to the internet and try again.');
+    } finally {
+      this.creatingCalendar.set(false);
     }
   }
 
@@ -1179,7 +1191,7 @@ export class App implements OnInit, OnDestroy {
     if (!session || !trip) return;
     const document = typeof value === 'string' ? trip.documents.find((item) => item.downloadAction === value) : value;
     if (!document?.downloadAction) return;
-    this.error.set('');
+    this.documentFailure.set(null);
     this.downloadingDocumentId.set(document.id);
     try {
       if (this.documentStatuses()[document.id] === 'saved') {
@@ -1198,7 +1210,8 @@ export class App implements OnInit, OnDestroy {
       }
     } catch (error) {
       if (isShareCancelled(error)) return;
-      this.error.set(this.online() ? this.apiError(error, 'We could not create that document. Please try again.') : 'This document has not been saved for offline use yet. Connect to download it.');
+      const message = this.online() ? this.apiError(error, 'Something went wrong preparing it.') : 'It hasn’t been saved for offline use yet. Connect to the internet and try again.';
+      if (message) this.documentFailure.set({ id: document.id, message });
     } finally {
       this.downloadingDocumentId.set(null);
     }

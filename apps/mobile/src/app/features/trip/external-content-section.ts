@@ -48,7 +48,7 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
         </section>
       }
       @if (hasPending(external)) { <p class="vt-section rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">Additional guides are being prepared. This page will check again automatically.</p> }
-    } @else if (failed()) { <section class="vt-section rounded-2xl bg-slate-100 p-4 text-sm text-slate-600"><strong>Live travel information is temporarily unavailable.</strong><p class="mt-1">Your saved itinerary is unaffected. Try again when you next refresh the trip.</p></section> }
+    } @else if (failed()) { <section class="vt-status-card vt-retry" data-tone="warn" role="alert"><span class="vt-status-card__icon" aria-hidden="true"><vt-icon name="alert" [size]="20" /></span><div class="vt-status-card__copy"><strong>Live travel information is unavailable</strong><p>Flights, weather and hotel details couldn’t be loaded. Your saved itinerary is unaffected.</p><button type="button" class="vt-status-card__action" [disabled]="loading()" (click)="refresh.emit()">Try again</button></div></section> }
   `,
 })
 export class ExternalContentSection {

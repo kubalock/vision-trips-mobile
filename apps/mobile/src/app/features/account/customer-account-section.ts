@@ -7,7 +7,8 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
   selector: 'app-customer-account-section',
   imports: [EuropeanDatePipe, VtIcon],
   template: `
-    @if (loading()) {
+    <!-- A reload of an account already on screen keeps it (and any unsaved edits) visible. -->
+    @if (loading() && !account()) {
       <section class="vt-section vt-account-page">
         <header class="vt-account-heading">
           <p class="vt-account-kicker">Your details</p>
@@ -18,6 +19,7 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
     }
     @else if (account(); as data) {
       <section class="vt-section vt-account-page">
+        @if (error()) { <section class="vt-status-card vt-retry" data-tone="warn" role="alert"><span class="vt-status-card__icon" aria-hidden="true"><vt-icon name="alert" [size]="20" /></span><div class="vt-status-card__copy"><strong>We couldn’t update your account</strong><p>{{ error() }} You can keep using what’s shown here.</p><button type="button" class="vt-status-card__action" [disabled]="loading()" (click)="retry.emit()">Try again</button></div></section> }
         <header class="vt-account-heading">
           <p class="vt-account-kicker">Your details</p>
           <h1 id="account-title">Account and preferences</h1>
@@ -160,14 +162,14 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
     } @else {
       <section class="vt-section vt-account-page">
         <header class="vt-account-heading"><p class="vt-account-kicker">Your details</p><h1>Account and preferences</h1></header>
-        <div class="vt-account-card"><p class="vt-account-error">We could not load your customer account. Check your connection and try again.</p></div>
+        <section class="vt-status-card vt-retry" data-tone="warn" role="alert"><span class="vt-status-card__icon" aria-hidden="true"><vt-icon name="alert" [size]="20" /></span><div class="vt-status-card__copy"><strong>We couldn’t load your account</strong><p>{{ error() || 'Check your connection and try again.' }}</p><button type="button" class="vt-status-card__action" [disabled]="loading()" (click)="retry.emit()">Try again</button></div></section>
       </section>
     }
   `,
 })
 export class CustomerAccountSection {
-  readonly account = input<CustomerAccount | null>(null); readonly loading = input(false); readonly saving = input(false); readonly savedNotice = input(''); readonly openingTripId = input<string | null>(null);
-  readonly save = output<CustomerPreferences>(); readonly openTrip = output<string>(); readonly signOut = output<void>();
+  readonly account = input<CustomerAccount | null>(null); readonly loading = input(false); readonly saving = input(false); readonly savedNotice = input(''); readonly openingTripId = input<string | null>(null); readonly error = input('');
+  readonly save = output<CustomerPreferences>(); readonly openTrip = output<string>(); readonly signOut = output<void>(); readonly retry = output<void>();
   private draft: CustomerPreferences | null = null;
   /** A new account (another trip, or a fresh load after saving) discards any unsaved edits from the previous one. */
   private readonly resetDraftOnAccountChange = effect(() => {

@@ -1538,6 +1538,10 @@ body.vt .vt-app .vt-account-danger button:active { transform: scale(.97); }
 .vt-app .vt-status-card__copy p { margin: var(--sp-1) 0 0; color: var(--ink-2); font-size: var(--fs-0); line-height: 1.45; }
 .vt-app .vt-status-card__action { margin-top: var(--sp-3); min-height: 36px; padding: 0 var(--sp-4); border: 1px solid color-mix(in srgb, var(--tone) 40%, var(--line)); border-radius: var(--r-pill); background: var(--surface); color: var(--ink); font: inherit; font-size: var(--fs-0); font-weight: 700; cursor: pointer; }
 .vt-app .vt-status-card__action:hover { background: color-mix(in srgb, var(--tone) 10%, var(--surface)); }
+.vt-app .vt-status-card__action:disabled { opacity: .6; cursor: progress; }
+/* Retry cards sit beside the thing that failed (a document row, the calendar button, a section). */
+.vt-app .vt-retry { margin: var(--sp-3) 0 0; box-shadow: none; }
+.vt-app .vt-hero .vt-retry { max-width: 420px; }
 .vt-app .vt-status-card__close { display: grid; place-items: center; flex: 0 0 auto; width: 32px; height: 32px; margin: -4px -6px 0 0; padding: 0; border: 0; border-radius: var(--r-pill); background: transparent; color: var(--ink-3); cursor: pointer; }
 .vt-app .vt-status-card__close:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); }
 @keyframes vt-spin { to { transform: rotate(360deg); } }

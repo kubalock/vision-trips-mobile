@@ -69,7 +69,8 @@
           <div class="vt-hero__body"><p class="vt-hero__kicker">{{ stageLabel(currentTrip.stage) }}</p><h1 class="vt-hero__title">{{ currentTrip.summary.name }}</h1><p class="vt-hero__sub">{{ currentTrip.summary.reference }} · {{ (currentTrip.summary.departureDate | europeanDate) || 'Dates to be confirmed' }}@if (currentTrip.summary.returnDate) { — {{ currentTrip.summary.returnDate | europeanDate }} }</p>
             <ul class="vt-hero__facts" role="list">@for (type of currentTrip.summary.holidayTypes; track type) { <li>{{ type }}</li> }@if (currentTrip.summary.durationDays !== null) { <li>{{ currentTrip.summary.durationDays }} nights</li> }</ul>
             <p class="vt-small">{{ storedSecurely() ? (savedInBrowser ? 'Saved in this browser for offline viewing.' : 'Saved securely on this device.') : 'This trip has not been saved for offline viewing.' }}</p>
-            <div class="vt-hero__actions"><button type="button" class="vt-hero__calendar" (click)="downloadCalendar()"><vt-icon name="calendar" [size]="18" /> Add to calendar</button></div>
+            <div class="vt-hero__actions"><button type="button" class="vt-hero__calendar" [disabled]="creatingCalendar()" (click)="downloadCalendar()"><vt-icon name="calendar" [size]="18" /> {{ creatingCalendar() ? 'Preparing…' : 'Add to calendar' }}</button></div>
+            @if (calendarError()) { <section class="vt-status-card vt-retry" data-tone="warn" role="alert"><span class="vt-status-card__icon" aria-hidden="true"><vt-icon name="alert" [size]="20" /></span><div class="vt-status-card__copy"><strong>Calendar file not created</strong><p>{{ calendarError() }}</p><button type="button" class="vt-status-card__action" [disabled]="creatingCalendar()" (click)="downloadCalendar()">Try again</button></div></section> }
           </div>
         </article>
         <app-stage-experience-section [trip]="currentTrip" [external]="externalContent()" (planNext)="planNextTrip()" />
@@ -118,7 +119,7 @@
         }
         @if (currentTrip.payments; as payments) { <app-payments-section [payments]="payments" [openingPaymentId]="openingPaymentId()" [actionsDisabled]="!online()" (pay)="openPayment($event)" (payCustom)="openCustomPayment($event)" /> } @else { <p class="mt-5 rounded-2xl bg-white p-5 text-slate-600 ring-1 ring-slate-200">Payment information is only available to the lead customer.</p> }
       } @else if (activeView() === 'documents') {
-        <app-documents-section [documents]="currentTrip.documents" [statuses]="documentStatuses()" [downloadingId]="downloadingDocumentId()" (download)="downloadDocument($event)" />
+        <app-documents-section [documents]="currentTrip.documents" [statuses]="documentStatuses()" [downloadingId]="downloadingDocumentId()" [failure]="documentFailure()" (download)="downloadDocument($event)" />
       } @else if (activeView() === 'help') {
         <section class="vt-section vt-help-card vt-help-contact" aria-labelledby="help-title">
           <header class="vt-help-heading"><p class="vt-page-kicker vt-help-kicker">We’re here for you</p><h1 id="help-title" class="vt-page-title">Help</h1><p class="vt-page-description">Contact {{ currentTrip.support.companyName }}</p></header>
@@ -161,7 +162,7 @@
         }
         <section class="vt-section vt-help-card vt-help-protection"><span class="vt-help-protection__icon"><vt-icon name="shield" [size]="24" /></span><div class="vt-help-protection__body"><h2>Financial protection</h2><p class="vt-help-intro">{{ currentTrip.protection.summary }}</p>@if (currentTrip.protection.holderName) { <p class="vt-help-protection__holder">Holder: {{ currentTrip.protection.holderName }}</p> }</div></section>
       } @else {
-        <app-customer-account-section [account]="customerAccount()" [loading]="accountLoading()" [saving]="accountSaving()" [savedNotice]="accountNotice()" [openingTripId]="openingAccountTripId()" (save)="saveCustomerPreferences($event)" (openTrip)="openCustomerAccountTrip($event)" (signOut)="signOutDevice()" />
+        <app-customer-account-section [account]="customerAccount()" [loading]="accountLoading()" [saving]="accountSaving()" [savedNotice]="accountNotice()" [openingTripId]="openingAccountTripId()" [error]="accountError()" (retry)="retryAccount()" (save)="saveCustomerPreferences($event)" (openTrip)="openCustomerAccountTrip($event)" (signOut)="signOutDevice()" />
         <section class="vt-appearance-card" aria-labelledby="appearance-title">
           <h2 id="appearance-title">Appearance</h2>
           <p>Choose how Vision Trips looks on this device.</p>

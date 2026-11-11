@@ -249,6 +249,60 @@ describe('App', () => {
       expect(app.error()).toBe('');
     });
 
+    describe('failures shown beside what failed', () => {
+      type Retry = {
+        calendarError: () => string; documentFailure: () => { id: string; message: string } | null; accountError: () => string;
+        customerAccount: { set: (value: unknown) => void; (): unknown }; retryAccount: () => void; accountLoading: () => boolean;
+        downloadDocument: (value: unknown) => Promise<void>; online: { set: (value: boolean) => void };
+      };
+      const serverError = () => new HttpErrorResponse({ status: 503 });
+
+      it('keeps a calendar failure beside the button, and clears it when the retry works', async () => {
+        const { app, api } = setup();
+        const view = app as unknown as Retry;
+        app.trip.set({ tripId: 'trip-1', summary: { reference: 'REF-1' } });
+        vi.spyOn(api, 'downloadCalendar').mockRejectedValueOnce(serverError()).mockResolvedValueOnce(new Blob(['x']));
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:x');
+        vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+
+        await app.downloadCalendar();
+        expect(view.calendarError()).toContain('busy');
+        expect(app.error()).toBe('');
+
+        await app.downloadCalendar();
+        expect(view.calendarError()).toBe('');
+      });
+
+      it('shows a failed document download on that document, not in the global banner', async () => {
+        const { app, api } = setup();
+        const view = app as unknown as Retry;
+        const document = { id: 'doc-1', title: 'Invoice', downloadAction: 'invoice', mimeType: 'application/pdf', version: '1' };
+        app.trip.set({ tripId: 'trip-1', summary: { reference: 'REF-1' }, documents: [document] });
+        vi.spyOn(api, 'downloadDocument').mockRejectedValueOnce(serverError());
+
+        await view.downloadDocument(document);
+
+        expect(view.documentFailure()).toEqual({ id: 'doc-1', message: expect.stringContaining('busy') });
+        expect(app.error()).toBe('');
+      });
+
+      it('keeps an account already on screen when reloading it fails, and offers a retry', async () => {
+        const { app, api } = setup();
+        const view = app as unknown as Retry;
+        app.trip.set({ tripId: 'trip-1', accessScope: 'primary_customer' });
+        const account = { emailHint: 'a***@x.com', preferences: {}, airportOptions: [], monthOptions: [], trips: [] };
+        view.customerAccount.set(account);
+        const load = vi.spyOn(api, 'customerAccount').mockRejectedValueOnce(serverError()).mockResolvedValueOnce(account as never);
+
+        view.retryAccount(); await vi.waitFor(() => expect(view.accountLoading()).toBe(false));
+        expect(view.customerAccount()).toBe(account);
+        expect(view.accountError()).toContain('busy');
+
+        view.retryAccount(); await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+        await vi.waitFor(() => expect(view.accountError()).toBe(''));
+      });
+    });
+
     it('updates the saved-trip list when a token is renewed', async () => {
       const { app, api } = setup();
       app.savedTripList.set([{ snapshot: { tripId: 'trip-1' }, session: { refreshToken: 'old-refresh' }, savedAt: '2026-11-01T00:00:00Z' }]);

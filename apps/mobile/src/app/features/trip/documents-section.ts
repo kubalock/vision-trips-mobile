@@ -67,6 +67,9 @@ interface DocumentGroup {
                       }
                     </span>
                   </button>
+                  @if (failure()?.id === document.id) {
+                    <section class="vt-status-card vt-retry" data-tone="warn" role="alert"><span class="vt-status-card__icon" aria-hidden="true"><vt-icon name="alert" [size]="20" /></span><div class="vt-status-card__copy"><strong>{{ document.title }} didn’t download</strong><p>{{ failure()?.message }}</p><button type="button" class="vt-status-card__action" [disabled]="downloadingId() === document.id" (click)="download.emit(document)">Try again</button></div></section>
+                  }
                 } @else {
                   <div class="vt-doc-button vt-doc-button--unavailable">
                     <span class="vt-doc-button__icon"><vt-icon name="file" [size]="21" /></span>
@@ -99,6 +102,8 @@ export class DocumentsSection {
   readonly documents = input.required<TripDocument[]>();
   readonly statuses = input.required<Record<string, WalletStatus>>();
   readonly downloadingId = input<string | null>(null);
+  /** The last failed download, shown beside that document with a retry. */
+  readonly failure = input<{ id: string; message: string } | null>(null);
   readonly download = output<TripDocument>();
   readonly groups = computed<DocumentGroup[]>(() => {
     const groups: DocumentGroup[] = [
