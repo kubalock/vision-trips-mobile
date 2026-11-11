@@ -1,4 +1,4 @@
-import { Component, effect, input, output, untracked } from '@angular/core';
+import { Component, computed, effect, input, linkedSignal, output, untracked } from '@angular/core';
 import type { CustomerAccount, CustomerAccountTrip, CustomerPreferences } from '@vision-trips/contracts';
 import { VtIcon } from '../../shared/lucide-icon';
 import { EuropeanDatePipe } from '../../shared/european-date.pipe';
@@ -58,7 +58,8 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
           </div>
         </section>
 
-        <form class="vt-account-form" (submit)="submit($event, data)">
+        @let prefs = draft()!;
+        <form class="vt-account-form" (submit)="submit($event)">
           <section class="vt-account-card" aria-labelledby="account-contact-title">
             <header class="vt-account-card__header">
               <span class="vt-account-card__icon"><vt-icon name="message" [size]="21" /></span>
@@ -67,20 +68,20 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
             <fieldset class="vt-account-fieldset">
               <legend>Marketing channels</legend>
               <div class="vt-channel-grid">
-                <label class="vt-channel-tile" [class.is-selected]="data.preferences.emailMarketing">
-                  <input class="sr-only" type="checkbox" [checked]="data.preferences.emailMarketing" (change)="channel(data, 'emailMarketing', $event)">
+                <label class="vt-channel-tile" [class.is-selected]="prefs.emailMarketing">
+                  <input class="sr-only" type="checkbox" [checked]="prefs.emailMarketing" (change)="channel('emailMarketing', $event)">
                   <span class="vt-channel-tile__icon"><vt-icon name="mail" [size]="20" /></span>
                   <span class="vt-channel-tile__copy"><strong>Email</strong><small>Offers, inspiration and early access</small></span>
                   <span class="vt-toggle" aria-hidden="true"><span></span></span>
                 </label>
-                <label class="vt-channel-tile" [class.is-selected]="data.preferences.smsMarketing">
-                  <input class="sr-only" type="checkbox" [checked]="data.preferences.smsMarketing" (change)="channel(data, 'smsMarketing', $event)">
+                <label class="vt-channel-tile" [class.is-selected]="prefs.smsMarketing">
+                  <input class="sr-only" type="checkbox" [checked]="prefs.smsMarketing" (change)="channel('smsMarketing', $event)">
                   <span class="vt-channel-tile__icon"><vt-icon name="message" [size]="20" /></span>
                   <span class="vt-channel-tile__copy"><strong>Text message</strong><small>Rare, time-sensitive opportunities</small></span>
                   <span class="vt-toggle" aria-hidden="true"><span></span></span>
                 </label>
-                <label class="vt-channel-tile" [class.is-selected]="data.preferences.postalMarketing">
-                  <input class="sr-only" type="checkbox" [checked]="data.preferences.postalMarketing" (change)="channel(data, 'postalMarketing', $event)">
+                <label class="vt-channel-tile" [class.is-selected]="prefs.postalMarketing">
+                  <input class="sr-only" type="checkbox" [checked]="prefs.postalMarketing" (change)="channel('postalMarketing', $event)">
                   <span class="vt-channel-tile__icon"><vt-icon name="file" [size]="20" /></span>
                   <span class="vt-channel-tile__copy"><strong>Post</strong><small>Brochures and occasional cards</small></span>
                   <span class="vt-toggle" aria-hidden="true"><span></span></span>
@@ -108,17 +109,17 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
                     aria-controls="airport-options"
                     [attr.aria-expanded]="airportSearchOpen"
                     [value]="airportQuery"
-                    [placeholder]="data.preferences.preferredAirports.length >= 10 ? 'Maximum of 10 selected' : 'Search airports…'"
-                    [disabled]="data.preferences.preferredAirports.length >= 10"
+                    [placeholder]="prefs.preferredAirports.length >= 10 ? 'Maximum of 10 selected' : 'Search airports…'"
+                    [disabled]="prefs.preferredAirports.length >= 10"
                     (focus)="airportSearchOpen = true"
                     (input)="setAirportQuery($event)"
                     (keydown.escape)="airportSearchOpen = false"
                   >
                 </div>
-                @if (airportSearchOpen && data.preferences.preferredAirports.length < 10) {
+                @if (airportSearchOpen && prefs.preferredAirports.length < 10) {
                   <div id="airport-options" class="vt-airport-options" role="listbox" aria-label="Available departure airports">
-                    @for (airport of filteredAirports(data); track airport) {
-                      <button type="button" role="option" aria-selected="false" (mousedown)="$event.preventDefault()" (click)="addAirport(data, airport)">
+                    @for (airport of filteredAirports(data, prefs); track airport) {
+                      <button type="button" role="option" aria-selected="false" (mousedown)="$event.preventDefault()" (click)="addAirport(airport)">
                         <span>{{ airport }}</span><vt-icon name="arrow-right" [size]="15" />
                       </button>
                     } @empty { <p>No matching airports</p> }
@@ -126,10 +127,10 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
                 }
               </div>
               <div class="vt-selected-airports" aria-label="Selected departure airports">
-                @for (airport of data.preferences.preferredAirports; track airport) {
+                @for (airport of prefs.preferredAirports; track airport) {
                   <span class="vt-selected-airport">
                     <span>{{ airport }}</span>
-                    <button type="button" [attr.aria-label]="'Remove ' + airport" (click)="removeAirport(data, airport)"><vt-icon name="close" [size]="14" /></button>
+                    <button type="button" [attr.aria-label]="'Remove ' + airport" (click)="removeAirport(airport)"><vt-icon name="close" [size]="14" /></button>
                   </span>
                 } @empty { <span class="vt-selected-airports__empty">No airports selected yet</span> }
               </div>
@@ -139,17 +140,19 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
               <p class="vt-account-field-hint">Select every month that suits you.</p>
               <div class="vt-month-grid">
                 @for (month of data.monthOptions; track month) {
-                  <label class="vt-month-chip" [class.is-selected]="data.preferences.preferredMonths.includes(month)">
-                    <input class="sr-only" type="checkbox" [checked]="data.preferences.preferredMonths.includes(month)" (change)="toggleMonth(data, month, $event)">
+                  <label class="vt-month-chip" [class.is-selected]="prefs.preferredMonths.includes(month)">
+                    <input class="sr-only" type="checkbox" [checked]="prefs.preferredMonths.includes(month)" (change)="toggleMonth(month, $event)">
                     <span>{{ month.slice(0, 3) }}</span>
                   </label>
                 }
               </div>
             </fieldset>
-            <button type="submit" class="vt-account-save" [disabled]="saving()">
-              <vt-icon name="check" [size]="19" /> {{ saving() ? 'Saving…' : 'Save preferences' }}
+            <button type="submit" class="vt-account-save" [disabled]="saving() || !dirty()">
+              <vt-icon name="check" [size]="19" /> {{ saving() ? 'Saving…' : dirty() ? 'Save preferences' : 'No changes to save' }}
             </button>
-            @if (savedNotice()) { <p class="vt-account-saved" role="status">{{ savedNotice() }}</p> }
+            @if (saveError() && dirty()) {
+              <section class="vt-status-card vt-retry" data-tone="warn" role="alert"><span class="vt-status-card__icon" aria-hidden="true"><vt-icon name="alert" [size]="20" /></span><div class="vt-status-card__copy"><strong>Your preferences weren’t saved</strong><p>{{ saveError() }} Your changes are still here.</p><button type="submit" class="vt-status-card__action" [disabled]="saving()">Try again</button></div></section>
+            } @else if (savedNotice() && !dirty()) { <p class="vt-account-saved" role="status">{{ savedNotice() }}</p> }
           </section>
         </form>
 
@@ -170,22 +173,49 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
 export class CustomerAccountSection {
   readonly account = input<CustomerAccount | null>(null); readonly loading = input(false); readonly saving = input(false); readonly savedNotice = input(''); readonly openingTripId = input<string | null>(null); readonly error = input('');
   readonly save = output<CustomerPreferences>(); readonly openTrip = output<string>(); readonly signOut = output<void>(); readonly retry = output<void>();
-  private draft: CustomerPreferences | null = null;
-  /** A new account (another trip, or a fresh load after saving) discards any unsaved edits from the previous one. */
-  private readonly resetDraftOnAccountChange = effect(() => {
+  /**
+   * The traveller's edits, kept apart from the server's preferences until a save succeeds. The draft restarts
+   * from the server's copy whenever that copy changes: a different account, or the reply to a successful save.
+   * A reload that brings back the same saved preferences keeps edits not yet saved.
+   */
+  readonly draft = linkedSignal<CustomerPreferences | undefined, CustomerPreferences | null>({
+    source: () => this.account()?.preferences,
+    computation: (server, previous) => {
+      if (!server) return null;
+      const sameBaseline = previous?.value && previous.source && samePreferences(previous.source, server);
+      return sameBaseline ? previous.value : structuredClone(server);
+    },
+  });
+  /** True when the draft differs from what the server holds. */
+  readonly dirty = computed(() => {
+    const draft = this.draft(); const server = this.account()?.preferences;
+    return Boolean(draft && server && !samePreferences(draft, server));
+  });
+  readonly saveError = input('');
+  private readonly resetSearchOnAccountChange = effect(() => {
     this.account();
-    untracked(() => { this.draft = null; this.airportQuery = ''; this.airportSearchOpen = false; });
+    untracked(() => { this.airportQuery = ''; this.airportSearchOpen = false; });
   });
   airportQuery = '';
   airportSearchOpen = false;
-  channel(data: CustomerAccount, key: 'emailMarketing' | 'smsMarketing' | 'postalMarketing', event: Event): void { const checked = (event.target as HTMLInputElement).checked; this.ensure(data)[key] = checked; data.preferences[key] = checked; }
+  channel(key: 'emailMarketing' | 'smsMarketing' | 'postalMarketing', event: Event): void { const checked = (event.target as HTMLInputElement).checked; this.edit((draft) => ({ ...draft, [key]: checked })); }
   setAirportQuery(event: Event): void { this.airportQuery = (event.target as HTMLInputElement).value; this.airportSearchOpen = true; }
-  filteredAirports(data: CustomerAccount): string[] { const query = this.airportQuery.trim().toLocaleLowerCase(); return data.airportOptions.filter((airport) => !data.preferences.preferredAirports.includes(airport) && (!query || airport.toLocaleLowerCase().includes(query))).slice(0, 8); }
-  addAirport(data: CustomerAccount, airport: string): void { if (data.preferences.preferredAirports.length >= 10) return; const draft = this.ensure(data); draft.preferredAirports = [...new Set([...draft.preferredAirports, airport])].slice(0, 10); data.preferences.preferredAirports = draft.preferredAirports; this.airportQuery = ''; this.airportSearchOpen = false; }
-  removeAirport(data: CustomerAccount, airport: string): void { const draft = this.ensure(data); draft.preferredAirports = draft.preferredAirports.filter((item) => item !== airport); data.preferences.preferredAirports = draft.preferredAirports; }
-  toggleMonth(data: CustomerAccount, month: string, event: Event): void { const draft = this.ensure(data); draft.preferredMonths = (event.target as HTMLInputElement).checked ? [...new Set([...draft.preferredMonths, month])] : draft.preferredMonths.filter((item) => item !== month); data.preferences.preferredMonths = draft.preferredMonths; }
+  filteredAirports(data: CustomerAccount, prefs: CustomerPreferences): string[] { const query = this.airportQuery.trim().toLocaleLowerCase(); return data.airportOptions.filter((airport) => !prefs.preferredAirports.includes(airport) && (!query || airport.toLocaleLowerCase().includes(query))).slice(0, 8); }
+  addAirport(airport: string): void { this.edit((draft) => draft.preferredAirports.length >= 10 ? draft : { ...draft, preferredAirports: [...new Set([...draft.preferredAirports, airport])].slice(0, 10) }); this.airportQuery = ''; this.airportSearchOpen = false; }
+  removeAirport(airport: string): void { this.edit((draft) => ({ ...draft, preferredAirports: draft.preferredAirports.filter((item) => item !== airport) })); }
+  toggleMonth(month: string, event: Event): void { const checked = (event.target as HTMLInputElement).checked; this.edit((draft) => ({ ...draft, preferredMonths: checked ? [...new Set([...draft.preferredMonths, month])] : draft.preferredMonths.filter((item) => item !== month) })); }
   isPastTrip(trip: CustomerAccountTrip): boolean { return ['closed', 'cancelled', 'home', 'past'].includes(trip.status); }
   tripStatusLabel(trip: CustomerAccountTrip): string { if (trip.current) return 'Open'; if (this.isPastTrip(trip)) return 'Past'; return trip.status === 'confirmed' ? 'Confirmed' : trip.status.replaceAll('_', ' '); }
-  submit(event: Event, data: CustomerAccount): void { event.preventDefault(); this.save.emit(this.draft ?? structuredClone(data.preferences)); }
-  private ensure(data: CustomerAccount): CustomerPreferences { return this.draft ??= structuredClone(data.preferences); }
+  submit(event: Event): void {
+    event.preventDefault();
+    const draft = this.draft();
+    if (draft && this.dirty() && !this.saving()) this.save.emit(structuredClone(draft));
+  }
+  private edit(change: (draft: CustomerPreferences) => CustomerPreferences): void { this.draft.update((draft) => draft ? change(draft) : draft); }
+}
+
+function samePreferences(a: CustomerPreferences, b: CustomerPreferences): boolean {
+  const sameSet = (x: string[], y: string[]) => x.length === y.length && x.every((item) => y.includes(item));
+  return a.emailMarketing === b.emailMarketing && a.smsMarketing === b.smsMarketing && a.postalMarketing === b.postalMarketing
+    && sameSet(a.preferredAirports, b.preferredAirports) && sameSet(a.preferredMonths, b.preferredMonths);
 }

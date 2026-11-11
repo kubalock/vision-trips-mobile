@@ -286,6 +286,21 @@ describe('App', () => {
         expect(app.error()).toBe('');
       });
 
+      it('leaves the saved preferences alone and reports inline when saving fails', async () => {
+        const { app, api } = setup();
+        const view = app as unknown as Retry & { accountSaveError: () => string; saveCustomerPreferences: (value: unknown) => Promise<void> };
+        app.trip.set({ tripId: 'trip-1', accessScope: 'primary_customer' });
+        const saved = { emailMarketing: false, smsMarketing: false, postalMarketing: false, preferredAirports: [], preferredMonths: [] };
+        view.customerAccount.set({ emailHint: 'a***@x.com', preferences: saved, airportOptions: [], monthOptions: [], trips: [] });
+        vi.spyOn(api, 'updateCustomerPreferences').mockRejectedValueOnce(serverError());
+
+        await view.saveCustomerPreferences({ ...saved, emailMarketing: true });
+
+        expect((view.customerAccount() as { preferences: unknown }).preferences).toBe(saved);
+        expect(view.accountSaveError()).toContain('busy');
+        expect(app.error()).toBe('');
+      });
+
       it('keeps an account already on screen when reloading it fails, and offers a retry', async () => {
         const { app, api } = setup();
         const view = app as unknown as Retry;

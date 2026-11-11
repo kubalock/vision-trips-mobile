@@ -162,7 +162,7 @@
         }
         <section class="vt-section vt-help-card vt-help-protection"><span class="vt-help-protection__icon"><vt-icon name="shield" [size]="24" /></span><div class="vt-help-protection__body"><h2>Financial protection</h2><p class="vt-help-intro">{{ currentTrip.protection.summary }}</p>@if (currentTrip.protection.holderName) { <p class="vt-help-protection__holder">Holder: {{ currentTrip.protection.holderName }}</p> }</div></section>
       } @else {
-        <app-customer-account-section [account]="customerAccount()" [loading]="accountLoading()" [saving]="accountSaving()" [savedNotice]="accountNotice()" [openingTripId]="openingAccountTripId()" [error]="accountError()" (retry)="retryAccount()" (save)="saveCustomerPreferences($event)" (openTrip)="openCustomerAccountTrip($event)" (signOut)="signOutDevice()" />
+        <app-customer-account-section [account]="customerAccount()" [loading]="accountLoading()" [saving]="accountSaving()" [savedNotice]="accountNotice()" [openingTripId]="openingAccountTripId()" [error]="accountError()" [saveError]="accountSaveError()" (retry)="retryAccount()" (save)="saveCustomerPreferences($event)" (openTrip)="openCustomerAccountTrip($event)" (signOut)="signOutDevice()" />
         <section class="vt-appearance-card" aria-labelledby="appearance-title">
           <h2 id="appearance-title">Appearance</h2>
           <p>Choose how Vision Trips looks on this device.</p>

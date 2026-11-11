@@ -124,6 +124,7 @@ export class App implements OnInit, OnDestroy {
   protected readonly accountNotice = signal('');
   /** Failures shown beside the thing that failed, each with its own retry (not in the global banner). */
   protected readonly accountError = signal('');
+  protected readonly accountSaveError = signal('');
   protected readonly documentFailure = signal<{ id: string; message: string } | null>(null);
   protected readonly calendarError = signal('');
   protected readonly creatingCalendar = signal(false);
@@ -771,10 +772,11 @@ export class App implements OnInit, OnDestroy {
 
   protected async saveCustomerPreferences(preferences: CustomerPreferences): Promise<void> {
     const currentSession = this.session(); if (!currentSession || this.accountSaving()) return;
-    this.accountSaving.set(true); this.accountNotice.set('');
+    this.accountSaving.set(true); this.accountNotice.set(''); this.accountSaveError.set('');
     const generation = this.tripGeneration;
+    // Only the server's reply updates the saved preferences; until then the edits live in the form's draft.
     try { const result = await this.withSession(currentSession, (accessToken) => this.api.updateCustomerPreferences(preferences, accessToken)); if (!this.isCurrentTrip(generation)) return; this.customerAccount.update((account) => account ? { ...account, preferences: result.preferences } : account); this.accountNotice.set(`Saved across ${result.updatedRecords} customer ${result.updatedRecords === 1 ? 'record' : 'records'}.`); }
-    catch (error) { this.error.set(this.apiError(error, 'We could not save your preferences. Please try again.')); }
+    catch (error) { if (this.isCurrentTrip(generation)) this.accountSaveError.set(this.apiError(error, 'Something went wrong saving them.')); }
     finally { if (this.isCurrentTrip(generation)) this.accountSaving.set(false); }
   }
 
@@ -994,7 +996,7 @@ export class App implements OnInit, OnDestroy {
     this.messageTopic.set('itinerary');
     this.error.set('');
     this.signedOut.set(false);
-    this.accountError.set(''); this.documentFailure.set(null); this.calendarError.set(''); this.creatingCalendar.set(false);
+    this.accountError.set(''); this.accountSaveError.set(''); this.documentFailure.set(null); this.calendarError.set(''); this.creatingCalendar.set(false);
     return generation;
   }
 
