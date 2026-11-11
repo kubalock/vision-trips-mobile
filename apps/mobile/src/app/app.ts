@@ -13,6 +13,7 @@ import { DocumentWalletStore, type WalletStatus } from './core/storage/document-
 import { ExternalPages, type PendingExternalPage } from './core/platform/external-pages';
 import { ShareSheet } from './core/platform/share-sheet';
 import { SessionManager, isTerminalSessionError } from './core/session/session-manager';
+import { isTripDataError } from './core/api/trip-schema';
 import { Directory, Filesystem, Encoding } from '@capacitor/filesystem';
 import { DocumentsSection } from './features/trip/documents-section';
 import { DestinationsSection } from './features/trip/destinations-section';
@@ -1229,6 +1230,9 @@ const INTERNAL_ERROR_TERMS = /airtable|token|mint|webhook|schema|api key|base id
  * that our API phrases for customers; infrastructure and configuration failures get a calm, generic message.
  */
 export function customerErrorMessage(error: unknown, fallback: string): string {
+  if (isTripDataError(error)) return error.reason === 'unsupported_version'
+    ? 'This trip needs a newer version of the app. Please update the app and try again.'
+    : 'We couldn’t read this trip’s details. Please try again in a moment, or contact your travel agent.';
   if (isTerminalSessionError(error)) return 'You’ve been signed out of this trip. Open your trip link again to continue.';
   if (!(error instanceof HttpErrorResponse)) return fallback;
   if (error.status === 0) return 'We can’t reach Vision Trips right now. Check your connection and try again.';

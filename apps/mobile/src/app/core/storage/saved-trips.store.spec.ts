@@ -1,4 +1,5 @@
-import type { MobileSession, TripSnapshot } from '@vision-trips/contracts';
+import type { MobileSession } from '@vision-trips/contracts';
+import { parseTripSnapshot } from '../api/trip-schema';
 import { SavedTripsStore } from './saved-trips.store';
 
 function trustToken(baseId: string, recordId: string, expiresAt = Date.now() + 86_400_000, signature = 'sig'): string {
@@ -7,7 +8,7 @@ function trustToken(baseId: string, recordId: string, expiresAt = Date.now() + 8
 }
 
 const session = (refreshToken: string): MobileSession => ({ accessToken: 'vta_secret', accessExpiresAt: '2030-01-01T00:00:00.000Z', refreshToken, refreshExpiresAt: '2030-01-30T00:00:00.000Z' });
-const snapshot = (tripId: string) => ({ tripId }) as TripSnapshot;
+const snapshot = (tripId: string) => parseTripSnapshot({ schemaVersion: 3, tripId, stage: 'confirmed', accessScope: 'primary_customer', summary: { name: 'Trip', reference: 'REF' } });
 
 /** The installed app's secure storage, backed by a map. */
 function nativeStore(): SavedTripsStore {
@@ -77,6 +78,37 @@ describe('SavedTripsStore sign-out', () => {
 
     expect(trips.map((trip) => [trip.snapshot.tripId, trip.session?.refreshToken ?? null])).toEqual([['trp_old', null], ['trp_new', 'vrt_new']]);
     expect((await store.all()).find((trip) => trip.snapshot.tripId === 'trp_old')?.session).toBeNull();
+  });
+});
+
+describe('SavedTripsStore schema checks', () => {
+  it('migrates an older saved trip once and saves it back', async () => {
+    const store = nativeStore();
+    const secure = (store as unknown as { secure: { set: (key: string, value: unknown) => Promise<void>; get: (key: string) => Promise<unknown> } }).secure;
+    await secure.set('trip:index', ['trp_old']);
+    await secure.set('trip:trp_old', { snapshot: { schemaVersion: 2, tripId: 'trp_old', stage: 'confirmed', accessScope: 'primary_customer', summary: { name: 'Old', reference: 'R' } }, session: session('vrt_old'), savedAt: '2026-01-01T00:00:00.000Z' });
+
+    const [trip] = await store.all();
+
+    expect(trip.snapshot.schemaVersion).toBe(3);
+    expect(trip.snapshot.itinerary).toEqual([]);
+    expect(((await secure.get('trip:trp_old')) as { snapshot: { schemaVersion: number } }).snapshot.schemaVersion).toBe(3);
+  });
+
+  it('removes saved trips this version cannot read and keeps the rest', async () => {
+    const store = nativeStore();
+    const secure = (store as unknown as { secure: { set: (key: string, value: unknown) => Promise<void>; get: (key: string) => Promise<unknown> } }).secure;
+    await store.save(snapshot('trp_good'), session('vrt_good'));
+    await secure.set('trip:index', ['trp_good', 'trp_future', 'trp_broken']);
+    await secure.set('trip:trp_future', { snapshot: { schemaVersion: 9, tripId: 'trp_future' }, session: session('vrt_f'), savedAt: '2026-01-01T00:00:00.000Z' });
+    await secure.set('trip:trp_broken', { snapshot: { schemaVersion: 3 }, session: session('vrt_b'), savedAt: '2026-01-01T00:00:00.000Z' });
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const trips = await store.all();
+
+    expect(trips.map((trip) => trip.snapshot.tripId)).toEqual(['trp_good']);
+    expect(await secure.get('trip:index')).toEqual(['trp_good']);
+    expect(await secure.get('trip:trp_future')).toBeNull();
   });
 });
 

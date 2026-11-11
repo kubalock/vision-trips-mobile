@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import type { CustomerAccount, CustomerEngagementRequest, CustomerEngagementResponse, CustomerMessageRequest, CustomerMessageResponse, CustomerPreferences, ExternalTripContent, FellowTravellerLinkResponse, LinkExchangeResponse, MobileSession, OpenCustomerAccountTripResponse, OpenRelatedQuotationResponse, PaymentLinkResponse, PaymentStatusResponse, QuotationAcceptanceRequest, QuotationAcceptanceResponse, RelatedQuotationsResponse, TripSnapshot, UpdateCustomerPreferencesResponse } from '@vision-trips/contracts';
 import { firstValueFrom } from 'rxjs';
 import { API_BASE_URL } from '../config/api-base-url';
+import { parseExternalContent, parseTripSnapshot } from './trip-schema';
 
 @Injectable({ providedIn: 'root' })
 export class VisionApiService {
@@ -10,21 +11,21 @@ export class VisionApiService {
   private readonly baseUrl = inject(API_BASE_URL);
 
   exchangeLink(linkOrCode: string, deviceTrustTokens: string[] = []): Promise<LinkExchangeResponse> {
-    return firstValueFrom(
+    return this.exchange(firstValueFrom(
       this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges`, { linkOrCode, deviceTrustTokens }, this.writeOptions()),
-    );
+    ));
   }
 
   exchangeLocalTrip(baseId: string, recordId: string): Promise<LinkExchangeResponse> {
-    return firstValueFrom(
+    return this.exchange(firstValueFrom(
       this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges/local`, { baseId, recordId }, this.writeOptions()),
-    );
+    ));
   }
 
   verifyPostcode(exchangeId: string, postcode: string, rememberDevice: boolean): Promise<LinkExchangeResponse> {
-    return firstValueFrom(
+    return this.exchange(firstValueFrom(
       this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges/${exchangeId}/verify/knowledge`, { postcode, rememberDevice }, this.writeOptions()),
-    );
+    ));
   }
 
   sendOtp(exchangeId: string): Promise<import('@vision-trips/contracts').LinkExchangeChallenge> {
@@ -32,7 +33,7 @@ export class VisionApiService {
   }
 
   verifyOtp(exchangeId: string, code: string, rememberDevice: boolean): Promise<LinkExchangeResponse> {
-    return firstValueFrom(this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges/${exchangeId}/verify/otp`, { code, rememberDevice }, this.writeOptions()));
+    return this.exchange(firstValueFrom(this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges/${exchangeId}/verify/otp`, { code, rememberDevice }, this.writeOptions())));
   }
 
   downloadCalendar(accessToken: string): Promise<Blob> {
@@ -62,9 +63,9 @@ export class VisionApiService {
   }
 
   refreshTrip(accessToken: string): Promise<TripSnapshot> {
-    return firstValueFrom(this.http.get<TripSnapshot>(`${this.baseUrl}/trips/current`, {
+    return parsed(firstValueFrom(this.http.get<unknown>(`${this.baseUrl}/trips/current`, {
       headers: { Authorization: `Bearer ${accessToken}` },
-    }));
+    })), parseTripSnapshot);
   }
 
   paymentStatus(accessToken: string): Promise<PaymentStatusResponse> {
@@ -72,7 +73,7 @@ export class VisionApiService {
   }
 
   externalContent(accessToken: string): Promise<ExternalTripContent> {
-    return firstValueFrom(this.http.get<ExternalTripContent>(`${this.baseUrl}/trips/current/external-content`, { headers: { Authorization: `Bearer ${accessToken}` } }));
+    return parsed(firstValueFrom(this.http.get<unknown>(`${this.baseUrl}/trips/current/external-content`, { headers: { Authorization: `Bearer ${accessToken}` } })), parseExternalContent);
   }
 
   engagement(input: CustomerEngagementRequest, accessToken: string): Promise<CustomerEngagementResponse> {
@@ -84,12 +85,12 @@ export class VisionApiService {
   }
 
   openRelatedQuotation(comparisonId: string, accessToken: string): Promise<OpenRelatedQuotationResponse> {
-    return firstValueFrom(this.http.post<OpenRelatedQuotationResponse>(`${this.baseUrl}/trips/current/related-quotations/${encodeURIComponent(comparisonId)}/open`, {}, this.writeOptions(accessToken)));
+    return withParsedSnapshot(firstValueFrom(this.http.post<OpenRelatedQuotationResponse>(`${this.baseUrl}/trips/current/related-quotations/${encodeURIComponent(comparisonId)}/open`, {}, this.writeOptions(accessToken))));
   }
 
   customerAccount(accessToken: string): Promise<CustomerAccount> { return firstValueFrom(this.http.get<CustomerAccount>(`${this.baseUrl}/trips/current/account`, { headers: { Authorization: `Bearer ${accessToken}` } })); }
   updateCustomerPreferences(preferences: CustomerPreferences, accessToken: string): Promise<UpdateCustomerPreferencesResponse> { return firstValueFrom(this.http.post<UpdateCustomerPreferencesResponse>(`${this.baseUrl}/trips/current/account/preferences`, preferences, this.writeOptions(accessToken))); }
-  openCustomerAccountTrip(accountTripId: string, accessToken: string): Promise<OpenCustomerAccountTripResponse> { return firstValueFrom(this.http.post<OpenCustomerAccountTripResponse>(`${this.baseUrl}/trips/current/account/trips/${encodeURIComponent(accountTripId)}/open`, {}, this.writeOptions(accessToken))); }
+  openCustomerAccountTrip(accountTripId: string, accessToken: string): Promise<OpenCustomerAccountTripResponse> { return withParsedSnapshot(firstValueFrom(this.http.post<OpenCustomerAccountTripResponse>(`${this.baseUrl}/trips/current/account/trips/${encodeURIComponent(accountTripId)}/open`, {}, this.writeOptions(accessToken)))); }
   /** Browsers: clears the HttpOnly trusted-device cookies (the installed app clears its secure storage instead). */
   forgetDeviceTrust(): Promise<void> { return firstValueFrom(this.http.delete<void>(`${this.baseUrl}/link-exchanges/device-trust`, this.writeOptions())); }
   revokeSession(refreshToken: string): Promise<void> { return firstValueFrom(this.http.delete<void>(`${this.baseUrl}/sessions/current`, { body: { refreshToken }, ...this.writeOptions() })); }
@@ -114,7 +115,23 @@ export class VisionApiService {
     }));
   }
 
+  /** Checks the trip in an authorised link exchange before the app uses it. */
+  private async exchange(response: Promise<LinkExchangeResponse>): Promise<LinkExchangeResponse> {
+    const result = await response;
+    return result.status === 'authorized' ? { ...result, snapshot: parseTripSnapshot(result.snapshot) } : result;
+  }
+
   private writeOptions(accessToken?: string): { headers: Record<string, string> } {
     return { headers: { ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), 'Idempotency-Key': crypto.randomUUID() } };
   }
+}
+
+/** Runs a response through its runtime schema: the generic on HttpClient is only a compile-time cast. */
+async function parsed<T>(response: Promise<unknown>, parse: (value: unknown) => T): Promise<T> {
+  return parse(await response);
+}
+
+async function withParsedSnapshot<T extends { snapshot: TripSnapshot }>(response: Promise<T>): Promise<T> {
+  const result = await response;
+  return { ...result, snapshot: parseTripSnapshot(result.snapshot) };
 }

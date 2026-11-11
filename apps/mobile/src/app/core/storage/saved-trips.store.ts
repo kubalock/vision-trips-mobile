@@ -4,6 +4,7 @@ import { SecureStorage } from '@aparajita/capacitor-secure-storage';
 import type { MobileSession, TripSnapshot } from '@vision-trips/contracts';
 import { isWebSessionHandle } from '../api/web-client.interceptor';
 import { BrowserTripDb } from './browser-trip-db';
+import { decodeTripSnapshot, isTripDataError, parseStoredSession } from '../api/trip-schema';
 
 export interface SavedTrip {
   snapshot: TripSnapshot;
@@ -70,11 +71,26 @@ export class SavedTripsStore {
     return true;
   }
 
+  /**
+   * Every saved trip, checked against the current schema. Older versions are migrated (and saved back, so it
+   * happens once); entries that cannot be used — an unsupported version or damaged data — are removed.
+   */
   async all(): Promise<SavedTrip[]> {
-    const saved = this.native
-      ? await Promise.all((await this.ids()).map((id) => this.secure.get(`trip:${id}`)))
-      : await Promise.all((await this.ids()).map((id) => this.browserDb.get(id)));
-    return saved.flatMap((value) => isSavedTrip(value) ? [value as unknown as SavedTrip] : []);
+    const ids = await this.ids();
+    const stored = await Promise.all(ids.map((id) => this.native ? this.secure.get(`trip:${id}`) : this.browserDb.get(id)));
+    const trips: SavedTrip[] = [];
+    for (const [index, value] of stored.entries()) {
+      const decoded = decodeSavedTrip(value);
+      if (!decoded) { await this.remove(ids[index]); continue; }
+      if (decoded.migrated) await this.write(decoded.trip);
+      trips.push(decoded.trip);
+    }
+    return trips;
+  }
+
+  private async write(trip: SavedTrip): Promise<void> {
+    if (this.native) await this.secure.set(`trip:${trip.snapshot.tripId}`, trip as unknown as Record<string, unknown>);
+    else await this.browserDb.set(trip.snapshot.tripId, trip);
   }
 
   /** All saved trips, with any credential that has passed its expiry dropped (the trip itself is kept). */
@@ -90,9 +106,7 @@ export class SavedTripsStore {
   async signOut(tripId: string): Promise<void> {
     const trip = (await this.all()).find((saved) => saved.snapshot.tripId === tripId);
     if (!trip?.session) return;
-    const signedOut: SavedTrip = { ...trip, session: null };
-    if (this.native) await this.secure.set(`trip:${tripId}`, signedOut as unknown as Record<string, unknown>);
-    else await this.browserDb.set(tripId, signedOut);
+    await this.write({ ...trip, session: null });
   }
 
   async remove(tripId: string): Promise<void> {
@@ -128,10 +142,19 @@ export function isSessionExpired(session: MobileSession, now = Date.now()): bool
   return !Number.isFinite(expiresAt) || expiresAt <= now;
 }
 
-function isSavedTrip(value: unknown): boolean {
-  if (!value || typeof value !== 'object') return false;
-  const candidate = value as Partial<SavedTrip>;
-  return Boolean(candidate.snapshot?.tripId && (candidate.session === null || candidate.session?.refreshToken));
+/** Checks a stored trip; null when it cannot be used. A damaged session counts as signed out, not as a reason to drop the trip. */
+function decodeSavedTrip(value: unknown): { trip: SavedTrip; migrated: boolean } | null {
+  if (!value || typeof value !== 'object') return null;
+  const candidate = value as { snapshot?: unknown; session?: unknown; savedAt?: unknown };
+  try {
+    const { snapshot, migrated } = decodeTripSnapshot(candidate.snapshot);
+    const session = parseStoredSession(candidate.session);
+    const savedAt = typeof candidate.savedAt === 'string' && Number.isFinite(Date.parse(candidate.savedAt)) ? candidate.savedAt : new Date(0).toISOString();
+    return { trip: { snapshot, session, savedAt }, migrated };
+  } catch (error) {
+    console.warn('Removed a saved trip that this version cannot read.', isTripDataError(error) ? error.message : error);
+    return null;
+  }
 }
 
 /** Reads the booking and expiry from a trust token (`payload.signature`); the server still verifies the signature. */

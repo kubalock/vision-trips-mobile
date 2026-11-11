@@ -527,7 +527,7 @@ describe('isShareCancelled', () => {
 
 function minimalTrip(): unknown {
   return {
-    tripId: 'trip-1', stage: 'countdown', accessScope: 'primary_customer', version: '1',
+    schemaVersion: 3, tripId: 'trip-1', stage: 'countdown', accessScope: 'primary_customer', version: '1',
     freshness: { status: 'fresh', sourceUpdatedAt: '2026-11-01T10:00:00Z', nextRefreshAfter: null },
     summary: { name: 'Test trip', reference: 'REF-1', departureDate: null, returnDate: null, heroImageUrl: null },
     brand: { name: 'Brand', logoUrl: null, theme: {}, profile: { whyBook: [], socialLinks: [], reviewLinks: [] } },
