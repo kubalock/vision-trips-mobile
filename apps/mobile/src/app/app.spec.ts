@@ -28,7 +28,9 @@ describe('App', () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('h1')?.textContent).toContain('Use your invitation link');
+    expect(compiled.querySelector('h1')?.textContent).toContain('Open your trip');
+    expect(compiled.querySelector('main')?.classList).toContain('vt-main--entry');
+    expect(compiled.querySelector('.vt-entry h2')?.textContent).toContain('Use your invitation link');
     expect(compiled.querySelector('#base-id, #record-id, input[placeholder^="app"], input[placeholder^="rec"]')).toBeNull();
     expect(compiled.querySelectorAll('main input')).toHaveLength(0);
     expect(compiled.textContent).not.toMatch(/Airtable|base ID|record ID/i);

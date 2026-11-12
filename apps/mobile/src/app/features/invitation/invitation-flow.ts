@@ -25,73 +25,88 @@ export function sanitizeOtp(value: string): string {
   selector: 'app-invitation-flow',
   imports: [VtIcon],
   template: `
-    <section class="vt-gate__panel vt-card vt-invite" [attr.aria-busy]="busy() || step() === 'loading'" aria-labelledby="invite-title">
-      <p class="vt-invite__live vt-sr-only" aria-live="polite" role="status">{{ announcement() }}</p>
+    <section class="vt-invite" [attr.aria-busy]="busy() || step() === 'loading'" aria-labelledby="invite-title">
+      <p class="vt-sr-only" aria-live="polite" role="status">{{ announcement() }}</p>
+      <button type="button" class="vt-invite__back" [disabled]="busy() && step() === 'code'" (click)="close()"><vt-icon name="chevron-left" [size]="18" /> {{ step() === 'unavailable' || step() === 'error' ? 'Back' : 'Not now' }}</button>
       @switch (step()) {
         @case ('loading') {
-          <p class="vt-invite__kicker">Opening your invitation</p>
-          <h1 id="invite-title" tabindex="-1" #heading>Just a moment…</h1>
-          <p class="vt-invite__lead"><vt-icon class="vt-invite__spin" name="loader" [size]="18" /> Checking your link.</p>
+          <header class="vt-page-head">
+            <p class="vt-page-kicker vt-page-head__kicker">Opening your invitation</p>
+            <h1 id="invite-title" class="vt-page-title vt-page-head__title" tabindex="-1" #heading>Just a moment…</h1>
+          </header>
+          <div class="vt-invite__card"><p class="vt-invite__lead"><vt-icon class="vt-invite__spin" name="loader" [size]="18" /> Checking your link.</p></div>
         }
         @case ('welcome') {
           @if (invitation(); as current) {
-            <div class="vt-invite__brand">
-              @if (current.brand.logoUrl) { <img class="vt-invite__logo" [src]="current.brand.logoUrl" [alt]="current.brand.name" decoding="async" /> }
-              @else { <span class="vt-invite__brand-name">{{ current.brand.name }}</span> }
+            <header class="vt-page-head">
+              <p class="vt-page-kicker vt-page-head__kicker">Your trip with {{ current.brand.name }}</p>
+              <h1 id="invite-title" class="vt-page-title vt-page-head__title" tabindex="-1" #heading>{{ current.verification === 'none' ? 'You’ve been invited to view a trip' : 'Welcome — your trip is ready' }}</h1>
+            </header>
+            <div class="vt-invite__card">
+              <div class="vt-invite__brand">
+                @if (current.brand.logoUrl) { <img class="vt-invite__logo" [src]="current.brand.logoUrl" [alt]="current.brand.name" decoding="async" /> }
+                @else { <span class="vt-invite__brand-name">{{ current.brand.name }}</span> }
+              </div>
+              @if (current.verification === 'none') {
+                <p class="vt-invite__lead">A fellow traveller has shared the itinerary, documents and contact details with you. Prices and payments aren’t included.</p>
+                <button type="button" class="vt-invite__primary" [disabled]="busy() || !online()" (click)="openWithoutCode()">{{ busy() ? 'Opening…' : 'Open the trip' }}</button>
+              } @else if (current.trustedDevice) {
+                <p class="vt-invite__lead">This device is already trusted for your trip, so you don’t need a code.</p>
+                <button type="button" class="vt-invite__primary" [disabled]="busy() || !online()" (click)="openWithoutCode()">{{ busy() ? 'Opening…' : 'Open my trip' }}</button>
+                <button type="button" class="vt-invite__link" [disabled]="busy() || !online()" (click)="sendCode()">Send me a code instead</button>
+              } @else {
+                <p class="vt-invite__lead">To keep your booking safe, we’ll email a six-digit code to <strong>{{ current.destinationHint }}</strong>.</p>
+                <button type="button" class="vt-invite__primary" [disabled]="busy() || !online() || resendSeconds() > 0" (click)="sendCode()"><vt-icon name="mail" [size]="19" /> {{ busy() ? 'Sending…' : resendSeconds() > 0 ? 'Send my code in ' + resendSeconds() + 's' : 'Send my code' }}</button>
+                <p class="vt-invite__fine">Not your email address? Contact {{ current.brand.name }} — they can update it and send a new invitation.</p>
+              }
+              @if (!online()) { <p class="vt-invite__error" role="alert">You’re offline. Connect to the internet to receive and enter your code.</p> }
+              @else if (problem(); as current) { <p class="vt-invite__error" role="alert">{{ current.message }}</p> }
             </div>
-            <p class="vt-invite__kicker">Your trip with {{ current.brand.name }}</p>
-            <h1 id="invite-title" tabindex="-1" #heading>{{ current.verification === 'none' ? 'You’ve been invited to view a trip' : 'Welcome — your trip is ready' }}</h1>
-            @if (current.verification === 'none') {
-              <p class="vt-invite__lead">A fellow traveller has shared the itinerary, documents and contact details with you. Prices and payments aren’t included.</p>
-              <button type="button" class="vt-btn vt-btn--primary vt-btn--wide" [disabled]="busy() || !online()" (click)="openWithoutCode()">{{ busy() ? 'Opening…' : 'Open the trip' }}</button>
-            } @else if (current.trustedDevice) {
-              <p class="vt-invite__lead">This device is already trusted for your trip, so you don’t need a code.</p>
-              <button type="button" class="vt-btn vt-btn--primary vt-btn--wide" [disabled]="busy() || !online()" (click)="openWithoutCode()">{{ busy() ? 'Opening…' : 'Open my trip' }}</button>
-              <button type="button" class="vt-invite__link" [disabled]="busy() || !online()" (click)="sendCode()">Send me a code instead</button>
-            } @else {
-              <p class="vt-invite__lead">To keep your booking safe, we’ll email a six-digit code to <strong>{{ current.destinationHint }}</strong>.</p>
-              <button type="button" class="vt-btn vt-btn--primary vt-btn--wide" [disabled]="busy() || !online() || resendSeconds() > 0" (click)="sendCode()">
-                {{ busy() ? 'Sending…' : resendSeconds() > 0 ? 'Send my code in ' + resendSeconds() + 's' : 'Send my code' }}
-              </button>
-              <p class="vt-invite__fine">Not your email address? Contact {{ current.brand.name }} — they can update it and send a new invitation.</p>
-            }
           }
         }
         @case ('code') {
-          <p class="vt-invite__kicker">Check your email</p>
-          <h1 id="invite-title" tabindex="-1" #heading>Enter your code</h1>
-          <p class="vt-invite__lead" id="otp-help">We sent a six-digit code to <strong>{{ invitation()?.destinationHint }}</strong>. It expires in 10 minutes.</p>
-          <form class="vt-form vt-invite__form" (submit)="verify($event)" novalidate>
-            <label for="invite-otp">Six-digit code</label>
-            <input #codeInput id="invite-otp" name="one-time-code" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code"
-              maxlength="14" spellcheck="false" class="vt-invite__code" [value]="code()" [attr.aria-invalid]="problem() ? true : null"
-              [attr.aria-describedby]="problem() ? 'otp-help otp-error' : 'otp-help'" [disabled]="busy()" (input)="updateCode($event)" (paste)="pasteCode($event)" />
-            @if (problem(); as current) { <p id="otp-error" class="vt-invite__error" role="alert">{{ current.message }}</p> }
-            <label class="vt-invite__remember"><input type="checkbox" [checked]="rememberDevice()" (change)="rememberDevice.set($any($event.target).checked)" [disabled]="busy()" /><span>Trust this device for 30 days. Don’t tick this on a shared device.</span></label>
-            <button type="submit" class="vt-btn vt-btn--primary vt-btn--wide" [disabled]="busy() || code().length !== 6 || !online()">{{ busy() ? 'Checking…' : 'Verify and open my trip' }}</button>
-          </form>
-          <button type="button" class="vt-invite__link" [disabled]="busy() || resendSeconds() > 0 || remainingSends() === 0 || !online()" (click)="sendCode()">
-            {{ remainingSends() === 0 ? 'No more codes can be sent right now' : resendSeconds() > 0 ? 'Send a new code in ' + resendSeconds() + 's' : 'Send a new code' }}
-          </button>
+          <header class="vt-page-head">
+            <p class="vt-page-kicker vt-page-head__kicker">Check your email</p>
+            <h1 id="invite-title" class="vt-page-title vt-page-head__title" tabindex="-1" #heading>Enter your code</h1>
+            <p class="vt-page-description vt-page-head__lead" id="otp-help">We sent a six-digit code to <strong>{{ invitation()?.destinationHint }}</strong>. It expires in 10 minutes.</p>
+          </header>
+          <div class="vt-invite__card">
+            <form class="vt-form vt-invite__form" (submit)="verify($event)" novalidate>
+              <label for="invite-otp">Six-digit code</label>
+              <input #codeInput id="invite-otp" name="one-time-code" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code"
+                maxlength="14" spellcheck="false" class="vt-invite__code" [value]="code()" [attr.aria-invalid]="problem() ? true : null"
+                [attr.aria-describedby]="problem() ? 'otp-help otp-error' : 'otp-help'" [disabled]="busy()" (input)="updateCode($event)" (paste)="pasteCode($event)" />
+              @if (!online()) { <p class="vt-invite__error" role="alert">You’re offline. Connect to the internet to receive and enter your code.</p> }
+              @else if (problem(); as current) { <p id="otp-error" class="vt-invite__error" role="alert">{{ current.message }}</p> }
+              <label class="vt-invite__remember"><input type="checkbox" [checked]="rememberDevice()" (change)="rememberDevice.set($any($event.target).checked)" [disabled]="busy()" /><span>Trust this device for 30 days. Don’t tick this on a shared device.</span></label>
+              <button type="submit" class="vt-invite__primary" [disabled]="busy() || code().length !== 6 || !online()">{{ busy() ? 'Checking…' : 'Verify and open my trip' }}</button>
+            </form>
+            <button type="button" class="vt-invite__link" [disabled]="busy() || resendSeconds() > 0 || remainingSends() === 0 || !online()" (click)="sendCode()">
+              {{ remainingSends() === 0 ? 'No more codes can be sent right now' : resendSeconds() > 0 ? 'Send a new code in ' + resendSeconds() + 's' : 'Send a new code' }}
+            </button>
+          </div>
         }
         @case ('unavailable') {
-          <p class="vt-invite__kicker">Invitation</p>
-          <h1 id="invite-title" tabindex="-1" #heading>{{ problem()?.title }}</h1>
-          <p class="vt-invite__lead" role="alert">{{ problem()?.message }}</p>
-          <p class="vt-invite__fine">Your travel agent can send you a fresh invitation at any time. Trips you’ve already opened stay in My Trips on this device.</p>
+          <header class="vt-page-head">
+            <p class="vt-page-kicker vt-page-head__kicker">Invitation</p>
+            <h1 id="invite-title" class="vt-page-title vt-page-head__title" tabindex="-1" #heading>{{ problem()?.title }}</h1>
+          </header>
+          <div class="vt-invite__card">
+            <p class="vt-invite__lead" role="alert">{{ problem()?.message }}</p>
+            <p class="vt-invite__fine">Your travel agent can send you a fresh invitation at any time. Trips you’ve already opened stay in My trips on this device.</p>
+          </div>
         }
         @case ('error') {
-          <p class="vt-invite__kicker">Invitation</p>
-          <h1 id="invite-title" tabindex="-1" #heading>{{ problem()?.title }}</h1>
-          <p class="vt-invite__lead" role="alert">{{ problem()?.message }}</p>
-          <button type="button" class="vt-btn vt-btn--primary vt-btn--wide" [disabled]="busy()" (click)="retry()">Try again</button>
+          <header class="vt-page-head">
+            <p class="vt-page-kicker vt-page-head__kicker">Invitation</p>
+            <h1 id="invite-title" class="vt-page-title vt-page-head__title" tabindex="-1" #heading>{{ problem()?.title }}</h1>
+          </header>
+          <div class="vt-invite__card">
+            <p class="vt-invite__lead" role="alert">{{ problem()?.message }}</p>
+            <button type="button" class="vt-invite__primary" [disabled]="busy()" (click)="retry()"><vt-icon name="refresh" [size]="18" /> Try again</button>
+          </div>
         }
       }
-      @if (step() === 'welcome' || step() === 'code') {
-        @if (!online()) { <p class="vt-invite__error" role="alert">You’re offline. Connect to the internet to receive and enter your code.</p> }
-        @else if (step() === 'welcome' && problem(); as current) { <p class="vt-invite__error" role="alert">{{ current.message }}</p> }
-      }
-      <button type="button" class="vt-invite__back" [disabled]="busy() && step() === 'code'" (click)="close()"><vt-icon name="chevron-left" [size]="16" /> {{ step() === 'unavailable' || step() === 'error' ? 'Back' : 'Not now' }}</button>
     </section>
   `,
 })

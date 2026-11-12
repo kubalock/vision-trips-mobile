@@ -1098,7 +1098,7 @@ button { font: inherit; }
 
 @media (min-width: 560px) and (max-width: 899px) {
   .vt-wrap { width: min(100% - 40px, 760px); }
-  .vt-app .vt-main:not(.vt-main--home):not(.vt-main--itinerary):not(.vt-main--payments):not(.vt-main--documents):not(.vt-main--help):not(.vt-main--account):not(.vt-main--trips) { padding-top: 18px; }
+  .vt-app .vt-main:not(.vt-main--home):not(.vt-main--itinerary):not(.vt-main--payments):not(.vt-main--documents):not(.vt-main--help):not(.vt-main--account):not(.vt-main--trips):not(.vt-main--entry) { padding-top: 18px; }
   .vt-app .vt-hero { min-height: 440px; }
   .vt-app .vt-section { padding-top: 36px; }
   .vt-app .vt-card { padding: var(--card-pad); }
@@ -1582,14 +1582,6 @@ body.vt .vt-app .vt-account-danger button:active { transform: scale(.97); }
 /* Form fields inside Tailwind blocks (entry and verification screens). */
 :root[data-theme="dark"] .vt-app :is(input, select, textarea).border-slate-300 { background-color: var(--surface); color: var(--ink); }
 
-/* Appearance choice on the Account page. */
-.vt-app .vt-appearance-card { margin: var(--sp-6) var(--vt-flat-gutter, 0) 0; padding: var(--card-pad); border: 1px solid var(--card-border); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-card); }
-.vt-app .vt-appearance-card h2 { margin: 0; font-size: var(--fs-2); }
-.vt-app .vt-appearance-card > p { margin: var(--sp-1) 0 var(--sp-3); color: var(--ink-2); font-size: var(--fs-0); }
-.vt-app .vt-segmented { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-1); padding: var(--sp-1); border-radius: var(--r-s); background: var(--surface-2); }
-.vt-app .vt-segmented button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 var(--sp-2); border: 0; border-radius: var(--r-xs); background: transparent; color: var(--ink-2); font: inherit; font-size: var(--fs-0); font-weight: 600; cursor: pointer; }
-.vt-app .vt-segmented button.is-selected { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-card-sm), 0 0 0 1px var(--card-border); }
-
 /* A figure missing from the booking: shown plainly as unavailable, never as £0.00. */
 .vt-app .vt-money--unavailable { color: var(--ink-3); font-size: 0.85em; font-weight: 600; }
 
@@ -1779,26 +1771,130 @@ body.vt .vt-app .vt-account-danger button:active { transform: scale(.97); }
 :root[data-theme="dark"] .vt-app .vt-quotation-card.is-current { border-color: var(--vt-accent-text); }
 :root[data-theme="dark"] .vt-app .vt-quotation-card__meta > div { border-color: var(--line-2); }
 
-/* Invitation and email-code screens */
+/* Entry (no trip open) and invitation screens: same full-width canvas and page rhythm as My trips, own classes. */
 .vt-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
-.vt-app .vt-invite { display: grid; gap: var(--sp-3, 12px); }
-.vt-app .vt-invite h1 { margin: 0; font-family: var(--vt-display); font-weight: var(--vt-display-weight); font-size: clamp(1.6rem, 6vw, 2rem); line-height: 1.15; }
-.vt-app .vt-invite h1:focus { outline: none; }
-.vt-app .vt-invite h1:focus-visible { outline: 2px solid var(--vt-accent); outline-offset: 4px; border-radius: 4px; }
+.vt-app main.vt-main--entry { --vt-flat-gutter: clamp(20px, 4vw, 56px); width: 100%; margin-inline: 0; padding-top: 0; }
+.vt-app :is(.vt-entry, .vt-invite) { display: grid; align-content: start; gap: 18px; padding: 32px var(--vt-flat-gutter) 48px; }
+
+/* Page header shared by the entry and invitation screens. */
+.vt-app .vt-page-head { display: grid; gap: 0; margin-bottom: 6px; }
+.vt-app .vt-page-head__kicker { margin: 0; color: var(--vt-accent-text); font-size: .72rem; font-weight: 800; letter-spacing: .14em; line-height: 1.2; text-transform: uppercase; }
+.vt-app .vt-page-head__title { margin: 5px 0 0; color: var(--ink); font-size: clamp(2rem, 7vw, 2.5rem); font-weight: 650; line-height: 1.08; }
+.vt-app .vt-page-head__title:focus { outline: none; }
+.vt-app .vt-page-head__title:focus-visible { outline: 2px solid var(--vt-accent); outline-offset: 4px; border-radius: 4px; }
+.vt-app .vt-page-head__lead { margin: 9px 0 0; color: var(--ink-2); font-size: .9rem; line-height: 1.55; }
+
+/* Entry screen. */
+.vt-app .vt-entry-card { display: grid; gap: 14px; margin: 0; padding: 20px; border: 1px solid var(--card-border); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-card); }
+.vt-app .vt-entry-card__header { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 13px; }
+.vt-app .vt-entry-card__header h2 { margin: 0; color: var(--ink); font-size: 1.18rem; font-weight: 700; line-height: 1.25; }
+.vt-app .vt-entry-card__icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: var(--r-s); background: var(--tint); color: var(--vt-accent-text); }
+.vt-app .vt-entry-card__intro { margin: 0; color: var(--ink-2); font-size: .9rem; line-height: 1.55; }
+.vt-app .vt-entry-card--quiet { box-shadow: none; background: color-mix(in srgb, var(--surface) 70%, transparent); }
+.vt-app .vt-entry-card--dev { border-style: dashed; box-shadow: none; background: transparent; }
+.vt-app .vt-entry-steps { display: grid; gap: 12px; margin: 4px 0 0; padding: 0; list-style: none; }
+.vt-app .vt-entry-steps li { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: start; gap: 12px; }
+.vt-app .vt-entry-steps li > span { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--tint); color: var(--vt-accent-text); font-size: .8rem; font-weight: 800; }
+.vt-app .vt-entry-steps strong { display: block; color: var(--ink); font-size: .92rem; font-weight: 700; line-height: 1.35; }
+.vt-app .vt-entry-steps p { margin: 2px 0 0; color: var(--ink-2); font-size: .84rem; line-height: 1.45; }
+.vt-app .vt-entry__status { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--ink-2); font-size: .9rem; }
+.vt-app .vt-entry .vt-status-card.vt-entry__notice { margin: 0; }
+.vt-app :is(.vt-entry__spin, .vt-invite__spin) { display: inline-block; vertical-align: -3px; animation: vt-spin 1s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .vt-app :is(.vt-entry__spin, .vt-invite__spin) { animation: none; } }
+
+/* Primary pill buttons on these screens match "Add another trip" / "Open trip". */
+.vt-app :is(.vt-entry__primary, .vt-invite__primary) { display: inline-flex; align-items: center; justify-content: center; gap: 9px; width: 100%; min-height: 50px; padding: 11px 20px; border: 1px solid var(--accent-action); border-radius: var(--r-pill); background: var(--accent-action); color: var(--accent-action-ink); box-shadow: 0 8px 20px color-mix(in srgb, var(--accent-action) 22%, transparent); font-size: .9rem; font-weight: 800; cursor: pointer; transition: filter .18s ease, transform .12s ease; }
+.vt-app :is(.vt-entry__primary, .vt-invite__primary):hover:not(:disabled) { filter: brightness(.9); }
+.vt-app :is(.vt-entry__primary, .vt-invite__primary):active:not(:disabled) { filter: brightness(.82); transform: scale(.98); }
+.vt-app :is(.vt-entry__primary, .vt-invite__primary):disabled { opacity: .55; cursor: not-allowed; box-shadow: none; }
+
+/* Invitation and email-code screens. */
+.vt-app .vt-invite__card { display: grid; gap: 14px; padding: 20px; border: 1px solid var(--card-border); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-card); }
 .vt-app .vt-invite__brand { display: flex; align-items: center; min-height: 40px; }
 .vt-app .vt-invite__logo { max-height: 44px; max-width: 200px; object-fit: contain; }
-.vt-app .vt-invite__brand-name { font-weight: 700; font-size: 1.1rem; }
-.vt-app .vt-invite__kicker { margin: 0; font-size: var(--fs-0, .8rem); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--vt-accent-text); }
-.vt-app .vt-invite__lead { margin: 0; color: var(--ink-2); line-height: 1.55; }
-.vt-app .vt-invite__fine { margin: 0; font-size: var(--fs-0, .85rem); color: var(--ink-2); line-height: 1.5; }
-.vt-app .vt-invite__form { margin-top: var(--sp-2, 8px); }
+.vt-app .vt-invite__brand-name { color: var(--ink); font-size: 1.1rem; font-weight: 700; }
+.vt-app .vt-invite__lead { margin: 0; color: var(--ink-2); font-size: .92rem; line-height: 1.55; }
+.vt-app .vt-invite__lead .vt-invite__spin { margin-right: 6px; }
+.vt-app .vt-invite__lead strong, .vt-app .vt-page-head__lead strong { color: var(--ink); }
+.vt-app .vt-invite__fine { margin: 0; color: var(--ink-2); font-size: .82rem; line-height: 1.5; }
 .vt-app .vt-invite .vt-invite__code { font-size: 1.75rem; letter-spacing: .4em; text-align: center; font-variant-numeric: tabular-nums; font-family: ui-monospace, Menlo, Consolas, monospace; }
-.vt-app .vt-invite__error { margin: 0; padding: 10px 12px; border-radius: var(--r-s); background: color-mix(in srgb, var(--warn, #b45309) 10%, var(--surface)); color: var(--ink); font-size: var(--fs-0, .9rem); }
+.vt-app .vt-invite__error { margin: 0; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--warn) 24%, var(--line)); border-radius: var(--r-s); background: color-mix(in srgb, var(--warn) 9%, var(--surface)); color: var(--ink); font-size: .85rem; line-height: 1.45; }
 .vt-app .vt-invite__remember { display: flex !important; align-items: flex-start; gap: 10px; font-weight: 400 !important; }
 .vt-app .vt-invite__remember input { width: auto; min-height: 0; margin-top: 3px; }
-.vt-app .vt-invite__link, .vt-app .vt-invite__back { justify-self: center; min-height: 44px; padding: 8px 12px; border: 0; background: none; color: var(--link, var(--vt-accent-text)); font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
-.vt-app .vt-invite__back { justify-self: start; color: var(--ink-2); }
-.vt-app :is(.vt-invite__link, .vt-invite__back):disabled { color: var(--ink-3, #94a3b8); cursor: default; }
-.vt-app .vt-invite__spin { display: inline-block; vertical-align: -3px; animation: vt-spin 1s linear infinite; }
-@media (prefers-reduced-motion: reduce) { .vt-app .vt-invite__spin { animation: none; } }
-.vt-app .vt-dev-tools { margin-top: var(--sp-5, 20px); padding-top: var(--sp-4, 16px); border-top: 1px dashed var(--line-2); display: grid; gap: 8px; }
+.vt-app .vt-invite__link, .vt-app .vt-invite__back { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 8px 12px; border: 0; background: none; color: var(--link, var(--vt-accent-text)); font-weight: 700; cursor: pointer; }
+.vt-app .vt-invite__link { justify-self: center; }
+.vt-app .vt-invite__back { justify-self: start; margin: -8px 0 -6px -12px; color: var(--ink-2); font-size: .88rem; }
+.vt-app :is(.vt-invite__link, .vt-invite__back):disabled { color: var(--ink-3); cursor: default; }
+:root[data-theme="dark"] .vt-app :is(.vt-entry-card, .vt-invite__card) { border-color: var(--card-border); }
+@media (min-width: 640px) {
+  .vt-app :is(.vt-entry__primary, .vt-invite__primary) { width: auto; justify-self: start; }
+  .vt-app .vt-invite form .vt-invite__primary { width: 100%; }
+}
+
+/* Quotation review and acceptance: same card, header and accordion language as "Questions you may have". */
+.vt-app .vt-accept-card { display: grid; gap: 16px; margin: 24px var(--vt-flat-gutter) 0; padding: 16px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-card); }
+.vt-app .vt-accept-card__lead { margin: 0; color: var(--ink-2); font-size: .86rem; line-height: 1.55; }
+.vt-app .vt-accept-card__note { margin: 8px 0 0; color: var(--ink-2); font-size: .8rem; }
+.vt-app .vt-accept-card__legal { margin: 0; color: var(--ink-3); font-size: .78rem; line-height: 1.5; }
+.vt-app .vt-accept-progress { display: grid; gap: 8px; }
+.vt-app .vt-accept-progress__label { color: var(--vt-accent-text); font-size: .78rem; font-weight: 750; }
+.vt-app .vt-accept-progress__bar { display: block; height: 6px; overflow: hidden; border-radius: var(--r-pill); background: var(--surface-2); }
+.vt-app .vt-accept-progress__bar > span { display: block; height: 100%; border-radius: inherit; background: var(--vt-accent); transition: width .25s ease; }
+.vt-app .vt-accept-form { display: grid; gap: 16px; }
+.vt-app .vt-accept-list { display: grid; gap: 10px; }
+.vt-app .vt-accept-item { overflow: hidden; border: 1px solid var(--line); border-radius: var(--r-s); background: var(--surface); transition: border-color .18s ease; }
+.vt-app .vt-accept-item[open] { border-color: color-mix(in srgb, var(--vt-accent) 30%, var(--line)); }
+.vt-app .vt-accept-item.is-confirmed { border-color: color-mix(in srgb, var(--ok) 40%, var(--line)); background: color-mix(in srgb, var(--ok) 5%, var(--surface)); }
+.vt-app .vt-accept-item summary { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 60px; padding: 10px 12px; cursor: pointer; list-style: none; }
+.vt-app .vt-accept-item summary::-webkit-details-marker { display: none; }
+.vt-app .vt-accept-item summary:hover .vt-faq-item__chevron { background: var(--tint); }
+.vt-app .vt-accept-item[open] .vt-faq-item__chevron { background: var(--tint); transform: rotate(180deg); }
+.vt-app .vt-accept-item summary:focus-visible { outline: 2px solid var(--vt-accent); outline-offset: 2px; border-radius: var(--r-s); }
+.vt-app .vt-accept-item__status { display: grid; place-items: center; width: 30px; height: 30px; border: 1.5px solid var(--line-2); border-radius: 50%; color: var(--ink-2); font-size: .78rem; font-weight: 800; }
+.vt-app .vt-accept-item.is-read .vt-accept-item__status { border-color: var(--vt-accent); color: var(--vt-accent-text); }
+.vt-app .vt-accept-item.is-confirmed .vt-accept-item__status { border-color: var(--ok); background: var(--ok); color: var(--surface); }
+.vt-app .vt-accept-item__title { display: grid; gap: 2px; min-width: 0; }
+.vt-app .vt-accept-item__title > span { color: var(--ink); font-size: .9rem; font-weight: 700; line-height: 1.35; }
+.vt-app .vt-accept-item__title > small { color: var(--ink-3); font-size: .74rem; font-weight: 600; }
+.vt-app .vt-accept-item.is-read .vt-accept-item__title > small { color: var(--vt-accent-text); }
+.vt-app .vt-accept-item.is-confirmed .vt-accept-item__title > small { color: var(--ok); }
+/* Long sections scroll inside the card so "read to the end" means something; the confirm row stays in view. */
+.vt-app .vt-accept-item__body { display: grid; gap: 10px; max-height: min(60vh, 520px); overflow-y: auto; overscroll-behavior: contain; padding: 4px 14px 0 54px; border-top: 1px solid var(--line); }
+.vt-app .vt-accept-item__intro { margin: 10px 0 0; color: var(--ink); font-size: .86rem; line-height: 1.55; }
+.vt-app .vt-accept-item__list { display: grid; gap: 6px; margin: 0; padding: 0 0 0 18px; list-style: disc; color: var(--ink-2); font-size: .84rem; line-height: 1.5; }
+.vt-app .vt-accept-item__list li::marker { color: var(--vt-accent-text); }
+.vt-app .vt-accept-item__links { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.vt-app .vt-accept-item__links a { display: inline-flex; align-items: center; gap: 5px; color: var(--link, var(--vt-accent-text)); font-size: .84rem; font-weight: 700; }
+.vt-app .vt-accept-item__end { margin: 0; color: var(--ink-3); font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.vt-app .vt-accept-item__confirm { position: sticky; bottom: 0; display: flex; align-items: flex-start; gap: 10px; margin: 0 -14px 0 -54px; padding: 14px 14px 14px 54px; border-top: 1px solid var(--line); background: var(--surface); color: var(--ink); font-size: .86rem; font-weight: 650; cursor: pointer; }
+.vt-app .vt-accept-item.is-confirmed .vt-accept-item__confirm { background: color-mix(in srgb, var(--ok) 5%, var(--surface)); }
+.vt-app .vt-accept-item__confirm input { flex: 0 0 auto; width: 20px; height: 20px; min-height: 0; margin: 1px 0 0; accent-color: var(--vt-accent); }
+.vt-app .vt-accept-item__confirm span { display: grid; gap: 2px; }
+.vt-app .vt-accept-item__confirm small { color: var(--ink-3); font-size: .74rem; font-weight: 500; }
+.vt-app .vt-accept-item__confirm.is-disabled { color: var(--ink-3); cursor: not-allowed; }
+.vt-app .vt-accept-signature { display: grid; gap: 12px; margin: 0; padding: 0; border: 0; }
+.vt-app .vt-accept-signature legend { margin-bottom: 4px; padding: 0; color: var(--ink); font-size: .95rem; font-weight: 700; }
+.vt-app .vt-accept-signature label { display: grid; gap: 6px; color: var(--ink-2); font-size: .8rem; font-weight: 650; }
+.vt-app .vt-accept-signature input { width: 100%; min-height: 48px; padding: 12px 14px; border: 1.5px solid var(--line-2); border-radius: var(--r-s); background: var(--surface); color: var(--ink); font-size: .95rem; }
+.vt-app .vt-accept-signature input:focus { border-color: var(--vt-accent); outline: none; box-shadow: 0 0 0 3px var(--tint-2); }
+.vt-app :is(.vt-accept-card__submit, .vt-accept-card__secondary) { display: inline-flex; align-items: center; justify-content: center; gap: 9px; width: 100%; min-height: 50px; padding: 11px 20px; border-radius: var(--r-pill); font-size: .9rem; font-weight: 800; cursor: pointer; transition: filter .18s ease, transform .12s ease; }
+.vt-app .vt-accept-card__submit { border: 1px solid var(--accent-action); background: var(--accent-action); color: var(--accent-action-ink); box-shadow: 0 8px 20px color-mix(in srgb, var(--accent-action) 22%, transparent); }
+.vt-app .vt-accept-card__submit:hover:not(:disabled) { filter: brightness(.9); }
+.vt-app .vt-accept-card__submit:active:not(:disabled) { filter: brightness(.82); transform: scale(.98); }
+.vt-app .vt-accept-card__submit:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
+.vt-app .vt-accept-card__secondary { border: 1px solid color-mix(in srgb, var(--vt-accent) 28%, transparent); background: var(--tint); color: var(--vt-accent-text); }
+.vt-app .vt-accept-done { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 14px; }
+.vt-app .vt-accept-done__icon { display: grid; place-items: center; width: 46px; height: 46px; border-radius: var(--r-s); background: color-mix(in srgb, var(--ok) 14%, var(--surface)); color: var(--ok); }
+.vt-app .vt-accept-done .vt-accept-card__lead { margin-top: 10px; }
+:root[data-theme="dark"] .vt-app :is(.vt-accept-card, .vt-accept-item) { border-color: var(--card-border); }
+@media (min-width: 640px) {
+  .vt-app .vt-accept-card { padding: 22px; }
+  .vt-app .vt-accept-signature { grid-template-columns: 1fr 1fr; }
+  .vt-app .vt-accept-signature legend { grid-column: 1 / -1; }
+  .vt-app :is(.vt-accept-card__submit, .vt-accept-card__secondary) { width: auto; justify-self: start; }
+}
+@media (max-width: 480px) {
+  .vt-app .vt-accept-item__body { padding-left: 14px; }
+  .vt-app .vt-accept-item__confirm { margin-left: -14px; padding-left: 14px; }
+}
+@media (prefers-reduced-motion: reduce) { .vt-app .vt-accept-progress__bar > span { transition: none; } }

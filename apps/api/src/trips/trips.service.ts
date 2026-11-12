@@ -768,9 +768,9 @@ function mapQuotationReview(
     {
       id: 'package', title: 'What you are booking', introduction: 'Check the dates, itinerary, total price and payment schedule before accepting.',
       items: [
-        `${summary.name} · ${summary.departureDate || 'Dates to be confirmed'}${summary.returnDate ? ` to ${summary.returnDate}` : ''}`,
-        ...itinerary.map((item) => `${item.typeLabel}: ${item.title}${item.startDate ? ` · ${item.startDate}` : ''}`),
-        ...(payments ? [`Total price: ${money(payments.total, payments.currency)}`, ...payments.items.filter((item) => item.status === 'outstanding' || item.status === 'overdue').map((item) => `${item.label}: ${money(item.amount, item.currency)}${item.dueDate ? ` due ${item.dueDate}` : ''}`)] : []),
+        `${summary.name} · ${summary.departureDate ? displayDate(summary.departureDate) : 'Dates to be confirmed'}${summary.returnDate ? ` to ${displayDate(summary.returnDate)}` : ''}`,
+        ...itinerary.map((item) => `${item.typeLabel}: ${item.title}${item.startDate ? ` · ${displayDate(item.startDate)}` : ''}`),
+        ...(payments ? [`Total price: ${money(payments.total, payments.currency)}`, ...payments.items.filter((item) => item.status === 'outstanding' || item.status === 'overdue').map((item) => `${item.label}: ${money(item.amount, item.currency)}${item.dueDate ? ` due ${displayDate(item.dueDate)}` : ''}`)] : []),
       ], links: [],
     },
     {
@@ -965,4 +965,10 @@ function emptyRecord(): AirtableRecord {
 
 function safeHttpsUrl(value: string | null | undefined): string | null {
   return typeof value === 'string' && /^https:\/\/[^\s"'<>]+$/.test(value) ? value : null;
+}
+
+/** Dates in customer-facing text use the app's format, DD/MM/YYYY (e.g. 19/08/2026); anything unparseable is left as is. */
+export function displayDate(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : value;
 }

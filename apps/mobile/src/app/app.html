@@ -33,7 +33,7 @@
       </div>
     </div>
   </header>
-  <main id="main-content" class="vt-wrap vt-main" [class.vt-main--home]="displayedTrip() && activeView() === 'home'" [class.vt-main--itinerary]="displayedTrip() && activeView() === 'itinerary'" [class.vt-main--payments]="displayedTrip() && activeView() === 'payments'" [class.vt-main--documents]="displayedTrip() && activeView() === 'documents'" [class.vt-main--help]="displayedTrip() && activeView() === 'help'" [class.vt-main--account]="displayedTrip() && activeView() === 'account'" [class.vt-main--trips]="showTripLibrary()" tabindex="-1">
+  <main id="main-content" class="vt-wrap vt-main" [class.vt-main--home]="displayedTrip() && activeView() === 'home'" [class.vt-main--itinerary]="displayedTrip() && activeView() === 'itinerary'" [class.vt-main--payments]="displayedTrip() && activeView() === 'payments'" [class.vt-main--documents]="displayedTrip() && activeView() === 'documents'" [class.vt-main--help]="displayedTrip() && activeView() === 'help'" [class.vt-main--account]="displayedTrip() && activeView() === 'account'" [class.vt-main--trips]="showTripLibrary()" [class.vt-main--entry]="!displayedTrip() && !showTripLibrary()" tabindex="-1">
 
     @if (displayedTrip(); as currentTrip) {
       @if (signedOut()) {
@@ -84,14 +84,54 @@
         <app-stage-experience-section [trip]="currentTrip" [external]="externalContent()" (planNext)="planNextTrip()" />
         @if (currentTrip.bookingJourney; as journey) { <app-booking-journey-section [journey]="journey" [related]="relatedQuotations()" [openingId]="openingRelatedId()" (enquire)="enquireAboutExtra($event)" (open)="openRelatedQuotation($event)" /> }
         @if (acceptanceComplete()) {
-          <section class="vt-section vt-notice vt-notice--ok"><h2 class="vt-h3">Quotation accepted</h2><p>Your acceptance has been recorded. Your travel agent will confirm the booking after checking each part with the suppliers.</p><p class="vt-small">{{ acceptanceNotice() }}</p><button type="button" class="vt-btn vt-btn--ghost vt-btn--sm" (click)="downloadDocument('acceptance')">Download acceptance receipt</button></section>
+          <section class="vt-accept-card vt-accept-card--done" aria-labelledby="accept-done-title">
+            <div class="vt-accept-done">
+              <span class="vt-accept-done__icon" aria-hidden="true"><vt-icon name="badge-check" [size]="24" /></span>
+              <div>
+                <header class="vt-lower-section__header"><p>Quotation accepted</p><h2 id="accept-done-title">Thank you — we’ve recorded your acceptance</h2></header>
+                <p class="vt-accept-card__lead">Your travel agent will confirm the booking after checking each part with the suppliers.</p>
+                @if (acceptanceNotice()) { <p class="vt-accept-card__note" role="status">{{ acceptanceNotice() }}</p> }
+              </div>
+            </div>
+            <button type="button" class="vt-accept-card__secondary" (click)="downloadDocument('acceptance')"><vt-icon name="download" [size]="18" /> Download acceptance receipt</button>
+          </section>
         } @else if (currentTrip.quotation.canAccept) {
-          <section class="vt-section vt-card"><p class="vt-small">Ready to book?</p><h2 class="vt-h2">Review and accept this quotation</h2><p class="vt-section__lead">Open every section, read the information and confirm it before accepting. Acceptance does not mark the booking as confirmed until your travel agent checks with the suppliers.</p>
-            <form class="vt-form" (submit)="acceptQuotation($event)">
-              <div class="vt-accept__reads">@for (section of currentTrip.quotation.reviewSections; track section.id) { <details class="vt-read" [class.is-read]="acceptanceSectionsOpened().includes(section.id)" (toggle)="markAcceptanceSectionOpened(section.id, $event)"><summary><span class="vt-read__tick"><vt-icon name="check" [size]="16" /></span><span>{{ section.title }}</span><span class="vt-read__chev" aria-hidden="true"><vt-icon name="chevron-down" /></span></summary><div class="vt-read__body" (scroll)="checkAcceptanceSectionScroll(section.id, $event)"><p>{{ section.introduction }}</p>@if (section.items.length) { <ul>@for (item of section.items; track item) { <li>{{ item }}</li> }</ul> }@if (section.links.length) { <ul class="vt-links">@for (link of section.links; track link.url) { <li><a class="inline-flex items-center gap-1" [href]="link.url" target="_blank" rel="noopener">{{ link.label }} <vt-icon name="external" [size]="14" /></a></li> }</ul> }<p class="vt-read__end">End of section</p><label class="vt-read__confirm"><input type="checkbox" [disabled]="!acceptanceSectionsOpened().includes(section.id)" (change)="toggleAcceptanceConfirmation(section.id, $event)"><span>I have read and understood this section</span></label></div></details> }</div>
-              <label for="acceptance-name">Full name<input id="acceptance-name" autocomplete="name" [value]="acceptanceName()" (input)="updateAcceptanceName($event)"></label><label for="acceptance-email">Email address<input id="acceptance-email" type="email" autocomplete="email" [value]="acceptanceEmail()" (input)="updateAcceptanceEmail($event)"></label>
-              <p class="vt-small">By selecting Accept quotation, you confirm that the information is correct and agree to the applicable booking conditions and cancellation terms.</p>
-              <button type="submit" [disabled]="submitting() || !online() || !acceptanceName().trim() || !acceptanceEmail().trim() || acceptanceConfirmations().length !== currentTrip.quotation.requiredConfirmations.length" class="vt-btn vt-btn--primary vt-btn--wide">{{ submitting() ? 'Recording your acceptance…' : online() ? 'Accept quotation and continue to deposit' : 'Connect to accept' }}</button>
+          <section class="vt-accept-card" aria-labelledby="accept-title">
+            <header class="vt-lower-section__header"><p>Ready to book?</p><h2 id="accept-title">Review and accept this quotation</h2></header>
+            <p class="vt-accept-card__lead">Open each section, read it to the end and confirm it. Accepting doesn’t confirm the booking — your travel agent does that after checking with the suppliers.</p>
+            <div class="vt-accept-progress" aria-live="polite">
+              <span class="vt-accept-progress__label">{{ acceptanceConfirmations().length }} of {{ currentTrip.quotation.reviewSections.length }} sections confirmed</span>
+              <span class="vt-accept-progress__bar" aria-hidden="true"><span [style.width.%]="currentTrip.quotation.reviewSections.length ? acceptanceConfirmations().length / currentTrip.quotation.reviewSections.length * 100 : 0"></span></span>
+            </div>
+            <form class="vt-accept-form" (submit)="acceptQuotation($event)">
+              <div class="vt-accept-list">
+                @for (section of currentTrip.quotation.reviewSections; track section.id; let index = $index) {
+                  <details class="vt-accept-item vt-read" [class.is-read]="acceptanceSectionsOpened().includes(section.id)" [class.is-confirmed]="acceptanceConfirmations().includes(section.id)" (toggle)="markAcceptanceSectionOpened(section.id, $event)">
+                    <summary>
+                      <span class="vt-accept-item__status" aria-hidden="true">@if (acceptanceConfirmations().includes(section.id)) { <vt-icon name="check" [size]="16" /> } @else { {{ index + 1 }} }</span>
+                      <span class="vt-accept-item__title"><span>{{ section.title }}</span><small>{{ acceptanceConfirmations().includes(section.id) ? 'Confirmed' : acceptanceSectionsOpened().includes(section.id) ? 'Read — please confirm' : 'Not read yet' }}</small></span>
+                      <span class="vt-faq-item__chevron" aria-hidden="true"><vt-icon name="chevron-down" [size]="18" /></span>
+                    </summary>
+                    <div class="vt-accept-item__body vt-read__body" (scroll)="checkAcceptanceSectionScroll(section.id, $event)">
+                      <p class="vt-accept-item__intro">{{ section.introduction }}</p>
+                      @if (section.items.length) { <ul class="vt-accept-item__list">@for (item of section.items; track item) { <li>{{ item }}</li> }</ul> }
+                      @if (section.links.length) { <ul class="vt-accept-item__links">@for (link of section.links; track link.url) { <li><a [href]="link.url" target="_blank" rel="noopener">{{ link.label }} <vt-icon name="external" [size]="14" /></a></li> }</ul> }
+                      <p class="vt-accept-item__end">End of section</p>
+                      <label class="vt-accept-item__confirm" [class.is-disabled]="!acceptanceSectionsOpened().includes(section.id)">
+                        <input type="checkbox" [checked]="acceptanceConfirmations().includes(section.id)" [disabled]="!acceptanceSectionsOpened().includes(section.id)" (change)="toggleAcceptanceConfirmation(section.id, $event)">
+                        <span>I have read and understood this section@if (!acceptanceSectionsOpened().includes(section.id)) { <small>Scroll to the end of the section to confirm</small> }</span>
+                      </label>
+                    </div>
+                  </details>
+                }
+              </div>
+              <fieldset class="vt-accept-signature">
+                <legend>Your details</legend>
+                <label for="acceptance-name"><span>Full name</span><input id="acceptance-name" autocomplete="name" [value]="acceptanceName()" (input)="updateAcceptanceName($event)"></label>
+                <label for="acceptance-email"><span>Email address</span><input id="acceptance-email" type="email" autocomplete="email" [value]="acceptanceEmail()" (input)="updateAcceptanceEmail($event)"></label>
+              </fieldset>
+              <p class="vt-accept-card__legal">By selecting Accept quotation, you confirm that the information is correct and agree to the applicable booking conditions and cancellation terms.</p>
+              <button type="submit" class="vt-accept-card__submit" [disabled]="submitting() || !online() || !acceptanceName().trim() || !acceptanceEmail().trim() || acceptanceConfirmations().length !== currentTrip.quotation.requiredConfirmations.length">{{ submitting() ? 'Recording your acceptance…' : online() ? 'Accept quotation and continue to deposit' : 'Connect to accept' }}</button>
             </form>
           </section>
         }
@@ -171,15 +211,6 @@
         <section class="vt-section vt-help-card vt-help-protection"><span class="vt-help-protection__icon"><vt-icon name="shield" [size]="24" /></span><div class="vt-help-protection__body"><h2>Financial protection</h2><p class="vt-help-intro">{{ currentTrip.protection.summary }}</p>@if (currentTrip.protection.holderName) { <p class="vt-help-protection__holder">Holder: {{ currentTrip.protection.holderName }}</p> }</div></section>
       } @else {
         <app-customer-account-section [account]="customerAccount()" [loading]="accountLoading()" [saving]="accountSaving()" [savedNotice]="accountNotice()" [openingTripId]="openingAccountTripId()" [error]="accountError()" [saveError]="accountSaveError()" (retry)="retryAccount()" (save)="saveCustomerPreferences($event)" (openTrip)="openCustomerAccountTrip($event)" (signOut)="signOutDevice()" />
-        <section class="vt-appearance-card" aria-labelledby="appearance-title">
-          <h2 id="appearance-title">Appearance</h2>
-          <p>Choose how Vision Trips looks on this device.</p>
-          <div class="vt-segmented" role="radiogroup" aria-labelledby="appearance-title">
-            @for (option of appearanceOptions; track option.value) {
-              <button type="button" role="radio" [attr.aria-checked]="appearancePreference() === option.value" [class.is-selected]="appearancePreference() === option.value" [attr.data-engagement]="'Appearance: ' + option.label" (click)="setAppearancePreference(option.value)"><vt-icon [name]="option.icon" [size]="18" /> {{ option.label }}</button>
-            }
-          </div>
-        </section>
       }
 
       <nav class="vt-nav" aria-label="Trip navigation">
@@ -248,24 +279,38 @@
         }
       </section>
     } @else {
-      <div class="vt-gate__panel vt-card vt-gate--link-only">
-        <p class="text-sm font-semibold uppercase tracking-widest text-teal-700">Open your trip</p>
-        <h1 class="mt-2 text-3xl font-semibold">Use your invitation link</h1>
-        <p class="mt-3 text-slate-600">Open the invitation your travel agent sent you by email or message on this device. We’ll email you a six-digit code to confirm it’s you, and your trip will be saved in My Trips.</p>
-        @if (submitting()) { <p class="mt-4 text-sm text-slate-600" role="status">Opening your trip link…</p> }
-        @if (error()) { <p class="mt-4 rounded-xl bg-red-50 p-4 text-sm text-red-800" role="alert">{{ error() }}</p> }
-        <p class="mt-5 text-sm text-slate-500">Can’t find it, or has it expired? Your travel agent can send you a new invitation.</p>
-        @if (savedTripList().length) { <button type="button" class="vt-btn vt-btn--wide mt-4" (click)="openAnotherTrip()">Go to My Trips</button> }
+      <section class="vt-entry" aria-labelledby="entry-title">
+        <header class="vt-page-head">
+          <p class="vt-page-kicker vt-page-head__kicker">Welcome to Vision Trips</p>
+          <h1 id="entry-title" class="vt-page-title vt-page-head__title">Open your trip</h1>
+          <p class="vt-page-description vt-page-head__lead">Your itinerary, documents and payments in one place — saved on this device so they work offline too.</p>
+        </header>
+        @if (submitting()) { <p class="vt-entry__status" role="status"><vt-icon class="vt-entry__spin" name="loader" [size]="18" /> Opening your trip link…</p> }
+        @if (error()) { <div class="vt-status-card vt-entry__notice" data-tone="warn" role="alert"><span class="vt-status-card__icon" aria-hidden="true"><vt-icon name="alert" [size]="20" /></span><div class="vt-status-card__copy"><strong>That link didn’t work</strong><p>{{ error() }}</p></div><button type="button" class="vt-status-card__close" aria-label="Dismiss" (click)="dismissError()"><vt-icon name="close" [size]="18" /></button></div> }
+        <article class="vt-entry-card">
+          <div class="vt-entry-card__header"><span class="vt-entry-card__icon" aria-hidden="true"><vt-icon name="mail" [size]="21" /></span><h2>Use your invitation link</h2></div>
+          <p class="vt-entry-card__intro">Open the invitation your travel agent sent you by email or message, on this device.</p>
+          <ol class="vt-entry-steps">
+            <li><span aria-hidden="true">1</span><div><strong>Open your invitation</strong><p>Tap the link in your email or message.</p></div></li>
+            <li><span aria-hidden="true">2</span><div><strong>Confirm it’s you</strong><p>We’ll email you a six-digit code.</p></div></li>
+            <li><span aria-hidden="true">3</span><div><strong>Your trip is ready</strong><p>It’s saved in My trips on this device.</p></div></li>
+          </ol>
+          @if (savedTripList().length) { <button type="button" class="vt-entry__primary" (click)="openAnotherTrip()"><vt-icon name="briefcase" [size]="19" /> Go to My trips</button> }
+        </article>
+        <article class="vt-entry-card vt-entry-card--quiet">
+          <div class="vt-entry-card__header"><span class="vt-entry-card__icon" aria-hidden="true"><vt-icon name="help" [size]="21" /></span><h2>Can’t find it, or has it expired?</h2></div>
+          <p class="vt-entry-card__intro">Your travel agent can send you a new invitation at any time. Each invitation works once, so use the newest one.</p>
+        </article>
         @if (devInvitationAvailable()) {
-          <div class="vt-dev-tools" role="group" aria-label="Development tools">
-            <p class="text-xs font-semibold uppercase tracking-widest text-slate-500">Development only</p>
-            <button type="button" class="vt-btn vt-btn--primary vt-btn--wide" [disabled]="openingDevInvitation()" (click)="openDevelopmentInvitation()">{{ openingDevInvitation() ? 'Creating test invitation…' : 'Open development test trip' }}</button>
-            <p class="mt-2 text-xs text-slate-500">Uses the test booking configured on the API server. The code is emailed to the test customer, or printed in the API console without an email provider.</p>
-          </div>
+          <article class="vt-entry-card vt-entry-card--dev" role="group" aria-label="Development tools">
+            <p class="vt-page-kicker vt-page-head__kicker">Development only</p>
+            <button type="button" class="vt-entry__primary" [disabled]="openingDevInvitation()" (click)="openDevelopmentInvitation()">{{ openingDevInvitation() ? 'Creating test invitation…' : 'Open development test trip' }}</button>
+            <p class="vt-entry-card__intro">Uses the test booking configured on the API server. The code is emailed to the test customer, or printed in the API console without an email provider.</p>
+          </article>
         } @else if (devInvitationMessage()) {
-          <p class="vt-dev-tools text-xs text-slate-500" role="note">Development: {{ devInvitationMessage() }}</p>
+          <p class="vt-entry-card vt-entry-card--dev vt-entry-card__intro" role="note"><strong>Development:</strong> {{ devInvitationMessage() }}</p>
         }
-      </div>
+      </section>
     }
   </main>
 </div>

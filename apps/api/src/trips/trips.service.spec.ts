@@ -253,3 +253,12 @@ describe('TripsService', () => {
     expect(JSON.stringify(status)).not.toContain('rec');
   });
 });
+
+describe('displayDate', () => {
+  it('shows ISO dates as DD/MM/YYYY like the app, and leaves anything else alone', async () => {
+    const { displayDate } = await import('./trips.service.js');
+    expect(displayDate('2026-08-19')).toBe('19/08/2026');
+    expect(displayDate('2028-01-28T00:00:00.000Z')).toBe('28/01/2028');
+    expect(displayDate('Dates to be confirmed')).toBe('Dates to be confirmed');
+  });
+});

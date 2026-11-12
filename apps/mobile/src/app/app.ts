@@ -151,11 +151,6 @@ export class App implements OnInit, OnDestroy {
       '--vt-hero-a': theme?.secondaryColor || '#134e4a', '--vt-hero-b': palette.accent,
     };
   });
-  protected readonly appearanceOptions: ReadonlyArray<{ value: AppearancePreference; label: string; icon: VtIconName }> = [
-    { value: 'system', label: 'Device', icon: 'device' },
-    { value: 'light', label: 'Light', icon: 'sun' },
-    { value: 'dark', label: 'Dark', icon: 'moon' },
-  ];
   private readonly applyAppearanceEffect = effect(() => this.applyAppearance(this.appearance()));
   private readonly sessions = inject(SessionManager);
   private readonly session = this.sessions.session;
