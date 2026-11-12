@@ -26,10 +26,10 @@ export class LinkTokenService {
     return this.mintLink(baseId, recordId, expiresAt, false);
   }
 
-  mintFellowTravellerLink(baseId: string, recordId: string, expiresAt: number): string {
-    return this.mintLink(baseId, recordId, expiresAt, true);
-  }
-
+  /**
+   * Legacy signed links are now only a booking locator: opening one starts email verification for the primary
+   * customer. They are still minted for notification emails until those link to invitations directly.
+   */
   private mintLink(baseId: string, recordId: string, expiresAt: number, fellowTraveller: boolean): string {
     const secret = process.env.VISION_LINK_SECRET;
     if (!secret) throw new Error('VISION_LINK_SECRET is not configured.');
@@ -83,7 +83,8 @@ export class LinkTokenService {
     };
   }
 
-  private extractToken(input: string): string {
+  /** The token part of a pasted link or a bare token (`/trip/<token>/…`). */
+  extractToken(input: string): string {
     const trimmed = input.trim();
     if (trimmed.length > 4096) throw new UnauthorizedException('The itinerary link is not valid.');
     if (!trimmed.includes('://')) return trimmed.replace(/^trip\//, '').split('/')[0];

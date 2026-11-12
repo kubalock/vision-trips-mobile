@@ -2,15 +2,18 @@ import { CallHandler, ConflictException, ExecutionContext, Injectable, NestInter
 import { createHash } from 'node:crypto';
 import { Observable, catchError, of, tap, throwError } from 'rxjs';
 import type { Request } from 'express';
+import { Reflector } from '@nestjs/core';
 import { DurableAuthStore } from '../sessions/durable-auth.store.js';
+import { NO_STORED_REPLAY } from './no-stored-replay.js';
 
 @Injectable()
 export class IdempotencyInterceptor implements NestInterceptor {
-  constructor(private readonly store: DurableAuthStore) {}
+  constructor(private readonly store: DurableAuthStore, private readonly reflector: Reflector) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const request = context.switchToHttp().getRequest<Request>();
     if (!['POST', 'PATCH', 'DELETE'].includes(request.method)) return next.handle();
+    if (this.reflector.getAllAndOverride<boolean>(NO_STORED_REPLAY, [context.getHandler(), context.getClass()])) return next.handle();
     const key = request.get('idempotency-key');
     if (!key) return next.handle();
     if (!/^[A-Za-z0-9._:-]{8,120}$/.test(key)) throw new ConflictException('The Idempotency-Key header is not valid.');

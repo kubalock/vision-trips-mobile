@@ -6,6 +6,17 @@ import { airlineFields, airportFields, bookingFields, brandFields, brandTemplate
 import { resolveStage } from './stage.js';
 import { themeTokens } from './theme.js';
 
+export interface InvitationContext {
+  tenantId: string | null;
+  tripName: string;
+  customer: { email: string; firstName: string | null } | null;
+  brand: { name: string; logoUrl: string | null; primaryColor: string | null; supportEmail: string | null; supportPhone: string | null };
+}
+
+export class InvitationTargetError extends Error {
+  constructor(readonly reason: 'customer_not_linked' | 'customer_email_missing') { super(reason); this.name = 'InvitationTargetError'; }
+}
+
 @Injectable()
 export class TripsService {
   constructor(private readonly airtable: AirtableService) {}
@@ -76,6 +87,50 @@ export class TripsService {
       email: firstString(pick(booking.fields, bookingFields.customerEmail)),
       forceOtp: Boolean(pick(booking.fields, bookingFields.enable2fa)),
     };
+  }
+
+  /**
+   * The minimum needed to invite a Customer to a Booking and to brand the invitation pages and emails: the Booking,
+   * its Brand and the Customer (three Airtable reads, not a full snapshot). Throws InvitationTargetError when the
+   * Customer is not linked to the Booking or has no usable email address.
+   */
+  async invitationContext(baseId: string, bookingRecordId: string, customerRecordId: string | null): Promise<InvitationContext> {
+    const booking = await this.airtable.record(baseId, 'Bookings', bookingRecordId);
+    const brandId = strings(pick(booking.fields, bookingFields.brand))[0] ?? null;
+    const linkedCustomers = strings(pick(booking.fields, bookingFields.customers));
+    if (customerRecordId && !linkedCustomers.includes(customerRecordId)) throw new InvitationTargetError('customer_not_linked');
+    const [brand, customer] = await Promise.all([
+      brandId ? this.airtable.record(baseId, 'Brands & Branches', brandId).catch(() => emptyRecord()) : Promise.resolve(emptyRecord()),
+      customerRecordId ? this.airtable.record(baseId, process.env.AIRTABLE_CUSTOMERS_TABLE?.trim() || 'Customers', customerRecordId) : Promise.resolve(null),
+    ]);
+    const email = customer ? safeEmail(pick(customer.fields, customerFields.primaryEmail)) ?? safeEmail(pick(customer.fields, customerFields.secondaryEmail)) : null;
+    if (customer && !email) throw new InvitationTargetError('customer_email_missing');
+    const colour = firstString(pick(brand.fields, brandFields.colour)).trim();
+    return {
+      tenantId: brandId,
+      tripName: safeText(pick(booking.fields, bookingFields.name)) || 'Your trip',
+      customer: customer && email ? { email, firstName: safeText(pick(customer.fields, customerFields.first)) || null } : null,
+      brand: {
+        name: safeText(pick(brand.fields, brandFields.name)) || 'Your travel company',
+        logoUrl: safeHttpsUrl(firstAttachmentUrl(pick(brand.fields, brandFields.logo))),
+        primaryColor: /^#[0-9A-Fa-f]{6}$/.test(colour) ? colour : null,
+        supportEmail: safeEmail(pick(brand.fields, brandFields.email)),
+        supportPhone: safeText(pick(brand.fields, brandFields.phone)) || null,
+      },
+    };
+  }
+
+  /**
+   * The Customer a legacy link or an older session most likely belongs to: the linked Customer whose email matches the
+   * Booking's `Customers | Email`, otherwise the first linked Customer with an email address.
+   */
+  async primaryCustomerRecordId(baseId: string, bookingRecordId: string): Promise<string | null> {
+    const booking = await this.airtable.record(baseId, 'Bookings', bookingRecordId);
+    const bookingEmail = safeEmail(pick(booking.fields, bookingFields.customerEmail));
+    const customers = await this.airtable.records(baseId, process.env.AIRTABLE_CUSTOMERS_TABLE?.trim() || 'Customers', strings(pick(booking.fields, bookingFields.customers)));
+    const withEmail = customers.filter((record) => safeEmail(pick(record.fields, customerFields.primaryEmail)) ?? safeEmail(pick(record.fields, customerFields.secondaryEmail)));
+    const matching = bookingEmail ? withEmail.find((record) => [customerFields.primaryEmail, customerFields.secondaryEmail].some((field) => safeEmail(pick(record.fields, field)) === bookingEmail)) : undefined;
+    return (matching ?? withEmail[0])?.id ?? null;
   }
 
   mapSnapshot(
@@ -906,4 +961,8 @@ function dateTimeString(value: unknown): string | null {
 
 function emptyRecord(): AirtableRecord {
   return { id: '', fields: {} };
+}
+
+function safeHttpsUrl(value: string | null | undefined): string | null {
+  return typeof value === 'string' && /^https:\/\/[^\s"'<>]+$/.test(value) ? value : null;
 }

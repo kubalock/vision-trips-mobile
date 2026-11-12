@@ -537,23 +537,7 @@ export interface TripDocument {
 
 export interface LinkExchangeRequest {
   linkOrCode: string;
-  deviceTrustToken?: string;
-}
-
-export interface LocalTripExchangeRequest {
-  baseId: string;
-  recordId: string;
-}
-
-export interface LinkExchangeChallenge {
-  exchangeId: string;
-  brandName: string;
-  tripHint: string;
-  methods: Array<'postcode' | 'surname' | 'surname_dob' | 'otp'>;
-  expiresAt: string;
-  destinationHint: string | null;
-  resendAvailableAt: string | null;
-  remainingSends: number;
+  deviceTrustTokens?: string[];
 }
 
 export interface AuthorizedLinkExchange {
@@ -565,12 +549,21 @@ export interface AuthorizedLinkExchange {
   trustedDeviceToken?: string;
 }
 
-export interface VerificationRequiredLinkExchange {
-  status: 'verification_required';
-  challenge: LinkExchangeChallenge;
+/** A legacy signed customer link only locates the booking; the customer continues with email verification. */
+export interface InvitationRequiredLinkExchange {
+  status: 'invitation_required';
+  invitationToken: string;
 }
 
-export type LinkExchangeResponse = AuthorizedLinkExchange | VerificationRequiredLinkExchange;
+export type LinkExchangeResponse = AuthorizedLinkExchange | InvitationRequiredLinkExchange;
+
+/** Result of verifying an invitation (email code, trusted device or share link). */
+export interface InvitationAuthorized {
+  status: 'authorized';
+  snapshot: TripSnapshot;
+  session: MobileSession;
+  trustedDeviceToken?: string;
+}
 
 export interface MobileSession {
   accessToken: string;
@@ -583,6 +576,5 @@ export interface RefreshSessionRequest {
   refreshToken: string;
 }
 
-export interface KnowledgeVerificationRequest {
-  postcode: string;
-}
+
+export * from './invitations.js';

@@ -1,5 +1,6 @@
 import { BadGatewayException, ServiceUnavailableException } from '@nestjs/common';
 import { AirtableService } from './airtable.service.js';
+import { fetchUrl } from '../../test/fetch-url.js';
 
 describe('AirtableService', () => {
   beforeEach(() => {
@@ -87,19 +88,19 @@ describe('AirtableService', () => {
 
     it('fetches linked records in chunks of 30 and keeps the requested order', async () => {
       const ids = Array.from({ length: 65 }, (_, index) => id(index));
-      const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => listResponse(requestedIds(String(input)).reverse()));
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => listResponse(requestedIds(fetchUrl(input)).reverse()));
 
       const records = await new AirtableService().records('appABCDEFGHIJKLMN', 'Bookings [Elements]', [...ids, ids[0], 'not-a-record-id']);
 
       expect(fetchMock).toHaveBeenCalledTimes(3);
-      expect(fetchMock.mock.calls.map(([url]) => requestedIds(String(url)).length)).toEqual([30, 30, 5]);
+      expect(fetchMock.mock.calls.map(([url]) => requestedIds(fetchUrl(url)).length)).toEqual([30, 30, 5]);
       expect(records.map((record) => record.id)).toEqual(ids);
     });
 
     it('omits deleted records and failed chunks instead of failing', async () => {
       const ids = Array.from({ length: 35 }, (_, index) => id(index));
       vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
-        const requested = requestedIds(String(input));
+        const requested = requestedIds(fetchUrl(input));
         if (requested.includes(id(30))) return new Response('{"error":"NOT_AUTHORIZED"}', { status: 403 });
         return listResponse(requested.filter((recordId) => recordId !== id(3)));
       });
@@ -130,7 +131,7 @@ describe('AirtableService', () => {
     process.env.AIRTABLE_MIN_REQUEST_INTERVAL_MS = '150';
     const startedAt: Record<string, number[]> = {};
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
-      const base = new URL(String(input)).pathname.split('/')[2];
+      const base = new URL(fetchUrl(input)).pathname.split('/')[2];
       (startedAt[base] ??= []).push(Date.now());
       return new Response(JSON.stringify({ id: 'recABCDEFGHIJKLMN', fields: {} }), { status: 200 });
     });

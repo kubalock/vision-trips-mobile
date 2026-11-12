@@ -5,7 +5,9 @@ import type { Request } from 'express';
 import { AirtableService } from '../airtable/airtable.service.js';
 import { SessionsService } from '../sessions/sessions.service.js';
 import { TripsService } from '../trips/trips.service.js';
-import { LinkTokenService } from '../security/link-token.service.js';
+import { isVerified, requireVerified } from '../security/assurance.js';
+import { CustomerInvitationsService } from '../invitations/customer-invitations.service.js';
+import { NoStoredReplay } from '../operations/no-stored-replay.js';
 import { AcceptanceNotificationsService } from './acceptance-notifications.service.js';
 import { PdfDocumentService } from './pdf-document.service.js';
 import { MintPaymentsService } from './mint-payments.service.js';
@@ -23,7 +25,7 @@ export class TripActionsController {
     private readonly sessions: SessionsService,
     private readonly trips: TripsService,
     private readonly airtable: AirtableService,
-    private readonly linkTokens: LinkTokenService,
+    private readonly invitations: CustomerInvitationsService,
     private readonly notifications: AcceptanceNotificationsService,
     private readonly pdf: PdfDocumentService,
     private readonly mintPayments: MintPaymentsService,
@@ -31,25 +33,34 @@ export class TripActionsController {
     @Optional() private readonly customerAccount?: CustomerAccountService,
   ) {}
 
+  /** Account settings, and trips or quotations opened from the account, need an email-verified (or trusted-device) session. */
+  private verified(authorization: string | undefined) {
+    const principal = this.sessions.validateAccess(authorization);
+    if (principal.fellowTraveller) throw new ForbiddenException('This is only available to the lead customer.');
+    requireVerified(principal);
+    return principal;
+  }
+
   @Get('account')
   @ApiBearerAuth()
   account(@Headers('authorization') authorization: string | undefined): Promise<CustomerAccount> {
     if (!this.customerAccount) throw new ServiceUnavailableException('Customer accounts are not available.');
-    return this.customerAccount.account(this.sessions.validateAccess(authorization));
+    return this.customerAccount.account(this.verified(authorization));
   }
 
   @Post('account/preferences')
   @ApiBearerAuth()
   updatePreferences(@Headers('authorization') authorization: string | undefined, @Body() body: Partial<CustomerPreferences>): Promise<UpdateCustomerPreferencesResponse> {
     if (!this.customerAccount) throw new ServiceUnavailableException('Customer accounts are not available.');
-    return this.customerAccount.update(this.sessions.validateAccess(authorization), body);
+    return this.customerAccount.update(this.verified(authorization), body);
   }
 
   @Post('account/trips/:accountTripId/open')
   @ApiBearerAuth()
+  @NoStoredReplay()
   openAccountTrip(@Headers('authorization') authorization: string | undefined, @Param('accountTripId') accountTripId: string): Promise<OpenCustomerAccountTripResponse> {
     if (!this.customerAccount) throw new ServiceUnavailableException('Customer accounts are not available.');
-    return this.customerAccount.open(this.sessions.validateAccess(authorization), accountTripId);
+    return this.customerAccount.open(this.verified(authorization), accountTripId);
   }
 
   @Get('related-quotations')
@@ -61,20 +72,25 @@ export class TripActionsController {
 
   @Post('related-quotations/:comparisonId/open')
   @ApiBearerAuth()
+  @NoStoredReplay()
   openRelated(@Headers('authorization') authorization: string | undefined, @Param('comparisonId') comparisonId: string): Promise<OpenRelatedQuotationResponse> {
     if (!this.relatedQuotations) throw new ServiceUnavailableException('Quotation comparison is not available.');
-    return this.relatedQuotations.open(this.sessions.validateAccess(authorization), comparisonId);
+    return this.relatedQuotations.open(this.verified(authorization), comparisonId);
   }
 
   @Get()
   @ApiBearerAuth()
-  snapshot(@Headers('authorization') authorization: string | undefined) {
+  async snapshot(@Headers('authorization') authorization: string | undefined) {
     const principal = this.sessions.validateAccess(authorization);
-    return this.trips.snapshot(
+    const snapshot = await this.trips.snapshot(
       principal.baseId,
       principal.recordId,
       principal.fellowTraveller ? 'fellow_traveller' : 'primary_customer',
     );
+    // Stored payment-page URLs would bypass the verified-session check on payment links: an unverified session gets
+    // none, so tapping "Pay" asks the API, which asks the customer to confirm by email first.
+    if (isVerified(principal) || !snapshot.payments) return snapshot;
+    return { ...snapshot, payments: { ...snapshot.payments, items: snapshot.payments.items.map((item) => ({ ...item, actionUrl: null })) } };
   }
 
   @Get('payment-status')
@@ -87,16 +103,14 @@ export class TripActionsController {
 
   @Post('fellow-traveller-link')
   @ApiBearerAuth()
+  @NoStoredReplay()
   async fellowTravellerLink(@Headers('authorization') authorization: string | undefined): Promise<FellowTravellerLinkResponse> {
     const principal = this.sessions.validateAccess(authorization);
     if (principal.fellowTraveller) throw new ForbiddenException('Only the lead customer can share this trip.');
+    requireVerified(principal);
     const snapshot = await this.trips.snapshot(principal.baseId, principal.recordId, 'primary_customer');
     if (!snapshot.capabilities.shareWithTraveller) throw new ForbiddenException('This trip cannot be shared.');
-    const expiresAtSeconds = Math.floor(Date.now() / 1_000) + 7 * 86_400;
-    return {
-      url: this.linkTokens.mintFellowTravellerLink(principal.baseId, principal.recordId, expiresAtSeconds),
-      expiresAt: new Date(expiresAtSeconds * 1_000).toISOString(),
-    };
+    return this.invitations.shareLink(principal);
   }
 
   @Post('payments/custom/link')
@@ -104,6 +118,7 @@ export class TripActionsController {
   async customPaymentLink(@Headers('authorization') authorization: string | undefined, @Body() body: { amount?: unknown }): Promise<PaymentLinkResponse> {
     const principal = this.sessions.validateAccess(authorization);
     if (principal.fellowTraveller) throw new ForbiddenException('Payments are only available to the lead customer.');
+    requireVerified(principal);
     return this.mintPayments.link(principal.baseId, principal.recordId, 'custom', body?.amount);
   }
 
@@ -115,6 +130,7 @@ export class TripActionsController {
   ): Promise<PaymentLinkResponse> {
     const principal = this.sessions.validateAccess(authorization);
     if (principal.fellowTraveller) throw new ForbiddenException('Payments are only available to the lead customer.');
+    requireVerified(principal);
     return this.mintPayments.link(principal.baseId, principal.recordId, paymentId);
   }
 
@@ -150,6 +166,7 @@ export class TripActionsController {
   ): Promise<QuotationAcceptanceResponse> {
     const principal = this.sessions.validateAccess(authorization);
     if (principal.fellowTraveller) throw new ForbiddenException('Only the lead customer can accept this quotation.');
+    requireVerified(principal);
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
     if (name.length < 2 || name.length > 120 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || body.agreed !== true) {

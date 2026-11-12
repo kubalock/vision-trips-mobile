@@ -5,6 +5,10 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { App, customerErrorMessage, engagementLabel, isShareCancelled } from './app';
 import { VisionApiService } from './core/api/vision-api.service';
 import { ShareSheet } from './core/platform/share-sheet';
+import { parseTripSnapshot } from './core/api/trip-schema';
+
+/** A complete snapshot (schema defaults fill every section), so rendering it in a test can't throw. */
+const fullTrip = (extra: Record<string, unknown> = {}) => parseTripSnapshot({ schemaVersion: 3, tripId: 'trip-1', stage: 'confirmed', accessScope: 'primary_customer', summary: { name: 'Lisbon', reference: 'REF-1' }, ...extra });
 
 describe('App', () => {
   beforeEach(async () => {
@@ -20,13 +24,89 @@ describe('App', () => {
     expect(app).toBeTruthy();
   });
 
-  it('should render the trip entry screen', async () => {
+  it('renders the invitation entry screen and never asks for infrastructure identifiers', async () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('h1')?.textContent).toContain('Where are you heading?');
-    expect(compiled.querySelector('label[for="base-id"]')?.textContent).toContain('Airtable base ID');
-    expect(compiled.querySelector('label[for="record-id"]')?.textContent).toContain('Booking record ID');
+    expect(compiled.querySelector('h1')?.textContent).toContain('Use your invitation link');
+    expect(compiled.querySelector('#base-id, #record-id, input[placeholder^="app"], input[placeholder^="rec"]')).toBeNull();
+    expect(compiled.querySelectorAll('main input')).toHaveLength(0);
+    expect(compiled.textContent).not.toMatch(/Airtable|base ID|record ID/i);
+  });
+
+  describe('development test trip', () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    it('is offered only when the API reports a configured development invitation', async () => {
+      const api = TestBed.inject(VisionApiService);
+      vi.spyOn(api, 'devInvitationStatus').mockResolvedValue({ available: false, message: 'Set VISION_DEV_BASE_ID…' });
+      const hidden = TestBed.createComponent(App);
+      await hidden.whenStable();
+      expect((hidden.nativeElement as HTMLElement).textContent).not.toContain('Open development test trip');
+
+      vi.spyOn(api, 'devInvitationStatus').mockResolvedValue({ available: true, message: null });
+      const shown = TestBed.createComponent(App);
+      await shown.whenStable();
+      const button = [...(shown.nativeElement as HTMLElement).querySelectorAll('button')].find((item) => item.textContent?.includes('Open development test trip'));
+      expect(button).toBeTruthy();
+    });
+
+    it('stays hidden when the API has no development endpoint (production)', async () => {
+      const api = TestBed.inject(VisionApiService);
+      vi.spyOn(api, 'devInvitationStatus').mockRejectedValue(new HttpErrorResponse({ status: 404 }));
+      const fixture = TestBed.createComponent(App);
+      await fixture.whenStable();
+      expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('Open development test trip');
+    });
+
+    it('opens the server-configured test booking through the normal invitation screen', async () => {
+      const api = TestBed.inject(VisionApiService);
+      vi.spyOn(api, 'devInvitationStatus').mockResolvedValue({ available: true, message: null });
+      vi.spyOn(api, 'createDevInvitation').mockResolvedValue('vt_abcdefghijklmnopqrstuvwxyzABCDEF');
+      const resolve = vi.spyOn(api, 'resolveInvitation').mockReturnValue(new Promise(() => undefined));
+      const fixture = TestBed.createComponent(App);
+      await fixture.whenStable();
+      const button = [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].find((item) => item.textContent?.includes('Open development test trip'))!;
+      button.click();
+      await vi.waitFor(() => expect(resolve).toHaveBeenCalledWith('vt_abcdefghijklmnopqrstuvwxyzABCDEF', []));
+      await fixture.whenStable();
+      expect((fixture.nativeElement as HTMLElement).querySelector('app-invitation-flow')).not.toBeNull();
+    });
+  });
+
+  describe('opening links', () => {
+    const invitation = 'vt_abcdefghijklmnopqrstuvwxyzABCDEF';
+    afterEach(() => { window.history.replaceState(null, '', '/'); vi.restoreAllMocks(); });
+
+    it('opens an invitation link on the welcome screen without exchanging it or creating a session', async () => {
+      const base = document.createElement('base');
+      base.href = '/';
+      document.head.prepend(base);
+      onTestFinished(() => base.remove());
+      window.history.replaceState(null, '', `/trip/${invitation}`);
+      const api = TestBed.inject(VisionApiService);
+      const exchange = vi.spyOn(api, 'exchangeLink');
+      const resolve = vi.spyOn(api, 'resolveInvitation').mockReturnValue(new Promise(() => undefined));
+      const fixture = TestBed.createComponent(App);
+      const app = fixture.componentInstance as unknown as { invitationToken: () => string | null; sessions: { session: () => unknown } };
+      await fixture.whenStable();
+      expect(app.invitationToken()).toBe(invitation);
+      expect(exchange).not.toHaveBeenCalled();
+      await vi.waitFor(() => expect(resolve).toHaveBeenCalled());
+      expect(app.sessions.session()).toBeNull();
+      expect(window.location.pathname).not.toContain(invitation); // Removed from the address bar and history.
+    });
+
+    it('sends a legacy signed customer link into email verification', async () => {
+      window.history.replaceState(null, '', '/trip/eyJ2IjoxfQ.signature/');
+      const api = TestBed.inject(VisionApiService);
+      vi.spyOn(api, 'exchangeLink').mockResolvedValue({ status: 'invitation_required', invitationToken: invitation });
+      vi.spyOn(api, 'resolveInvitation').mockReturnValue(new Promise(() => undefined));
+      const fixture = TestBed.createComponent(App);
+      const app = fixture.componentInstance as unknown as { invitationToken: () => string | null; sessions: { session: () => unknown } };
+      await vi.waitFor(() => expect(app.invitationToken()).toBe(invitation));
+      expect(app.sessions.session()).toBeNull();
+    });
   });
 
   it('should switch between trip views', () => {
@@ -235,6 +315,46 @@ describe('App', () => {
       expect(app.error()).toBe('');
     });
 
+    it('asks an unverified session to confirm by email when a payment is refused, then starts the code flow', async () => {
+      const { app, api, fixture } = setup();
+      app.trip.set(fullTrip({ payments: { currency: 'GBP', total: 100, paid: 0, items: [] } }));
+      vi.spyOn(window, 'open').mockImplementation(() => null);
+      vi.spyOn(api, 'paymentLink').mockRejectedValue(new HttpErrorResponse({ status: 403, error: { statusCode: 403, code: 'verification_required', message: 'Confirm it’s you.' } }));
+      const view = app as unknown as { verificationNeeded: () => boolean; confirmIdentity: () => Promise<void>; invitationToken: () => string | null };
+
+      await app.openPayment('pay-1');
+
+      expect(view.verificationNeeded()).toBe(true);
+      await fixture.whenStable();
+      expect((fixture.nativeElement as HTMLElement).querySelector('.vt-step-up')?.textContent).toContain('Confirm it’s you');
+      const stepUp = vi.spyOn(api, 'stepUp').mockResolvedValue('vt_abcdefghijklmnopqrstuvwxyzABCDEF');
+      vi.spyOn(api, 'resolveInvitation').mockReturnValue(new Promise(() => undefined));
+      await view.confirmIdentity();
+      expect(stepUp).toHaveBeenCalledWith('old-access');
+      expect(view.invitationToken()).toBe('vt_abcdefghijklmnopqrstuvwxyzABCDEF');
+    });
+
+    it('opens a verified invitation as the current trip and forgets the previous trip’s state', async () => {
+      const { app, api } = setup();
+      app.trip.set(fullTrip({ tripId: 'trip-old' }));
+      const view = app as unknown as { invitationAuthorized: (value: unknown) => Promise<void>; invitationToken: { set: (value: string | null) => void; (): string | null }; documentStatuses: { set: (value: unknown) => void; (): unknown }; customerAccount: { set: (value: unknown) => void; (): unknown }; verificationNeeded: { set: (value: boolean) => void; (): boolean } };
+      view.invitationToken.set('vt_abcdefghijklmnopqrstuvwxyzABCDEF');
+      view.documentStatuses.set({ 'old-doc': 'saved' });
+      view.customerAccount.set({ emailHint: 'old' });
+      view.verificationNeeded.set(true);
+      vi.spyOn(api, 'externalContent').mockReturnValue(new Promise(() => undefined));
+      const session = refreshed();
+      const snapshot = fullTrip({ tripId: 'trip-new', summary: { name: 'New', reference: 'NEW' } });
+
+      await view.invitationAuthorized({ status: 'authorized', snapshot, session });
+
+      expect(view.invitationToken()).toBeNull();
+      expect(app.session()?.accessToken).toBe('new-access');
+      expect(view.customerAccount()).toBeNull();
+      expect(view.documentStatuses()).toEqual({});
+      expect(view.verificationNeeded()).toBe(false);
+    });
+
     it('retries a calendar download with a renewed token after a 401', async () => {
       const { app, api } = setup();
       app.trip.set({ tripId: 'trip-1', summary: { reference: 'REF-1' } });
@@ -289,7 +409,7 @@ describe('App', () => {
       it('leaves the saved preferences alone and reports inline when saving fails', async () => {
         const { app, api } = setup();
         const view = app as unknown as Retry & { accountSaveError: () => string; saveCustomerPreferences: (value: unknown) => Promise<void> };
-        app.trip.set({ tripId: 'trip-1', accessScope: 'primary_customer' });
+        app.trip.set(fullTrip());
         const saved = { emailMarketing: false, smsMarketing: false, postalMarketing: false, preferredAirports: [], preferredMonths: [] };
         view.customerAccount.set({ emailHint: 'a***@x.com', preferences: saved, airportOptions: [], monthOptions: [], trips: [] });
         vi.spyOn(api, 'updateCustomerPreferences').mockRejectedValueOnce(serverError());
@@ -304,7 +424,7 @@ describe('App', () => {
       it('keeps an account already on screen when reloading it fails, and offers a retry', async () => {
         const { app, api } = setup();
         const view = app as unknown as Retry;
-        app.trip.set({ tripId: 'trip-1', accessScope: 'primary_customer' });
+        app.trip.set(fullTrip());
         const account = { emailHint: 'a***@x.com', preferences: {}, airportOptions: [], monthOptions: [], trips: [] };
         view.customerAccount.set(account);
         const load = vi.spyOn(api, 'customerAccount').mockRejectedValueOnce(serverError()).mockResolvedValueOnce(account as never);

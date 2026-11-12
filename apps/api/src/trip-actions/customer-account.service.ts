@@ -53,7 +53,9 @@ export class CustomerAccountService {
     const { customers } = await this.customers(principal);
     const target = (await this.bookings(principal.baseId, customers)).find((record) => this.id(principal.baseId, record.id) === accountTripId);
     if (!target) throw new NotFoundException('That trip is no longer linked to this customer.');
-    return { snapshot: await this.trips.snapshot(principal.baseId, target.id, 'primary_customer'), session: this.sessions.issue({ baseId: principal.baseId, recordId: target.id, fellowTraveller: false }) };
+    // The new session keeps the verification the customer already completed, for the Customer linked to that trip.
+    const customerRecordId = customers.find((customer) => strings(pick(customer.fields, customerFields.trips)).includes(target.id))?.id ?? null;
+    return { snapshot: await this.trips.snapshot(principal.baseId, target.id, 'primary_customer'), session: this.sessions.issue({ baseId: principal.baseId, recordId: target.id, fellowTraveller: false, customerRecordId, assurance: principal.assurance }) };
   }
 
   private assertLead(principal: SessionPrincipal): void { if (principal.fellowTraveller) throw new ForbiddenException('Customer account settings are only available to the lead customer.'); }

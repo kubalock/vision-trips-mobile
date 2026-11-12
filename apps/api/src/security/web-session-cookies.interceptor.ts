@@ -10,8 +10,8 @@ import { Observable, map } from 'rxjs';
  * - A refresh token goes into an HttpOnly, SameSite=Strict cookie scoped to /v1/sessions. The response carries a
  *   `web:<id>` handle in its place, which only says which cookie to use and is worthless on its own. The handle
  *   stays the same across renewals, so every tab keeps working with the latest cookie.
- * - A trusted-device token goes into an HttpOnly cookie scoped to /v1/link-exchanges, and is added to the
- *   exchange request on the way in.
+ * - A trusted-device token goes into an HttpOnly cookie scoped to /v1/link-exchanges (which includes the invitation
+ *   endpoints), and is added to any request there that carries a `deviceTrustTokens` array.
  *
  * The installed app does not send the header and keeps its tokens in the device's secure storage.
  */
@@ -76,8 +76,8 @@ export class WebSessionCookiesInterceptor implements NestInterceptor {
   private cookieTrust(token: string, response: Response, secure: boolean): void {
     const payload = trustPayload(token);
     if (!payload) return;
-    // One cookie per booking, so a renewed trust replaces the old one.
-    const name = TRUST_COOKIE + createHash('sha256').update(`${payload.b}:${payload.r}`).digest('base64url').slice(0, 16);
+    // One cookie per booking and customer, so a renewed trust replaces the old one.
+    const name = TRUST_COOKIE + createHash('sha256').update(`${payload.b}:${payload.r}:${payload.c ?? ''}`).digest('base64url').slice(0, 16);
     response.cookie(name, token, { ...cookieOptions('link-exchanges', secure), expires: new Date(payload.e) });
   }
 }
@@ -102,10 +102,10 @@ function isSession(value: unknown): value is MobileSession {
   return Boolean(session && typeof session === 'object' && typeof session.refreshToken === 'string' && typeof session.accessToken === 'string');
 }
 
-function trustPayload(token: string): { b: string; r: string; e: number } | null {
+function trustPayload(token: string): { b: string; r: string; c?: string; e: number } | null {
   try {
-    const value = JSON.parse(Buffer.from(token.split('.')[0], 'base64url').toString()) as { b?: unknown; r?: unknown; e?: unknown };
-    return typeof value.b === 'string' && typeof value.r === 'string' && typeof value.e === 'number' ? { b: value.b, r: value.r, e: value.e } : null;
+    const value = JSON.parse(Buffer.from(token.split('.')[0], 'base64url').toString()) as { b?: unknown; r?: unknown; c?: unknown; e?: unknown };
+    return typeof value.b === 'string' && typeof value.r === 'string' && typeof value.e === 'number' ? { b: value.b, r: value.r, ...(typeof value.c === 'string' ? { c: value.c } : {}), e: value.e } : null;
   } catch { return null; }
 }
 

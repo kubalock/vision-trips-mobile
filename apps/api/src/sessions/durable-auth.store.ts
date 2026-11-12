@@ -1,13 +1,19 @@
 import { Inject, Injectable, OnModuleDestroy, Optional } from '@nestjs/common';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
+import type { InvitationScope, SessionAssurance } from '@vision-trips/contracts';
 
 export interface StoredSession {
   id: string;
   baseId: string;
   recordId: string;
   fellowTraveller: boolean;
+  /** The Customer the session was verified for; null for share links and sessions created before invitations. */
+  customerRecordId: string | null;
+  /** How the session was established; only `otp` and `trusted_device` may perform sensitive actions. */
+  assurance: SessionAssurance;
+  invitationId: string | null;
   refreshHash: string;
   refreshExpiresAt: number;
   accessHash: string;
@@ -17,8 +23,62 @@ export interface StoredSession {
 
 interface SessionRow {
   id: string; base_id: string; record_id: string; fellow_traveller: number;
+  customer_record_id: string | null; assurance: string | null; invitation_id: string | null;
   refresh_hash: string; refresh_expires_at: number; access_hash: string;
   access_expires_at: number; revoked: number;
+}
+
+export type InvitationSource = 'agent' | 'legacy_link' | 'step_up' | 'share' | 'development';
+
+/** A durable invitation. Only the SHA-256 hash of its token is stored; the raw token exists only in the link. */
+export interface StoredInvitation {
+  id: string;
+  tokenHash: string;
+  tenantId: string | null;
+  baseId: string;
+  bookingRecordId: string;
+  customerRecordId: string | null;
+  scope: InvitationScope;
+  verification: 'email_otp' | 'none';
+  source: InvitationSource;
+  createdAt: number;
+  expiresAt: number;
+  sentAt: number | null;
+  acceptedAt: number | null;
+  revokedAt: number | null;
+  /** Unique while the invitation is the active one for its booking, customer and scope; cleared when it ends. */
+  activeKey: string | null;
+  idempotencyKey: string | null;
+  /** True while an email for this invitation was requested; used to ignore duplicate automation deliveries. */
+  emailRequested: boolean;
+  /** Share links can be opened by several fellow travellers until they expire; every other invitation is single-use. */
+  reusable: boolean;
+  /** A session to end once this (step-up) invitation is verified. */
+  replacesSessionId: string | null;
+  consumingUntil: number | null;
+}
+
+export interface InvitationOtp {
+  invitationId: string;
+  codeHash: string | null;
+  codeSentAt: number | null;
+  codeExpiresAt: number | null;
+  attempts: number;
+  sends: number;
+  sendWindowStartedAt: number;
+}
+
+interface InvitationRow {
+  id: string; token_hash: string; tenant_id: string | null; base_id: string; booking_record_id: string;
+  customer_record_id: string | null; scope: string; verification: string; source: string; created_at: number;
+  expires_at: number; sent_at: number | null; accepted_at: number | null; revoked_at: number | null;
+  active_key: string | null; idempotency_key: string | null; email_requested: number; reusable: number;
+  replaces_session_id: string | null; consuming_until: number | null;
+}
+
+interface OtpRow {
+  invitation_id: string; code_hash: string | null; code_sent_at: number | null; code_expires_at: number | null;
+  attempts: number; sends: number; send_window_started_at: number;
 }
 
 @Injectable()
@@ -66,15 +126,41 @@ export class DurableAuthStore implements OnModuleDestroy {
       );
       CREATE INDEX IF NOT EXISTS background_jobs_ready ON background_jobs(status, available_at);
       UPDATE background_jobs SET status = 'pending' WHERE status = 'running';
+      CREATE TABLE IF NOT EXISTS customer_invitations (
+        id TEXT PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE, tenant_id TEXT,
+        base_id TEXT NOT NULL, booking_record_id TEXT NOT NULL, customer_record_id TEXT,
+        scope TEXT NOT NULL, verification TEXT NOT NULL, source TEXT NOT NULL,
+        created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL,
+        sent_at INTEGER, accepted_at INTEGER, revoked_at INTEGER,
+        active_key TEXT, idempotency_key TEXT, email_requested INTEGER NOT NULL DEFAULT 0,
+        reusable INTEGER NOT NULL DEFAULT 0, replaces_session_id TEXT, consuming_until INTEGER
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS customer_invitations_active ON customer_invitations(active_key) WHERE active_key IS NOT NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS customer_invitations_idempotency ON customer_invitations(idempotency_key) WHERE idempotency_key IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS customer_invitations_booking ON customer_invitations(base_id, booking_record_id);
+      CREATE INDEX IF NOT EXISTS customer_invitations_expiry ON customer_invitations(expires_at);
+      CREATE TABLE IF NOT EXISTS invitation_otps (
+        invitation_id TEXT PRIMARY KEY, code_hash TEXT, code_sent_at INTEGER, code_expires_at INTEGER,
+        attempts INTEGER NOT NULL DEFAULT 0, sends INTEGER NOT NULL DEFAULT 0, send_window_started_at INTEGER NOT NULL DEFAULT 0
+      );
     `);
+    this.migrateSessions();
+  }
+
+  /** Sessions created before invitations have no customer or assurance: they count as `legacy` (no sensitive actions). */
+  private migrateSessions(): void {
+    const columns = new Set((this.database.prepare('PRAGMA table_info(auth_sessions)').all() as Array<{ name: string }>).map((column) => column.name));
+    if (!columns.has('customer_record_id')) this.database.exec('ALTER TABLE auth_sessions ADD COLUMN customer_record_id TEXT');
+    if (!columns.has('assurance')) this.database.exec("ALTER TABLE auth_sessions ADD COLUMN assurance TEXT NOT NULL DEFAULT 'legacy'");
+    if (!columns.has('invitation_id')) this.database.exec('ALTER TABLE auth_sessions ADD COLUMN invitation_id TEXT');
   }
 
   putSession(session: StoredSession): void {
     this.cleanup();
     this.database.prepare(`INSERT INTO auth_sessions
-      (id, base_id, record_id, fellow_traveller, refresh_hash, refresh_expires_at, access_hash, access_expires_at, revoked)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(session.id, session.baseId, session.recordId, Number(session.fellowTraveller), session.refreshHash, session.refreshExpiresAt, session.accessHash, session.accessExpiresAt, Number(session.revoked));
+      (id, base_id, record_id, fellow_traveller, customer_record_id, assurance, invitation_id, refresh_hash, refresh_expires_at, access_hash, access_expires_at, revoked)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(session.id, session.baseId, session.recordId, Number(session.fellowTraveller), session.customerRecordId, session.assurance, session.invitationId, session.refreshHash, session.refreshExpiresAt, session.accessHash, session.accessExpiresAt, Number(session.revoked));
   }
 
   sessionByRefreshHash(hash: string): StoredSession | null {
@@ -182,7 +268,116 @@ export class DurableAuthStore implements OnModuleDestroy {
   retryJob(id: string, error: string, availableAt: number): void { this.database.prepare("UPDATE background_jobs SET status = 'pending', last_error = ?, available_at = ? WHERE id = ?").run(error.slice(0, 500), availableAt, id); }
   failJob(id: string, error: string): void { this.database.prepare("UPDATE background_jobs SET status = 'failed', last_error = ? WHERE id = ?").run(error.slice(0, 500), id); }
 
+  // --- Customer invitations -------------------------------------------------------------------------------------
+
+  /**
+   * Stores a new invitation. When it has an active key, any earlier invitation holding that key is revoked in the same
+   * transaction, so a booking's customer has at most one active agent invitation at a time.
+   */
+  insertInvitation(invitation: StoredInvitation): void {
+    this.cleanup();
+    this.transaction(() => {
+      if (invitation.activeKey) {
+        this.database.prepare('UPDATE customer_invitations SET revoked_at = ?, active_key = NULL WHERE active_key = ?').run(invitation.createdAt, invitation.activeKey);
+      }
+      this.database.prepare(`INSERT INTO customer_invitations
+        (id, token_hash, tenant_id, base_id, booking_record_id, customer_record_id, scope, verification, source, created_at, expires_at,
+         sent_at, accepted_at, revoked_at, active_key, idempotency_key, email_requested, reusable, replaces_session_id, consuming_until)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        invitation.id, invitation.tokenHash, invitation.tenantId, invitation.baseId, invitation.bookingRecordId, invitation.customerRecordId,
+        invitation.scope, invitation.verification, invitation.source, invitation.createdAt, invitation.expiresAt, invitation.sentAt,
+        invitation.acceptedAt, invitation.revokedAt, invitation.activeKey, invitation.idempotencyKey, Number(invitation.emailRequested),
+        Number(invitation.reusable), invitation.replacesSessionId, invitation.consumingUntil,
+      );
+    });
+  }
+
+  invitationByTokenHash(tokenHash: string): StoredInvitation | null { return this.invitationWhere('token_hash = ?', tokenHash); }
+  invitationById(id: string): StoredInvitation | null { return this.invitationWhere('id = ?', id); }
+  invitationByIdempotencyKey(key: string): StoredInvitation | null { return this.invitationWhere('idempotency_key = ?', key); }
+  activeInvitation(activeKey: string): StoredInvitation | null { return this.invitationWhere('active_key = ?', activeKey); }
+
+  markInvitationSent(id: string, sentAt: number): void {
+    this.database.prepare('UPDATE customer_invitations SET sent_at = ? WHERE id = ?').run(sentAt, id);
+  }
+
+  /** Ends an invitation whose email could not be sent, and frees its idempotency key so a retry starts again. */
+  abandonInvitation(id: string, now = Date.now()): void {
+    this.database.prepare('UPDATE customer_invitations SET revoked_at = COALESCE(revoked_at, ?), active_key = NULL, idempotency_key = NULL WHERE id = ?').run(now, id);
+  }
+
+  revokeInvitations(baseId: string, bookingRecordId: string, customerRecordId: string | null, now = Date.now()): number {
+    const filter = customerRecordId ? ' AND customer_record_id = ?' : '';
+    const values: SQLInputValue[] = [now, baseId, bookingRecordId, ...(customerRecordId ? [customerRecordId] : [])];
+    return Number(this.database.prepare(`UPDATE customer_invitations SET revoked_at = ?, active_key = NULL
+      WHERE base_id = ? AND booking_record_id = ?${filter} AND revoked_at IS NULL AND accepted_at IS NULL`).run(...values).changes);
+  }
+
+  /**
+   * Claims an invitation for the final step of verification. Only one request can hold the claim, so two concurrent
+   * submissions of a correct code cannot both create sessions. Returns the claim's expiry, or null if already claimed,
+   * consumed or revoked.
+   */
+  claimInvitation(id: string, now = Date.now(), holdMs = 30_000): number | null {
+    const until = now + holdMs;
+    const changed = this.database.prepare(`UPDATE customer_invitations SET consuming_until = ?
+      WHERE id = ? AND revoked_at IS NULL AND (accepted_at IS NULL OR reusable = 1) AND expires_at > ?
+      AND (consuming_until IS NULL OR consuming_until <= ?)`).run(until, id, now, now).changes;
+    return changed === 1 ? until : null;
+  }
+
+  releaseInvitationClaim(id: string, claim: number): void {
+    this.database.prepare('UPDATE customer_invitations SET consuming_until = NULL WHERE id = ? AND consuming_until = ?').run(id, claim);
+  }
+
+  /** Marks a claimed invitation as accepted. Single-use invitations stop being active and lose their code. */
+  consumeInvitation(id: string, claim: number, now = Date.now()): boolean {
+    return this.transaction(() => {
+      const changed = this.database.prepare(`UPDATE customer_invitations
+        SET accepted_at = COALESCE(accepted_at, ?), consuming_until = NULL, active_key = CASE WHEN reusable = 1 THEN active_key ELSE NULL END
+        WHERE id = ? AND consuming_until = ?`).run(now, id, claim).changes === 1;
+      if (changed) this.database.prepare('DELETE FROM invitation_otps WHERE invitation_id = ?').run(id);
+      return changed;
+    });
+  }
+
+  invitationOtp(invitationId: string): InvitationOtp {
+    const row = this.database.prepare('SELECT * FROM invitation_otps WHERE invitation_id = ?').get(invitationId) as unknown as OtpRow | undefined;
+    return row
+      ? { invitationId, codeHash: row.code_hash, codeSentAt: row.code_sent_at, codeExpiresAt: row.code_expires_at, attempts: row.attempts, sends: row.sends, sendWindowStartedAt: row.send_window_started_at }
+      : { invitationId, codeHash: null, codeSentAt: null, codeExpiresAt: null, attempts: 0, sends: 0, sendWindowStartedAt: 0 };
+  }
+
+  putInvitationOtp(otp: InvitationOtp): void {
+    this.database.prepare(`INSERT INTO invitation_otps (invitation_id, code_hash, code_sent_at, code_expires_at, attempts, sends, send_window_started_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(invitation_id) DO UPDATE SET code_hash = excluded.code_hash, code_sent_at = excluded.code_sent_at,
+      code_expires_at = excluded.code_expires_at, attempts = excluded.attempts, sends = excluded.sends, send_window_started_at = excluded.send_window_started_at`)
+      .run(otp.invitationId, otp.codeHash, otp.codeSentAt, otp.codeExpiresAt, otp.attempts, otp.sends, otp.sendWindowStartedAt);
+  }
+
+  /** Counts one wrong code atomically and returns the attempts used so far. */
+  recordOtpFailure(invitationId: string): number {
+    const row = this.database.prepare('UPDATE invitation_otps SET attempts = attempts + 1 WHERE invitation_id = ? RETURNING attempts').get(invitationId) as { attempts: number } | undefined;
+    return row?.attempts ?? 0;
+  }
+
   onModuleDestroy(): void { this.database.close(); }
+
+  private invitationWhere(clause: string, value: string): StoredInvitation | null {
+    return mapInvitation(this.database.prepare(`SELECT * FROM customer_invitations WHERE ${clause}`).get(value) as unknown as InvitationRow | undefined);
+  }
+
+  private transaction<T>(work: () => T): T {
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      const result = work();
+      this.database.exec('COMMIT');
+      return result;
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
+  }
 
   private cleanup(): void {
     const now = Date.now();
@@ -192,9 +387,28 @@ export class DurableAuthStore implements OnModuleDestroy {
     this.database.prepare('DELETE FROM rate_limits WHERE window_started_at < ?').run(now - 86_400_000);
     this.database.prepare('DELETE FROM idempotency_results WHERE created_at < ?').run(now - 86_400_000);
     this.database.prepare("DELETE FROM background_jobs WHERE status = 'complete' AND created_at < ?").run(now - 86_400_000);
+    // Ended invitations are kept for 30 days after expiry for audit and duplicate detection.
+    this.database.prepare('DELETE FROM invitation_otps WHERE invitation_id IN (SELECT id FROM customer_invitations WHERE expires_at < ?)').run(now);
+    this.database.prepare('DELETE FROM customer_invitations WHERE expires_at < ?').run(now - 30 * 86_400_000);
   }
 }
 
 function mapSession(row: SessionRow | undefined): StoredSession | null {
-  return row ? { id: row.id, baseId: row.base_id, recordId: row.record_id, fellowTraveller: Boolean(row.fellow_traveller), refreshHash: row.refresh_hash, refreshExpiresAt: row.refresh_expires_at, accessHash: row.access_hash, accessExpiresAt: row.access_expires_at, revoked: Boolean(row.revoked) } : null;
+  return row ? { id: row.id, baseId: row.base_id, recordId: row.record_id, fellowTraveller: Boolean(row.fellow_traveller), customerRecordId: row.customer_record_id ?? null, assurance: assuranceOf(row.assurance), invitationId: row.invitation_id ?? null, refreshHash: row.refresh_hash, refreshExpiresAt: row.refresh_expires_at, accessHash: row.access_hash, accessExpiresAt: row.access_expires_at, revoked: Boolean(row.revoked) } : null;
+}
+
+function assuranceOf(value: string | null): SessionAssurance {
+  return value === 'otp' || value === 'trusted_device' || value === 'link' ? value : 'legacy';
+}
+
+function mapInvitation(row: InvitationRow | undefined): StoredInvitation | null {
+  if (!row) return null;
+  return {
+    id: row.id, tokenHash: row.token_hash, tenantId: row.tenant_id, baseId: row.base_id, bookingRecordId: row.booking_record_id,
+    customerRecordId: row.customer_record_id, scope: row.scope === 'fellow_traveller' ? 'fellow_traveller' : 'primary_customer',
+    verification: row.verification === 'none' ? 'none' : 'email_otp', source: row.source as InvitationSource,
+    createdAt: row.created_at, expiresAt: row.expires_at, sentAt: row.sent_at, acceptedAt: row.accepted_at, revokedAt: row.revoked_at,
+    activeKey: row.active_key, idempotencyKey: row.idempotency_key, emailRequested: Boolean(row.email_requested), reusable: Boolean(row.reusable),
+    replacesSessionId: row.replaces_session_id, consumingUntil: row.consuming_until,
+  };
 }

@@ -33,16 +33,22 @@ describe('LinkTokenService', () => {
     expect(service.parseLinkOrToken(token).fellowTraveller).toBe(true);
   });
 
-  it('mints an expiring restricted link compatible with the parser', () => {
+  it('mints an expiring customer link compatible with the parser', () => {
     process.env.VISION_TRIP_LINK_BASE_URL = 'https://trips.example/trip/';
     const expiresAt = Math.floor(Date.now() / 1_000) + 3_600;
 
-    const link = service.mintFellowTravellerLink('appABCDEFGHIJKLMN', 'recABCDEFGHIJKLMN', expiresAt);
+    const link = service.mintCustomerLink('appABCDEFGHIJKLMN', 'recABCDEFGHIJKLMN', expiresAt);
 
     expect(link).toMatch(/^https:\/\/trips\.example\/trip\//);
     expect(service.parseLinkOrToken(link)).toMatchObject({
-      baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: true, expiresAt,
+      baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false, expiresAt,
     });
+  });
+});
+
+describe('LinkTokenService.extractToken', () => {
+  it('returns the token of a pasted invitation link without treating it as signed', () => {
+    expect(new LinkTokenService().extractToken('https://trips.example/trip/vt_abcdefghijklmnopqrstuvwxyzABCDEF')).toBe('vt_abcdefghijklmnopqrstuvwxyzABCDEF');
   });
 });
 

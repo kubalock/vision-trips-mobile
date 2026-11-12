@@ -41,12 +41,14 @@ npm run build:device --workspace @vision-trips/mobile   # bakes in http://<this 
 
 The app sends API requests through Capacitor's native HTTP layer (`CapacitorHttp`), so browser CORS and mixed-content rules don't apply inside it. iOS still blocks plain HTTP to local addresses unless `NSAllowsLocalNetworking` is set in `Info.plist`.
 
-Production builds hide the Airtable-ID entry form; trips open only from their links.
+## Customer invitations and sign-in
+
+Customers open a trip from an invitation link (`https://<host>/trip/vt_<token>`) and confirm it's them with a six-digit code emailed to the Customer the agent invited; the trip is then saved in My Trips. Agents create invitations from Airtable (`POST /v1/customer-invitations`, `X-Vision-Key`). The app never asks for Airtable IDs — in development, set `VISION_DEV_BASE_ID`, `VISION_DEV_BOOKING_RECORD_ID` and `VISION_DEV_CUSTOMER_RECORD_ID` in `apps/api/.env` and use **Open development test trip** on the entry screen. Older signed links still find the booking but now ask for an email code. See [docs/customer-app-invitations.md](docs/customer-app-invitations.md) for the Airtable fields and automation, environment variables, migration notes and security model.
 
 ## Where sessions are kept
 
 - **Installed app:** the trip snapshot, its refresh token and the trusted-device tokens are kept in the device's secure storage (Keychain / Keystore).
-- **Browser:** the app sends `X-Vision-Client: web`, and the API puts the refresh token and trusted-device tokens in `HttpOnly; SameSite=Strict` cookies (`Secure` in production), scoped to `/v1/sessions` and `/v1/link-exchanges`. The app only sees a `web:` handle that names the cookie. Access tokens stay in memory, and only the trip snapshot is saved, in IndexedDB, labelled "Saved in this browser".
+- **Browser:** the app sends `X-Vision-Client: web`, and the API puts the refresh token and trusted-device tokens in `HttpOnly; SameSite=Strict` cookies (`Secure` in production), scoped to `/v1/sessions` and `/v1/link-exchanges` (which includes the invitation endpoints). The app only sees a `web:` handle that names the cookie. Access tokens stay in memory, and only the trip snapshot is saved, in IndexedDB, labelled "Saved in this browser".
 - Because the cookies are `SameSite=Strict`, the web app and the API must be served from the same site in production (for example `trips.example.com` and `api.example.com`).
 
 ## Mint payments

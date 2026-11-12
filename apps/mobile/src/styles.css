@@ -1778,3 +1778,27 @@ body.vt .vt-app .vt-account-danger button:active { transform: scale(.97); }
 :root[data-theme="dark"] .vt-app .vt-quotation-compare { border-color: var(--card-border); box-shadow: var(--shadow-card); }
 :root[data-theme="dark"] .vt-app .vt-quotation-card.is-current { border-color: var(--vt-accent-text); }
 :root[data-theme="dark"] .vt-app .vt-quotation-card__meta > div { border-color: var(--line-2); }
+
+/* Invitation and email-code screens */
+.vt-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.vt-app .vt-invite { display: grid; gap: var(--sp-3, 12px); }
+.vt-app .vt-invite h1 { margin: 0; font-family: var(--vt-display); font-weight: var(--vt-display-weight); font-size: clamp(1.6rem, 6vw, 2rem); line-height: 1.15; }
+.vt-app .vt-invite h1:focus { outline: none; }
+.vt-app .vt-invite h1:focus-visible { outline: 2px solid var(--vt-accent); outline-offset: 4px; border-radius: 4px; }
+.vt-app .vt-invite__brand { display: flex; align-items: center; min-height: 40px; }
+.vt-app .vt-invite__logo { max-height: 44px; max-width: 200px; object-fit: contain; }
+.vt-app .vt-invite__brand-name { font-weight: 700; font-size: 1.1rem; }
+.vt-app .vt-invite__kicker { margin: 0; font-size: var(--fs-0, .8rem); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--vt-accent-text); }
+.vt-app .vt-invite__lead { margin: 0; color: var(--ink-2); line-height: 1.55; }
+.vt-app .vt-invite__fine { margin: 0; font-size: var(--fs-0, .85rem); color: var(--ink-2); line-height: 1.5; }
+.vt-app .vt-invite__form { margin-top: var(--sp-2, 8px); }
+.vt-app .vt-invite .vt-invite__code { font-size: 1.75rem; letter-spacing: .4em; text-align: center; font-variant-numeric: tabular-nums; font-family: ui-monospace, Menlo, Consolas, monospace; }
+.vt-app .vt-invite__error { margin: 0; padding: 10px 12px; border-radius: var(--r-s); background: color-mix(in srgb, var(--warn, #b45309) 10%, var(--surface)); color: var(--ink); font-size: var(--fs-0, .9rem); }
+.vt-app .vt-invite__remember { display: flex !important; align-items: flex-start; gap: 10px; font-weight: 400 !important; }
+.vt-app .vt-invite__remember input { width: auto; min-height: 0; margin-top: 3px; }
+.vt-app .vt-invite__link, .vt-app .vt-invite__back { justify-self: center; min-height: 44px; padding: 8px 12px; border: 0; background: none; color: var(--link, var(--vt-accent-text)); font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+.vt-app .vt-invite__back { justify-self: start; color: var(--ink-2); }
+.vt-app :is(.vt-invite__link, .vt-invite__back):disabled { color: var(--ink-3, #94a3b8); cursor: default; }
+.vt-app .vt-invite__spin { display: inline-block; vertical-align: -3px; animation: vt-spin 1s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .vt-app .vt-invite__spin { animation: none; } }
+.vt-app .vt-dev-tools { margin-top: var(--sp-5, 20px); padding-top: var(--sp-4, 16px); border-top: 1px dashed var(--line-2); display: grid; gap: 8px; }

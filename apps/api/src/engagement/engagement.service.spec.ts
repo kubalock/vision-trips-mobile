@@ -11,7 +11,7 @@ describe('EngagementService', () => {
     const service = new EngagementService({ createRecord } as unknown as AirtableService, { enqueueJob } as unknown as DurableAuthStore);
 
     service.record(
-      { baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false },
+      { baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false, customerRecordId: null, assurance: 'otp' },
       { event: 'section_opened', detail: 'documents', stage: 'Booked', occurredAt: '2026-11-08T12:00:00Z', device: 'web' },
     );
     expect(enqueueJob).toHaveBeenCalledWith(expect.any(String), 'airtable-engagement', { baseId: 'appABCDEFGHIJKLMN', table: 'Engagement', fields: {
@@ -26,7 +26,7 @@ describe('EngagementService', () => {
     const createRecord = vi.fn();
     const enqueueJob = vi.fn();
     new EngagementService({ createRecord } as unknown as AirtableService, { enqueueJob } as unknown as DurableAuthStore).record(
-      { baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false },
+      { baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false, customerRecordId: null, assurance: 'otp' },
       { event: 'action_clicked', detail: 'Download' },
     );
     expect(createRecord).not.toHaveBeenCalled();

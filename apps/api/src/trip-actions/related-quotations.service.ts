@@ -13,34 +13,38 @@ export class RelatedQuotationsService {
 
   async list(principal: SessionPrincipal): Promise<RelatedQuotationsResponse> {
     if (principal.fellowTraveller) throw new ForbiddenException('Quotation comparison is only available to the lead customer.');
-    const records = await this.relatedBookings(principal);
+    const records = (await this.related(principal)).bookings;
     return { quotations: records.map((record) => this.summary(principal, record)).sort(compareQuotes) };
   }
 
   async open(principal: SessionPrincipal, comparisonId: string): Promise<OpenRelatedQuotationResponse> {
     if (principal.fellowTraveller) throw new ForbiddenException('Quotation comparison is only available to the lead customer.');
-    const target = (await this.relatedBookings(principal)).find((record) => this.id(principal.baseId, record.id) === comparisonId);
+    const { bookings, customers } = await this.related(principal);
+    const target = bookings.find((record) => this.id(principal.baseId, record.id) === comparisonId);
     if (!target) throw new NotFoundException('That quotation is no longer available for this customer.');
     const snapshot = await this.trips.snapshot(principal.baseId, target.id, 'primary_customer');
-    return { snapshot, session: this.sessions.issue({ baseId: principal.baseId, recordId: target.id, fellowTraveller: false }) };
+    // The new session keeps the verification the customer already completed, for the Customer linked to that quotation.
+    const customerRecordId = customers.find((customer) => strings(pick(customer.fields, customerFields.trips)).includes(target.id))?.id ?? null;
+    return { snapshot, session: this.sessions.issue({ baseId: principal.baseId, recordId: target.id, fellowTraveller: false, customerRecordId, assurance: principal.assurance }) };
   }
 
-  private async relatedBookings(principal: SessionPrincipal): Promise<AirtableRecord[]> {
+  private async related(principal: SessionPrincipal): Promise<{ bookings: AirtableRecord[]; customers: AirtableRecord[] }> {
     const profile = await this.trips.verificationProfile(principal.baseId, principal.recordId);
     const email = profile.email.trim().toLowerCase();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return [];
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { bookings: [], customers: [] };
     const safe = email.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     const customers = await this.airtable.list(principal.baseId, process.env.AIRTABLE_CUSTOMERS_TABLE?.trim() || 'Customers', {
       filterByFormula: `OR(LOWER({Primary Email})='${safe}',LOWER({Secondary Email})='${safe}')`,
       fields: ['Trips'], maxRecords: 20,
     });
     const ids = [...new Set(customers.flatMap((customer) => strings(pick(customer.fields, customerFields.trips))))];
-    const bookings = await this.airtable.records(principal.baseId, process.env.AIRTABLE_BOOKINGS_TABLE?.trim() || 'Bookings', ids);
-    return bookings.filter((record) => {
+    const records = await this.airtable.records(principal.baseId, process.env.AIRTABLE_BOOKINGS_TABLE?.trim() || 'Bookings', ids);
+    const bookings = records.filter((record) => {
       if (truthy(record.fields['Soft Delete'])) return false;
       const stage = resolveStage(firstString(pick(record.fields, bookingFields.status)), date(pick(record.fields, bookingFields.departure)), date(pick(record.fields, bookingFields.return)), date(pick(record.fields, bookingFields.quoteExpiry)));
       return stage === 'quote' || stage === 'quote_expired';
     }).slice(0, 20);
+    return { bookings, customers };
   }
 
   private summary(principal: SessionPrincipal, record: AirtableRecord): RelatedQuotationSummary {

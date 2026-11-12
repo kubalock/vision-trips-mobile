@@ -1,6 +1,7 @@
 import { HttpClient, HttpEventType, type HttpResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import type { CustomerAccount, CustomerEngagementRequest, CustomerEngagementResponse, CustomerMessageRequest, CustomerMessageResponse, CustomerPreferences, ExternalTripContent, FellowTravellerLinkResponse, LinkExchangeResponse, MobileSession, OpenCustomerAccountTripResponse, OpenRelatedQuotationResponse, PaymentLinkResponse, PaymentStatusResponse, QuotationAcceptanceRequest, QuotationAcceptanceResponse, RelatedQuotationsResponse, TripSnapshot, UpdateCustomerPreferencesResponse } from '@vision-trips/contracts';
+import type { CustomerAccount, CustomerEngagementRequest, CustomerEngagementResponse, CustomerMessageRequest, CustomerMessageResponse, CustomerPreferences, DevInvitationStatus, ExternalTripContent, FellowTravellerLinkResponse, InvitationAuthorized, InvitationOtpState, InvitationState, LinkExchangeResponse, MobileSession, OpenCustomerAccountTripResponse, OpenRelatedQuotationResponse, PaymentLinkResponse, PaymentStatusResponse, QuotationAcceptanceRequest, QuotationAcceptanceResponse, RelatedQuotationsResponse, TripSnapshot, UpdateCustomerPreferencesResponse } from '@vision-trips/contracts';
+import { devInvitationResponseSchema, devInvitationStatusSchema, invitationAuthorizedResponseSchema, invitationOtpStateSchema, invitationRequiredLinkExchangeSchema, invitationStateSchema, stepUpResponseSchema } from '@vision-trips/contracts';
 import { filter, firstValueFrom, map } from 'rxjs';
 import { API_BASE_URL } from '../config/api-base-url';
 import { parseExternalContent, parseTripSnapshot } from './trip-schema';
@@ -18,30 +19,46 @@ export class VisionApiService {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = inject(API_BASE_URL);
 
-  exchangeLink(linkOrCode: string, deviceTrustTokens: string[] = []): Promise<LinkExchangeResponse> {
+  /** Any trip link: invitations come back as `invitation_required`; legacy signed customer links too (they now need an email code). */
+  exchangeLink(linkOrCode: string): Promise<LinkExchangeResponse> {
     return this.exchange(firstValueFrom(
-      this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges`, { linkOrCode, deviceTrustTokens }, this.writeOptions()),
+      this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges`, { linkOrCode }, this.writeOptions()),
     ));
   }
 
-  exchangeLocalTrip(baseId: string, recordId: string): Promise<LinkExchangeResponse> {
-    return this.exchange(firstValueFrom(
-      this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges/local`, { baseId, recordId }, this.writeOptions()),
-    ));
+  // --- Invitations: the token travels in the body, never in a URL. Every response is checked at runtime. ---------
+
+  /** Welcome-screen details for an invitation link. Never signs anyone in. */
+  resolveInvitation(token: string, deviceTrustTokens: string[] = []): Promise<InvitationState> {
+    return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/link-exchanges/invitations/resolve`, { token, deviceTrustTokens })), (value) => invitationStateSchema.parse(value));
   }
 
-  verifyPostcode(exchangeId: string, postcode: string, rememberDevice: boolean): Promise<LinkExchangeResponse> {
-    return this.exchange(firstValueFrom(
-      this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges/${exchangeId}/verify/knowledge`, { postcode, rememberDevice }, this.writeOptions()),
-    ));
+  sendInvitationCode(token: string): Promise<InvitationOtpState> {
+    return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/link-exchanges/invitations/code`, { token })), (value) => invitationOtpStateSchema.parse(value));
   }
 
-  sendOtp(exchangeId: string): Promise<import('@vision-trips/contracts').LinkExchangeChallenge> {
-    return firstValueFrom(this.http.post<import('@vision-trips/contracts').LinkExchangeChallenge>(`${this.baseUrl}/link-exchanges/${exchangeId}/otp/send`, {}, this.writeOptions()));
+  verifyInvitationCode(token: string, code: string, rememberDevice: boolean): Promise<InvitationAuthorized> {
+    return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/link-exchanges/invitations/verify`, { token, code, rememberDevice })), parseAuthorized);
   }
 
-  verifyOtp(exchangeId: string, code: string, rememberDevice: boolean): Promise<LinkExchangeResponse> {
-    return this.exchange(firstValueFrom(this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges/${exchangeId}/verify/otp`, { code, rememberDevice }, this.writeOptions())));
+  /** Share links (no code) and invitations on a device already trusted for this customer. */
+  openInvitation(token: string, deviceTrustTokens: string[] = []): Promise<InvitationAuthorized> {
+    return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/link-exchanges/invitations/open`, { token, deviceTrustTokens })), parseAuthorized);
+  }
+
+  /** Asks for an email code before a sensitive action, for a session that was not verified by email. */
+  stepUp(accessToken: string): Promise<string> {
+    return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/link-exchanges/step-up`, {}, { headers: { Authorization: `Bearer ${accessToken}` } })), (value) => stepUpResponseSchema.parse(value).invitationToken);
+  }
+
+  /** Local development only: the API answers 404 in production. */
+  devInvitationStatus(): Promise<DevInvitationStatus> {
+    return parsed(firstValueFrom(this.http.get<unknown>(`${this.baseUrl}/link-exchanges/dev-invitation`)), (value) => devInvitationStatusSchema.parse(value));
+  }
+
+  /** Local development only: an invitation for the server's VISION_DEV_* booking. No identifiers reach the app. */
+  createDevInvitation(): Promise<string> {
+    return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/link-exchanges/dev-invitation`, {})), (value) => devInvitationResponseSchema.parse(value).invitationToken);
   }
 
   downloadCalendar(accessToken: string): Promise<Blob> {
@@ -136,10 +153,11 @@ export class VisionApiService {
     }));
   }
 
-  /** Checks the trip in an authorised link exchange before the app uses it. */
+  /** Checks the trip in an authorised link exchange (or the invitation it asks for) before the app uses it. */
   private async exchange(response: Promise<LinkExchangeResponse>): Promise<LinkExchangeResponse> {
     const result = await response;
-    return result.status === 'authorized' ? { ...result, snapshot: parseTripSnapshot(result.snapshot) } : result;
+    if (result.status === 'invitation_required') return invitationRequiredLinkExchangeSchema.parse(result);
+    return { ...result, snapshot: parseTripSnapshot(result.snapshot) };
   }
 
   private writeOptions(accessToken?: string): { headers: Record<string, string> } {
@@ -150,6 +168,11 @@ export class VisionApiService {
 /** Runs a response through its runtime schema: the generic on HttpClient is only a compile-time cast. */
 async function parsed<T>(response: Promise<unknown>, parse: (value: unknown) => T): Promise<T> {
   return parse(await response);
+}
+
+function parseAuthorized(value: unknown): InvitationAuthorized {
+  const result = invitationAuthorizedResponseSchema.parse(value);
+  return { ...result, snapshot: parseTripSnapshot(result.snapshot) };
 }
 
 async function withParsedSnapshot<T extends { snapshot: TripSnapshot }>(response: Promise<T>): Promise<T> {

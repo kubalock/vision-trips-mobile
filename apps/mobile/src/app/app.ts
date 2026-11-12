@@ -3,7 +3,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import { Network } from '@capacitor/network';
-import type { CustomerAccount, CustomerEngagementEvent, CustomerMessageTopic, CustomerPreferences, ExternalTripContent, LinkExchangeChallenge, LinkExchangeResponse, MobileSession, PaymentStatusResponse, RelatedQuotationSummary, TripDocument, TripSnapshot, TripStage } from '@vision-trips/contracts';
+import type { CustomerAccount, CustomerEngagementEvent, CustomerMessageTopic, CustomerPreferences, ExternalTripContent, InvitationAuthorized, LinkExchangeResponse, MobileSession, PaymentStatusResponse, RelatedQuotationSummary, TripDocument, TripSnapshot, TripStage } from '@vision-trips/contracts';
 import { DocumentTooLargeError, VisionApiService } from './core/api/vision-api.service';
 import { SavedTripsStore, type SavedTrip } from './core/storage/saved-trips.store';
 import { BrandAssetsStore } from './core/storage/brand-assets.store';
@@ -27,6 +27,7 @@ import { StageExperienceSection } from './features/trip/stage-experience-section
 import { BookingJourneySection } from './features/trip/booking-journey-section';
 import { CustomerAccountSection } from './features/account/customer-account-section';
 import { BrandSupportSection } from './features/trip/brand-support-section';
+import { InvitationFlow } from './features/invitation/invitation-flow';
 import { VtIcon, type VtIconName } from './shared/lucide-icon';
 import { brandPalette } from './shared/brand-palette';
 import { EuropeanDatePipe, formatEuropeanDate } from './shared/european-date.pipe';
@@ -38,7 +39,7 @@ type AppearancePreference = Appearance | 'system';
 
 @Component({
   selector: 'app-root',
-  imports: [BookingJourneySection, BrandSupportSection, CommunicationsSection, CustomerAccountSection, DestinationsSection, DocumentsSection, EuropeanDatePipe, ExtrasSection, ExternalContentSection, ItinerarySection, PaymentsSection, StageExperienceSection, VtIcon],
+  imports: [BookingJourneySection, BrandSupportSection, CommunicationsSection, CustomerAccountSection, DestinationsSection, DocumentsSection, EuropeanDatePipe, ExtrasSection, ExternalContentSection, InvitationFlow, ItinerarySection, PaymentsSection, StageExperienceSection, VtIcon],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -52,20 +53,22 @@ export class App implements OnInit, OnDestroy {
   private readonly shareSheet = inject(ShareSheet);
   /** Set when the browser blocked a payment page; the template offers a direct link instead. */
   protected readonly blockedPageUrl = signal<string | null>(null);
-  /** The Airtable-ID entry form is a local development tool; production builds only open trips from links. */
-  protected readonly localPreviewEnabled = isDevMode();
-  protected readonly baseId = signal('');
-  protected readonly recordId = signal('');
+  /**
+   * The invitation being verified (from a `vt_` link, a legacy link, a step-up or the development button). Only ever in
+   * memory: invitation tokens, like access and refresh credentials, are never written to localStorage.
+   */
+  protected readonly invitationToken = signal<string | null>(null);
+  /** Development builds only, and only when the API says a VISION_DEV_* test invitation is configured. */
+  protected readonly devInvitationAvailable = signal(false);
+  protected readonly devInvitationMessage = signal('');
+  protected readonly openingDevInvitation = signal(false);
+  /** A sensitive action was refused because this session hasn't been confirmed by email. */
+  protected readonly verificationNeeded = signal(false);
+  protected readonly startingStepUp = signal(false);
   protected readonly submitting = signal(false);
   protected readonly error = signal('');
   protected readonly trip = signal<TripSnapshot | null>(null);
   protected readonly brandLogoUrl = signal<string | null>(null);
-  protected readonly challenge = signal<LinkExchangeChallenge | null>(null);
-  protected readonly postcode = signal('');
-  protected readonly otpCode = signal('');
-  protected readonly verificationMethod = signal<'postcode' | 'otp'>('otp');
-  protected readonly rememberDevice = signal(true);
-  protected readonly resendSeconds = signal(0);
   protected readonly storedSecurely = signal(false);
   /** Browsers save only the trip itself, in this browser's storage; the installed app uses the device's secure storage. */
   protected readonly savedInBrowser = !this.savedTrips.native;
@@ -107,7 +110,7 @@ export class App implements OnInit, OnDestroy {
   protected readonly img = { srcset, sizes: IMAGE_SIZES };
   protected readonly tripRefreshStates = signal<Record<string, TripRefreshState>>({});
   protected readonly tripGroups = computed(() => groupSavedTrips(this.savedTripList()));
-  protected readonly displayedTrip = computed(() => this.showTripLibrary() ? null : this.trip());
+  protected readonly displayedTrip = computed(() => this.showTripLibrary() || this.invitationToken() ? null : this.trip());
   protected readonly notifications = signal<CustomerNotification[]>([]);
   protected readonly showNotifications = signal(false);
   protected readonly deviceNotificationsEnabled = signal(false);
@@ -168,9 +171,7 @@ export class App implements OnInit, OnDestroy {
   private tripGeneration = 0;
   private readonly paymentPollDelaysMs: readonly number[] = PAYMENT_POLL_DELAYS_MS;
   private networkListener: PluginListenerHandle | null = null;
-  private resendTimer: ReturnType<typeof setInterval> | null = null;
   private externalContentTimer: ReturnType<typeof setTimeout> | null = null;
-  protected readonly canContinue = computed(() => /^app[A-Za-z0-9]{14}$/.test(this.baseId().trim()) && /^rec[A-Za-z0-9]{14}$/.test(this.recordId().trim()) && !this.submitting());
 
   constructor() {
     this.sessions.connect({
@@ -197,6 +198,7 @@ export class App implements OnInit, OnDestroy {
     const sharedLinkToken = window.location.pathname.match(/\/trip\/([^/]+)/)?.[1] ?? null;
     if (sharedLinkToken) void this.openSharedLink(sharedLinkToken);
     void this.initializeOfflineState(!sharedLinkToken);
+    if (isDevMode() && !sharedLinkToken) void this.checkDevInvitation();
     if (Capacitor.isNativePlatform()) {
       void CapacitorApp.addListener('appStateChange', ({ isActive }) => {
         if (isActive) void this.checkPaymentReturn();
@@ -216,7 +218,6 @@ export class App implements OnInit, OnDestroy {
     void this.backButtonListener?.remove();
     void this.browserClosedListener?.remove();
     void this.networkListener?.remove();
-    if (this.resendTimer) clearInterval(this.resendTimer);
     if (this.externalContentTimer) clearTimeout(this.externalContentTimer);
     this.replaceBrandLogo(null);
   }
@@ -234,43 +235,58 @@ export class App implements OnInit, OnDestroy {
     if (label) this.trackEngagement('action_clicked', label);
   }
 
-  protected updateBaseId(event: Event): void {
-    this.baseId.set((event.target as HTMLInputElement).value);
-  }
-
-  protected updateRecordId(event: Event): void {
-    this.recordId.set((event.target as HTMLInputElement).value);
-  }
-
-  protected async openTrip(event: Event): Promise<void> {
-    event.preventDefault();
-    if (!this.canContinue()) return;
-
-    this.submitting.set(true);
+  /** Local development: opens the server-configured test booking through the normal invitation and email-code flow. */
+  protected async openDevelopmentInvitation(): Promise<void> {
+    if (this.openingDevInvitation()) return;
+    this.openingDevInvitation.set(true);
     this.error.set('');
     try {
-      const response = await this.api.exchangeLocalTrip(this.baseId().trim(), this.recordId().trim());
-      if (response.status === 'authorized') {
-        await this.acceptAuthorized(response);
-      } else {
-        this.setChallenge(response.challenge);
-      }
+      this.invitationToken.set(await this.api.createDevInvitation());
     } catch (error) {
-      this.error.set(this.apiError(error, 'We could not open that trip. Check the Airtable IDs and API configuration, then try again.'));
+      this.error.set(this.apiError(error, 'The development test trip could not be opened. Check the VISION_DEV_* settings and the API console.'));
     } finally {
-      this.submitting.set(false);
+      this.openingDevInvitation.set(false);
     }
   }
 
-  protected updatePostcode(event: Event): void {
-    this.postcode.set((event.target as HTMLInputElement).value);
+  private async checkDevInvitation(): Promise<void> {
+    try {
+      const status = await this.api.devInvitationStatus();
+      this.devInvitationAvailable.set(status.available);
+      this.devInvitationMessage.set(status.available ? '' : status.message ?? '');
+    } catch {
+      this.devInvitationAvailable.set(false); // 404 in production builds of the API, or the API isn't running.
+    }
   }
 
-  protected updateOtpCode(event: Event): void { this.otpCode.set((event.target as HTMLInputElement).value.replace(/\D/g, '').slice(0, 6)); }
-  protected updateRememberDevice(event: Event): void { this.rememberDevice.set((event.target as HTMLInputElement).checked); }
-  protected chooseVerificationMethod(method: 'postcode' | 'otp'): void {
-    this.verificationMethod.set(method); this.error.set('');
-    if (method === 'otp' && !this.challenge()?.resendAvailableAt) void this.sendOtp();
+  /** The invitation flow finished: open the verified trip and save it in My Trips. */
+  protected async invitationAuthorized(response: InvitationAuthorized): Promise<void> {
+    this.invitationToken.set(null);
+    this.verificationNeeded.set(false);
+    await this.acceptAuthorized({ status: 'authorized', exchangeId: 'invitation', expiresAt: response.session.refreshExpiresAt, snapshot: response.snapshot, session: response.session, trustedDeviceToken: response.trustedDeviceToken });
+  }
+
+  /** "Not now" / "Back": return to the open trip, My Trips, or the start screen. */
+  protected invitationCancelled(): void {
+    this.invitationToken.set(null);
+    if (!this.trip() && this.savedTripList().length) this.showTripLibrary.set(true);
+  }
+
+  /** Payments, quotation acceptance, sharing and account changes need a session confirmed by email. */
+  protected async confirmIdentity(): Promise<void> {
+    const currentSession = this.session();
+    if (!currentSession || this.startingStepUp() || !this.online()) return;
+    const generation = this.tripGeneration;
+    this.startingStepUp.set(true);
+    this.error.set('');
+    try {
+      const token = await this.withSession(currentSession, (accessToken) => this.api.stepUp(accessToken));
+      if (this.isCurrentTrip(generation)) this.invitationToken.set(token);
+    } catch (error) {
+      if (this.isCurrentTrip(generation)) this.error.set(this.apiError(error, 'We couldn’t start the email check. Please try again.'));
+    } finally {
+      this.startingStepUp.set(false);
+    }
   }
 
   protected updateAcceptanceName(event: Event): void {
@@ -473,19 +489,22 @@ export class App implements OnInit, OnDestroy {
   }
 
   private async openSharedLink(linkToken: string): Promise<void> {
-    // Keep the signed token out of the address bar and browser history once it has been read.
+    // Keep the token out of the address bar and browser history once it has been read.
     try { window.history.replaceState(window.history.state, '', new URL(document.baseURI).pathname); } catch { /* Not fatal. */ }
+    // Invitation links go straight to the invitation screen; nothing is authorised by opening them.
+    if (/^vt_[A-Za-z0-9_-]{32}$/.test(linkToken)) { this.invitationToken.set(linkToken); return; }
     this.submitting.set(true);
     this.error.set('');
     try {
-      const response = await this.api.exchangeLink(linkToken, await this.savedTrips.deviceTrusts());
+      // Legacy signed links only locate the booking now: customer links come back as an invitation to verify by email.
+      const response = await this.api.exchangeLink(linkToken);
       if (response.status === 'authorized') await this.acceptAuthorized(response);
-      else this.setChallenge(response.challenge);
+      else this.invitationToken.set(response.invitationToken);
     } catch (error) {
-      const linkRejected = error instanceof HttpErrorResponse && [400, 401, 403, 404, 410].includes(error.status);
-      this.error.set(linkRejected ? 'This trip link has expired or is no longer valid. Ask your travel agent for a new one.' : this.apiError(error, 'We could not open that trip link. Please try again.'));
+      const linkRejected = error instanceof HttpErrorResponse && [400, 401, 403, 404, 409, 410].includes(error.status);
+      this.error.set(linkRejected ? 'This trip link has expired or is no longer valid. Ask your travel agent for a new invitation.' : this.apiError(error, 'We could not open that trip link. Please try again.'));
       // Don't strand someone on the entry screen when they already have trips saved on this device.
-      if (!this.trip() && !this.challenge()) {
+      if (!this.trip() && !this.invitationToken()) {
         if (!this.savedTripList().length) await this.reloadSavedTrips();
         if (this.savedTripList().length) this.showTripLibrary.set(true);
       }
@@ -616,7 +635,7 @@ export class App implements OnInit, OnDestroy {
     if (this.trip()) return;
     const saved = (await this.savedTrips.signOutExpired()).sort((a, b) => b.savedAt.localeCompare(a.savedAt));
     this.setSavedTripList(saved, status.connected);
-    if (!activateSaved || !saved.length || this.trip() || this.challenge()) return;
+    if (!activateSaved || !saved.length || this.trip() || this.invitationToken()) return;
     if (saved.length > 1) {
       await this.activateSavedTrip(saved[0], false);
       this.showTripLibrary.set(true);
@@ -629,57 +648,10 @@ export class App implements OnInit, OnDestroy {
     this.trip.update((trip) => trip ? { ...trip, freshness: { ...trip.freshness, status } } : trip);
   }
 
-  protected async verifyPostcode(event: Event): Promise<void> {
-    event.preventDefault();
-    const challenge = this.challenge();
-    if (!challenge || !this.postcode().trim()) return;
-    this.submitting.set(true);
-    this.error.set('');
-    try {
-      const response = await this.api.verifyPostcode(challenge.exchangeId, this.postcode().trim(), this.rememberDevice());
-      if (response.status === 'authorized') await this.acceptAuthorized(response);
-    } catch (error) {
-      this.error.set(this.apiError(error, 'That postcode didn’t match the booking. Please check it and try again.'));
-    } finally {
-      this.submitting.set(false);
-    }
-  }
-
-  protected async sendOtp(): Promise<void> {
-    const challenge = this.challenge();
-    if (!challenge || this.resendSeconds() > 0 || this.submitting()) return;
-    this.submitting.set(true); this.error.set('');
-    try { this.setChallenge(await this.api.sendOtp(challenge.exchangeId)); }
-    catch (error) { this.error.set(this.apiError(error, 'We could not send a code. Please wait and try again.')); }
-    finally { this.submitting.set(false); }
-  }
-
-  protected async verifyOtp(event: Event): Promise<void> {
-    event.preventDefault(); const challenge = this.challenge();
-    if (!challenge || this.otpCode().length !== 6) return;
-    this.submitting.set(true); this.error.set('');
-    try { const response = await this.api.verifyOtp(challenge.exchangeId, this.otpCode(), this.rememberDevice()); if (response.status === 'authorized') await this.acceptAuthorized(response); }
-    catch (error) { this.error.set(this.apiError(error, 'That code was not accepted. Check it and try again.')); }
-    finally { this.submitting.set(false); }
-  }
-
-  private setChallenge(challenge: LinkExchangeChallenge): void {
-    this.challenge.set(challenge);
-    this.verificationMethod.set(challenge.methods.includes('otp') && !challenge.methods.includes('postcode') ? 'otp' : 'postcode');
-    this.startResendCountdown(challenge.resendAvailableAt);
-  }
-
-  private startResendCountdown(availableAt: string | null): void {
-    if (this.resendTimer) clearInterval(this.resendTimer);
-    const update = () => this.resendSeconds.set(availableAt ? Math.max(0, Math.ceil((new Date(availableAt).getTime() - Date.now()) / 1000)) : 0);
-    update(); this.resendTimer = setInterval(update, 1000);
-  }
-
   private async acceptAuthorized(response: Extract<LinkExchangeResponse, { status: 'authorized' }>): Promise<void> {
     const generation = this.beginTrip();
     this.trip.set(response.snapshot);
     this.session.set(response.session);
-    this.challenge.set(null);
     this.showTripLibrary.set(false);
     void this.loadExternalContent();
     void this.loadRelatedQuotations();
@@ -846,8 +818,7 @@ export class App implements OnInit, OnDestroy {
   protected addAnotherTrip(): void {
     this.clearOpenTrip();
     this.showTripLibrary.set(false);
-    this.baseId.set('');
-    this.recordId.set('');
+    this.invitationToken.set(null);
     this.error.set('');
   }
 
@@ -996,6 +967,7 @@ export class App implements OnInit, OnDestroy {
     this.messageTopic.set('itinerary');
     this.error.set('');
     this.signedOut.set(false);
+    this.verificationNeeded.set(false); this.startingStepUp.set(false);
     this.accountError.set(''); this.accountSaveError.set(''); this.documentFailure.set(null); this.calendarError.set(''); this.creatingCalendar.set(false);
     return generation;
   }
@@ -1237,6 +1209,8 @@ export class App implements OnInit, OnDestroy {
   private apiError(error: unknown, fallback: string): string {
     // The signed-out card already explains what happened and what to do; a toast would repeat it.
     if (isTerminalSessionError(error) && this.signedOut()) return '';
+    // The "confirm it's you" card offers the fix, so the banner only needs a short explanation.
+    if (isVerificationRequired(error)) { this.verificationNeeded.set(true); return 'Please confirm it’s you first — we’ll email you a code.'; }
     return customerErrorMessage(error, fallback);
   }
 
@@ -1274,6 +1248,11 @@ const INTERNAL_ERROR_TERMS = /airtable|token|mint|webhook|schema|api key|base id
  * Turns an API failure into something a traveller can act on. Server text is only shown for client errors (4xx)
  * that our API phrases for customers; infrastructure and configuration failures get a calm, generic message.
  */
+/** The API refused a sensitive action because the session wasn't confirmed by email (legacy or share-link session). */
+export function isVerificationRequired(error: unknown): boolean {
+  return error instanceof HttpErrorResponse && error.status === 403 && (error.error as { code?: unknown } | null)?.code === 'verification_required';
+}
+
 export function customerErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof DocumentTooLargeError) return 'This document is too large to download in the app. Ask your travel agent to email it to you.';
   if (isTripDataError(error)) return error.reason === 'unsupported_version'

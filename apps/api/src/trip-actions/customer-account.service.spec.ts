@@ -16,7 +16,7 @@ describe('CustomerAccountService', () => {
     ]) };
     const trips = { verificationProfile: vi.fn().mockResolvedValue({ email: 'alex@example.com' }) };
     const service = new CustomerAccountService(airtable as never, trips as never, {} as never);
-    const account = await service.account({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recBOOKINGAAAAAAA', fellowTraveller: false });
+    const account = await service.account({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recBOOKINGAAAAAAA', fellowTraveller: false, customerRecordId: null, assurance: 'otp' });
     expect(account.emailHint).toBe('al**@example.com');
     expect(account.preferences).toMatchObject({ emailMarketing: true, smsMarketing: false, postalMarketing: true, preferredAirports: ['Bristol Airport'], preferredMonths: ['June'] });
     expect(account.trips).toHaveLength(2);
@@ -28,7 +28,7 @@ describe('CustomerAccountService', () => {
     const airtable = { list: vi.fn().mockResolvedValue([{ id: 'recCUSTOMERAAAAAA', fields: {} }]), records: vi.fn(), updateRecord: vi.fn().mockResolvedValue({}), addComment: vi.fn().mockResolvedValue(undefined) };
     const trips = { verificationProfile: vi.fn().mockResolvedValue({ email: 'alex@example.com' }) };
     const service = new CustomerAccountService(airtable as never, trips as never, {} as never);
-    const result = await service.update({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recBOOKINGAAAAAAA', fellowTraveller: false }, { emailMarketing: true, smsMarketing: false, postalMarketing: true, preferredAirports: ['Manchester Airport'], preferredMonths: ['May', 'June'] });
+    const result = await service.update({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recBOOKINGAAAAAAA', fellowTraveller: false, customerRecordId: null, assurance: 'otp' }, { emailMarketing: true, smsMarketing: false, postalMarketing: true, preferredAirports: ['Manchester Airport'], preferredMonths: ['May', 'June'] });
     expect(result.updatedRecords).toBe(1);
     expect(airtable.updateRecord).toHaveBeenCalledWith('appABCDEFGHIJKLMN', 'Customers', 'recCUSTOMERAAAAAA', {
       'Email Marketing': true, 'Email Marketing Unsubscribe': false, 'SMS Marketing': false, 'Postal Marketing': true,
@@ -39,7 +39,7 @@ describe('CustomerAccountService', () => {
   it('blocks fellow travellers before searching customer records', async () => {
     const airtable = { list: vi.fn() }; const trips = { verificationProfile: vi.fn() };
     const service = new CustomerAccountService(airtable as never, trips as never, {} as never);
-    await expect(service.account({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recBOOKINGAAAAAAA', fellowTraveller: true })).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.account({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recBOOKINGAAAAAAA', fellowTraveller: true, customerRecordId: null, assurance: 'otp' })).rejects.toBeInstanceOf(ForbiddenException);
     expect(airtable.list).not.toHaveBeenCalled();
   });
 });

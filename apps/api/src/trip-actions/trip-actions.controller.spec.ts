@@ -44,7 +44,7 @@ describe('generated documents', () => {
 
 describe('quotation acceptance', () => {
   it('records acceptance fields and an audit comment without changing booking status', async () => {
-    const sessions = { validateAccess: vi.fn().mockReturnValue({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false }) };
+    const sessions = { validateAccess: vi.fn().mockReturnValue({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false, customerRecordId: 'recCUSTOMERAAAAAA', assurance: 'otp' }) };
     const trips = { snapshot: vi.fn().mockResolvedValue({
       stage: 'quote', version: 'v1', summary: { reference: 'VT-1' }, support: { email: null }, payments: { items: [] }, quotation: { canAccept: true, requiredConfirmations: ['package', 'terms'] },
     }) };
@@ -95,7 +95,7 @@ describe('customer messages', () => {
   });
 
   it('rejects short messages without writing a comment', async () => {
-    const sessions = { validateAccess: vi.fn().mockReturnValue({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false }) };
+    const sessions = { validateAccess: vi.fn().mockReturnValue({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false, customerRecordId: 'recCUSTOMERAAAAAA', assurance: 'otp' }) };
     const airtable = { addComment: vi.fn() };
     const controller = new TripActionsController(sessions as never, {} as never, airtable as never, {} as never, { send: vi.fn().mockResolvedValue({ customer: "local_preview", agent: "not_configured" }) } as never, { create: vi.fn() } as never, { link: vi.fn(), depositLink: vi.fn().mockResolvedValue(null) } as never);
 
@@ -118,7 +118,7 @@ describe('snapshot refresh', () => {
 
 describe('payment links', () => {
   it('returns the current server-validated link for a payable item', async () => {
-    const sessions = { validateAccess: vi.fn().mockReturnValue({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false }) };
+    const sessions = { validateAccess: vi.fn().mockReturnValue({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false, customerRecordId: 'recCUSTOMERAAAAAA', assurance: 'otp' }) };
     const trips = { snapshot: vi.fn().mockResolvedValue({ payments: { items: [{
       id: 'pay_public', amount: 250, currency: 'GBP', canPay: true, actionUrl: 'https://pay.example/secure',
     }] } }) };
@@ -141,7 +141,7 @@ describe('payment links', () => {
   });
 
   it('rejects stale or already-paid payment actions', async () => {
-    const sessions = { validateAccess: vi.fn().mockReturnValue({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false }) };
+    const sessions = { validateAccess: vi.fn().mockReturnValue({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false, customerRecordId: 'recCUSTOMERAAAAAA', assurance: 'otp' }) };
     const trips = { snapshot: vi.fn().mockResolvedValue({ payments: { items: [{ id: 'pay_public', canPay: false, actionUrl: null }] } }) };
     const controller = new TripActionsController(sessions as never, trips as never, {} as never, {} as never, { send: vi.fn().mockResolvedValue({ customer: "local_preview", agent: "not_configured" }) } as never, { create: vi.fn() } as never, { link: vi.fn().mockRejectedValue(new Error('This payment is no longer available.')), depositLink: vi.fn() } as never);
 
@@ -151,24 +151,75 @@ describe('payment links', () => {
 
 describe('fellow-traveller sharing', () => {
   it('mints a restricted link for the lead customer', async () => {
-    const sessions = { validateAccess: vi.fn().mockReturnValue({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false }) };
+    const sessions = { validateAccess: vi.fn().mockReturnValue({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false, customerRecordId: 'recCUSTOMERAAAAAA', assurance: 'otp' }) };
     const trips = { snapshot: vi.fn().mockResolvedValue({ capabilities: { shareWithTraveller: true } }) };
-    const tokens = { mintFellowTravellerLink: vi.fn().mockReturnValue('https://trips.example/trip/signed') };
+    const tokens = { shareLink: vi.fn().mockResolvedValue({ url: 'https://trips.example/trip/vt_share', expiresAt: '2026-11-19T00:00:00.000Z' }) };
     const controller = new TripActionsController(sessions as never, trips as never, {} as never, tokens as never, { send: vi.fn().mockResolvedValue({ customer: "local_preview", agent: "not_configured" }) } as never, { create: vi.fn() } as never, { link: vi.fn(), depositLink: vi.fn().mockResolvedValue(null) } as never);
 
     const result = await controller.fellowTravellerLink('Bearer token');
 
-    expect(result.url).toBe('https://trips.example/trip/signed');
-    expect(tokens.mintFellowTravellerLink).toHaveBeenCalledWith('appABCDEFGHIJKLMN', 'recABCDEFGHIJKLMN', expect.any(Number));
+    expect(result.url).toBe('https://trips.example/trip/vt_share');
+    expect(tokens.shareLink).toHaveBeenCalledWith(expect.objectContaining({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN' }));
   });
 
   it('prevents fellow travellers from creating another share link', async () => {
     const sessions = { validateAccess: vi.fn().mockReturnValue({ fellowTraveller: true }) };
     const trips = { snapshot: vi.fn() };
-    const tokens = { mintFellowTravellerLink: vi.fn() };
+    const tokens = { shareLink: vi.fn() };
     const controller = new TripActionsController(sessions as never, trips as never, {} as never, tokens as never, { send: vi.fn().mockResolvedValue({ customer: "local_preview", agent: "not_configured" }) } as never, { create: vi.fn() } as never, { link: vi.fn(), depositLink: vi.fn().mockResolvedValue(null) } as never);
 
     await expect(controller.fellowTravellerLink('Bearer token')).rejects.toBeInstanceOf(ForbiddenException);
-    expect(tokens.mintFellowTravellerLink).not.toHaveBeenCalled();
+    expect(tokens.shareLink).not.toHaveBeenCalled();
+  });
+});
+
+describe('sensitive actions need an email-verified session', () => {
+  const unverified = (assurance: 'legacy' | 'link') => ({ validateAccess: vi.fn().mockReturnValue({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false, customerRecordId: null, assurance }) });
+  const build = (sessions: object, extra: { trips?: object; airtable?: object; invitations?: object; mint?: object; account?: object; related?: object } = {}) => new TripActionsController(
+    sessions as never, (extra.trips ?? { snapshot: vi.fn() }) as never, (extra.airtable ?? { updateRecord: vi.fn(), addComment: vi.fn() }) as never,
+    (extra.invitations ?? { shareLink: vi.fn() }) as never, { send: vi.fn() } as never, { create: vi.fn() } as never,
+    (extra.mint ?? { link: vi.fn(), depositLink: vi.fn() }) as never, (extra.related ?? { open: vi.fn(), list: vi.fn() }) as never,
+    (extra.account ?? { account: vi.fn(), update: vi.fn(), open: vi.fn() }) as never,
+  );
+
+  it.each(['legacy', 'link'] as const)('refuses payments, acceptance, sharing and account changes for a %s session', async (assurance) => {
+    const mint = { link: vi.fn(), depositLink: vi.fn() };
+    const airtable = { updateRecord: vi.fn(), addComment: vi.fn() };
+    const invitations = { shareLink: vi.fn() };
+    const account = { account: vi.fn(), update: vi.fn(), open: vi.fn() };
+    const related = { open: vi.fn(), list: vi.fn() };
+    const controller = build(unverified(assurance), { mint, airtable, invitations, account, related });
+    const refusals: Array<() => unknown> = [
+      () => controller.paymentLink('Bearer token', 'pay_public'),
+      () => controller.customPaymentLink('Bearer token', { amount: 100 }),
+      () => controller.acceptQuotation('Bearer token', { name: 'Alex Traveller', email: 'alex@example.com', agreed: true, confirmations: [] }, { ip: '127.0.0.1', get: vi.fn() } as never),
+      () => controller.fellowTravellerLink('Bearer token'),
+      () => controller.account('Bearer token'),
+      () => controller.updatePreferences('Bearer token', {}),
+      () => controller.openAccountTrip('Bearer token', 'account-trip'),
+      () => controller.openRelated('Bearer token', 'comparison'),
+    ];
+    for (const refusal of refusals) await expect(Promise.resolve().then(refusal)).rejects.toMatchObject({ status: 403, response: { code: 'verification_required' } });
+    expect(mint.link).not.toHaveBeenCalled();
+    expect(airtable.updateRecord).not.toHaveBeenCalled();
+    expect(invitations.shareLink).not.toHaveBeenCalled();
+    expect(account.update).not.toHaveBeenCalled();
+    expect(related.open).not.toHaveBeenCalled();
+  });
+
+  it('accepts a trusted-device session for payments', async () => {
+    const sessions = { validateAccess: vi.fn().mockReturnValue({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false, customerRecordId: 'recCUSTOMERAAAAAA', assurance: 'trusted_device' }) };
+    const mint = { link: vi.fn().mockResolvedValue({ paymentId: 'pay_public', url: 'https://pay.example/secure', amount: 1, currency: 'GBP' }), depositLink: vi.fn() };
+    await expect(build(sessions, { mint }).paymentLink('Bearer token', 'pay_public')).resolves.toMatchObject({ paymentId: 'pay_public' });
+  });
+
+  it('still lets an unverified session read the trip and message the agent', async () => {
+    const trips = { snapshot: vi.fn().mockResolvedValue({ tripId: 'trp_public' }) };
+    const airtable = { addComment: vi.fn().mockResolvedValue(undefined) };
+    const controller = build(unverified('legacy'), { trips, airtable });
+    await expect(controller.snapshot('Bearer token')).resolves.toEqual({ tripId: 'trp_public' });
+    trips.snapshot.mockResolvedValueOnce({ tripId: 'trp_public', payments: { items: [{ id: 'pay_public', actionUrl: 'https://pay.example/stored' }] } });
+    await expect(controller.snapshot('Bearer token')).resolves.toMatchObject({ payments: { items: [{ id: 'pay_public', actionUrl: null }] } });
+    await expect(controller.sendMessage('Bearer token', { topic: 'other', message: 'Can we add a transfer please?' })).resolves.toMatchObject({ sent: true });
   });
 });

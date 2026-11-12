@@ -1,21 +1,39 @@
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
-import type { MobileSession } from '@vision-trips/contracts';
+import type { MobileSession, SessionAssurance } from '@vision-trips/contracts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { DurableAuthStore, type StoredSession } from './durable-auth.store.js';
 
-export interface SessionPrincipal { baseId: string; recordId: string; fellowTraveller: boolean }
+export interface SessionPrincipal {
+  baseId: string;
+  recordId: string;
+  fellowTraveller: boolean;
+  /** The verified Customer, when known (always set for sessions created from an invitation). */
+  customerRecordId: string | null;
+  assurance: SessionAssurance;
+  /** Internal session id, used to end a session once a step-up verification replaces it. */
+  sessionId?: string;
+}
+
+export interface SessionGrant {
+  baseId: string;
+  recordId: string;
+  fellowTraveller: boolean;
+  customerRecordId: string | null;
+  assurance: SessionAssurance;
+  invitationId?: string | null;
+}
 
 @Injectable()
 export class SessionsService {
   constructor(@Inject(DurableAuthStore) private readonly store: DurableAuthStore) {}
 
-  issue(input: SessionPrincipal): MobileSession {
+  issue(input: SessionGrant): MobileSession {
     const id = randomUUID();
     const refreshToken = token('vrt');
     const refreshExpiresAt = Date.now() + 30 * 86_400_000;
     const accessExpiresAt = Date.now() + 15 * 60_000;
     const accessToken = `${token('vta')}.${id}`;
-    this.store.putSession({ id, ...input, refreshHash: hash(refreshToken), refreshExpiresAt, accessHash: hash(accessToken), accessExpiresAt, revoked: false });
+    this.store.putSession({ id, baseId: input.baseId, recordId: input.recordId, fellowTraveller: input.fellowTraveller, customerRecordId: input.customerRecordId, assurance: input.assurance, invitationId: input.invitationId ?? null, refreshHash: hash(refreshToken), refreshExpiresAt, accessHash: hash(accessToken), accessExpiresAt, revoked: false });
     return response(accessToken, accessExpiresAt, refreshToken, refreshExpiresAt);
   }
 
@@ -41,7 +59,12 @@ export class SessionsService {
     if (typeof authorization !== 'string' || !authorization.startsWith('Bearer ')) throw invalidSession();
     const stored = this.store.sessionByAccessHash(hash(authorization.slice(7).trim()));
     if (!stored || stored.revoked || stored.accessExpiresAt < Date.now()) throw new UnauthorizedException('The access session has expired.');
-    return { baseId: stored.baseId, recordId: stored.recordId, fellowTraveller: stored.fellowTraveller };
+    return { baseId: stored.baseId, recordId: stored.recordId, fellowTraveller: stored.fellowTraveller, customerRecordId: stored.customerRecordId, assurance: stored.assurance, sessionId: stored.id };
+  }
+
+  /** Ends a session by its internal id (used when a step-up verification replaces it). */
+  revokeById(sessionId: string): void {
+    this.store.revokeSession(sessionId);
   }
 
   revoke(refreshToken: unknown): void {
