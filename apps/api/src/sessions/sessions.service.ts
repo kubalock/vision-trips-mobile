@@ -1,6 +1,7 @@
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import type { MobileSession, SessionAssurance } from '@vision-trips/contracts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { identityKey } from '../security/identity-key.js';
 import { DurableAuthStore, type StoredSession } from './durable-auth.store.js';
 
 export interface SessionPrincipal {
@@ -34,7 +35,7 @@ export class SessionsService {
     const accessExpiresAt = Date.now() + 15 * 60_000;
     const accessToken = `${token('vta')}.${id}`;
     this.store.putSession({ id, baseId: input.baseId, recordId: input.recordId, fellowTraveller: input.fellowTraveller, customerRecordId: input.customerRecordId, assurance: input.assurance, invitationId: input.invitationId ?? null, refreshHash: hash(refreshToken), refreshExpiresAt, accessHash: hash(accessToken), accessExpiresAt, revoked: false });
-    return response(accessToken, accessExpiresAt, refreshToken, refreshExpiresAt);
+    return response(accessToken, accessExpiresAt, refreshToken, refreshExpiresAt, identityKey(input));
   }
 
   refresh(refreshToken: unknown): MobileSession {
@@ -76,7 +77,7 @@ export class SessionsService {
     stored.accessHash = hash(accessToken);
     stored.accessExpiresAt = Date.now() + 15 * 60_000;
     this.store.updateTokens(stored);
-    return response(accessToken, stored.accessExpiresAt, refreshToken, stored.refreshExpiresAt);
+    return response(accessToken, stored.accessExpiresAt, refreshToken, stored.refreshExpiresAt, identityKey(stored));
   }
 }
 
@@ -86,6 +87,6 @@ const REFRESH_REUSE_GRACE_MS = 10_000;
 function token(prefix: string): string { return `${prefix}_${randomBytes(32).toString('base64url')}`; }
 function hash(value: string): string { return createHash('sha256').update(value).digest('base64url'); }
 function invalidSession(): UnauthorizedException { return new UnauthorizedException('The session is not valid.'); }
-function response(accessToken: string, accessExpiresAt: number, refreshToken: string, refreshExpiresAt: number): MobileSession {
-  return { accessToken, accessExpiresAt: new Date(accessExpiresAt).toISOString(), refreshToken, refreshExpiresAt: new Date(refreshExpiresAt).toISOString() };
+function response(accessToken: string, accessExpiresAt: number, refreshToken: string, refreshExpiresAt: number, identity: string): MobileSession {
+  return { accessToken, accessExpiresAt: new Date(accessExpiresAt).toISOString(), refreshToken, refreshExpiresAt: new Date(refreshExpiresAt).toISOString(), identityKey: identity };
 }

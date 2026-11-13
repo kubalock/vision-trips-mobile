@@ -12,6 +12,7 @@ import { CustomerNotificationsStore, type CustomerNotification } from './core/st
 import { DocumentWalletStore, type WalletStatus } from './core/storage/document-wallet.store';
 import { ExternalPages, type PendingExternalPage } from './core/platform/external-pages';
 import { ShareSheet } from './core/platform/share-sheet';
+import { tripLinkFromPath, tripLinkFromUrl, type TripLink } from './core/platform/deep-links';
 import { SessionManager, isTerminalSessionError } from './core/session/session-manager';
 import { isTripDataError } from './core/api/trip-schema';
 import { IMAGE_SIZES, sourceFor, srcset } from './shared/responsive-image';
@@ -23,7 +24,7 @@ import { ItinerarySection } from './features/trip/itinerary-section';
 import { ExtrasSection } from './features/trip/extras-section';
 import { PaymentsSection } from './features/trip/payments-section';
 import { ExternalContentSection } from './features/trip/external-content-section';
-import { StageExperienceSection } from './features/trip/stage-experience-section';
+import { StageExperienceSection, clearChecklist } from './features/trip/stage-experience-section';
 import { BookingJourneySection } from './features/trip/booking-journey-section';
 import { CustomerAccountSection } from './features/account/customer-account-section';
 import { BrandSupportSection } from './features/trip/brand-support-section';
@@ -132,6 +133,11 @@ export class App implements OnInit, OnDestroy {
   protected readonly calendarError = signal('');
   protected readonly creatingCalendar = signal(false);
   protected readonly openingAccountTripId = signal<string | null>(null);
+  /** Announced (and shown) after switching to a trip of another branch or Customer, or when a Customer replaced another's copy. */
+  protected readonly switchNotice = signal('');
+  /** More than one branch/brand is saved: My Trips labels each card so trips are not mistaken for one account. */
+  protected readonly multipleBrands = computed(() => new Set(this.savedTripList().map((trip) => trip.snapshot.brand.name)).size > 1);
+  protected readonly savedTripIds = computed(() => new Set(this.savedTripList().map((trip) => trip.snapshot.tripId)));
   /** What the traveller chose; 'system' follows the device setting live. */
   protected readonly appearancePreference = signal<AppearancePreference>(initialAppearancePreference());
   private readonly systemPrefersDark = signal(prefersDark());
@@ -162,6 +168,9 @@ export class App implements OnInit, OnDestroy {
   private resumeListener: PluginListenerHandle | null = null;
   private backButtonListener: PluginListenerHandle | null = null;
   private browserClosedListener: { remove: () => Promise<void> } | null = null;
+  private appUrlListener: PluginListenerHandle | null = null;
+  /** Bumped for every trip link that arrives; a slower, earlier link exchange is then ignored. */
+  private linkGeneration = 0;
   /** Bumped whenever a different trip is opened or the trip is closed; see beginTrip(). */
   private tripGeneration = 0;
   private readonly paymentPollDelaysMs: readonly number[] = PAYMENT_POLL_DELAYS_MS;
@@ -190,11 +199,15 @@ export class App implements OnInit, OnDestroy {
     }
     this.deviceNotificationsEnabled.set(this.customerNotifications.deviceEnabled());
     // Decide up front which wins at launch: a booking link in the URL beats re-opening the last saved trip.
-    const sharedLinkToken = window.location.pathname.match(/\/trip\/([^/]+)/)?.[1] ?? null;
-    if (sharedLinkToken) void this.openSharedLink(sharedLinkToken);
-    void this.initializeOfflineState(!sharedLinkToken);
-    if (isDevMode() && !sharedLinkToken) void this.checkDevInvitation();
+    const launchLink = tripLinkFromPath(window.location.pathname);
+    if (launchLink) void this.openTripLink(launchLink);
+    void this.initializeOfflineState(!launchLink);
+    if (isDevMode() && !launchLink) void this.checkDevInvitation();
     if (Capacitor.isNativePlatform()) {
+      // Universal Links / App Links: `appUrlOpen` covers a link opened while the app is running (warm or from the
+      // background); `getLaunchUrl` covers a cold launch, where the web view itself starts at the app's root.
+      void CapacitorApp.addListener('appUrlOpen', ({ url }) => this.handleOpenedUrl(url)).then((listener) => { this.appUrlListener = listener; });
+      void CapacitorApp.getLaunchUrl().then((launch) => { if (launch?.url) this.handleOpenedUrl(launch.url); }).catch(() => undefined);
       void CapacitorApp.addListener('appStateChange', ({ isActive }) => {
         if (isActive) void this.checkPaymentReturn();
       }).then((listener) => { this.resumeListener = listener; });
@@ -212,6 +225,8 @@ export class App implements OnInit, OnDestroy {
     void this.resumeListener?.remove();
     void this.backButtonListener?.remove();
     void this.browserClosedListener?.remove();
+    void this.appUrlListener?.remove();
+    this.linkGeneration += 1;
     void this.networkListener?.remove();
     if (this.externalContentTimer) clearTimeout(this.externalContentTimer);
     this.replaceBrandLogo(null);
@@ -261,10 +276,17 @@ export class App implements OnInit, OnDestroy {
     await this.acceptAuthorized({ status: 'authorized', exchangeId: 'invitation', expiresAt: response.session.refreshExpiresAt, snapshot: response.snapshot, session: response.session, trustedDeviceToken: response.trustedDeviceToken });
   }
 
-  /** "Not now" / "Back": return to the open trip, My Trips, or the start screen. */
+  /** "Not now" / "Back": return to the open trip, My Trips, or the start screen — the open trip is never lost. */
   protected invitationCancelled(): void {
     this.invitationToken.set(null);
     if (!this.trip() && this.savedTripList().length) this.showTripLibrary.set(true);
+    this.focusMain();
+  }
+
+  /** A link handed over by the OS: only a valid `/trip/<token>` link on an allowed host is used. */
+  private handleOpenedUrl(url: string): void {
+    const link = tripLinkFromUrl(url);
+    if (link) void this.openTripLink(link);
   }
 
   /** Payments, quotation acceptance, sharing and account changes need a session confirmed by email. */
@@ -483,19 +505,28 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  private async openSharedLink(linkToken: string): Promise<void> {
+  /**
+   * Opens a trip link (at launch, or handed over while the app is running). The trip already open stays as it is
+   * underneath: the invitation screen sits on top, and "Not now" returns to it. A newer link supersedes an older one
+   * still being exchanged, and the invitation flow itself drops late replies for a token it no longer shows.
+   */
+  private async openTripLink(link: TripLink): Promise<void> {
+    const generation = ++this.linkGeneration;
     // Keep the token out of the address bar and browser history once it has been read.
     try { window.history.replaceState(window.history.state, '', new URL(document.baseURI).pathname); } catch { /* Not fatal. */ }
+    this.showNotifications.set(false);
     // Invitation links go straight to the invitation screen; nothing is authorised by opening them.
-    if (/^vt_[A-Za-z0-9_-]{32}$/.test(linkToken)) { this.invitationToken.set(linkToken); return; }
+    if (link.kind === 'invitation') { this.error.set(''); this.invitationToken.set(link.token); return; }
     this.submitting.set(true);
     this.error.set('');
     try {
       // Legacy signed links only locate the booking now: customer links come back as an invitation to verify by email.
-      const response = await this.api.exchangeLink(linkToken);
+      const response = await this.api.exchangeLink(link.token);
+      if (generation !== this.linkGeneration) return; // Another link arrived meanwhile; it wins.
       if (response.status === 'authorized') await this.acceptAuthorized(response);
       else this.invitationToken.set(response.invitationToken);
     } catch (error) {
+      if (generation !== this.linkGeneration) return;
       const linkRejected = error instanceof HttpErrorResponse && [400, 401, 403, 404, 409, 410].includes(error.status);
       this.error.set(linkRejected ? 'This trip link has expired or is no longer valid. Ask your travel agent for a new invitation.' : this.apiError(error, 'We could not open that trip link. Please try again.'));
       // Don't strand someone on the entry screen when they already have trips saved on this device.
@@ -504,7 +535,7 @@ export class App implements OnInit, OnDestroy {
         if (this.savedTripList().length) this.showTripLibrary.set(true);
       }
     } finally {
-      this.submitting.set(false);
+      if (generation === this.linkGeneration) this.submitting.set(false);
     }
   }
 
@@ -644,10 +675,17 @@ export class App implements OnInit, OnDestroy {
   }
 
   private async acceptAuthorized(response: Extract<LinkExchangeResponse, { status: 'authorized' }>): Promise<void> {
+    const previous = { trip: this.trip(), identityKey: this.session()?.identityKey ?? null };
+    const nextIdentity = response.session.identityKey ?? null;
+    // Another Customer saved this same trip (booking) on this device: their copy is replaced, so clear what belonged to it.
+    const savedBy = await this.savedTrips.identityFor(response.snapshot.tripId);
+    const takesOver = Boolean(savedBy && nextIdentity && savedBy !== nextIdentity);
+    if (takesOver) await this.clearTripLocalData(response.snapshot.tripId);
     const generation = this.beginTrip();
     this.trip.set(response.snapshot);
     this.session.set(response.session);
     this.showTripLibrary.set(false);
+    this.switchNotice.set(switchMessage(previous, response.snapshot, nextIdentity, takesOver));
     void this.loadExternalContent();
     void this.loadRelatedQuotations();
     await this.loadBrandLogo(response.snapshot, true);
@@ -656,7 +694,22 @@ export class App implements OnInit, OnDestroy {
     // Opening a trip (link, verification, account or related quotation) brings it back even if it was removed earlier.
     this.storedSecurely.set(await this.savedTrips.save(response.snapshot, response.session, { reopened: true }));
     await this.reloadSavedTrips();
-    if (response.trustedDeviceToken) await this.savedTrips.saveDeviceTrust(response.trustedDeviceToken);
+    if (response.trustedDeviceToken) await this.savedTrips.saveDeviceTrust(response.trustedDeviceToken, nextIdentity);
+    if (this.isCurrentTrip(generation)) this.focusMain();
+  }
+
+  protected dismissSwitchNotice(): void { this.switchNotice.set(''); }
+
+  private focusMain(): void {
+    requestAnimationFrame(() => document.querySelector<HTMLElement>('#main-content')?.focus({ preventScroll: true }));
+  }
+
+  /** Everything this device keeps for one trip besides the saved copy itself. */
+  private async clearTripLocalData(tripId: string): Promise<void> {
+    await this.brandAssets.remove(tripId);
+    await this.documentWallet.remove(tripId);
+    this.customerNotifications.clear(tripId);
+    clearChecklist(tripId);
   }
 
   protected dismissPaymentStatus(): void {
@@ -742,29 +795,67 @@ export class App implements OnInit, OnDestroy {
     this.accountSaving.set(true); this.accountNotice.set(''); this.accountSaveError.set('');
     const generation = this.tripGeneration;
     // Only the server's reply updates the saved preferences; until then the edits live in the form's draft.
-    try { const result = await this.withSession(currentSession, (accessToken) => this.api.updateCustomerPreferences(preferences, accessToken)); if (!this.isCurrentTrip(generation)) return; this.customerAccount.update((account) => account ? { ...account, preferences: result.preferences } : account); this.accountNotice.set(`Saved across ${result.updatedRecords} customer ${result.updatedRecords === 1 ? 'record' : 'records'}.`); }
+    try { const result = await this.withSession(currentSession, (accessToken) => this.api.updateCustomerPreferences(preferences, accessToken)); if (!this.isCurrentTrip(generation)) return; this.customerAccount.update((account) => account ? { ...account, preferences: result.preferences } : account); this.accountNotice.set(result.updatedRecords > 1 ? `Preferences saved to your ${result.updatedRecords} linked customer profiles with ${this.trip()?.brand.name ?? 'this company'}.` : `Preferences saved for your account with ${this.trip()?.brand.name ?? 'this company'}.`); }
     catch (error) { if (this.isCurrentTrip(generation)) this.accountSaveError.set(this.apiError(error, 'Something went wrong saving them.')); }
     finally { if (this.isCurrentTrip(generation)) this.accountSaving.set(false); }
   }
 
+  /**
+   * Opens a trip listed in the verified Customer's account: the API re-checks the link and issues a session for that
+   * booking and Customer (no new invitation or code), and the trip is then saved in My Trips. If the customer moved
+   * on (another trip or invitation opened) before the reply, the trip is saved but not switched to.
+   */
   protected async openCustomerAccountTrip(accountTripId: string): Promise<void> {
     const currentSession = this.session(); if (!currentSession || this.openingAccountTripId()) return;
+    const generation = this.tripGeneration;
     this.openingAccountTripId.set(accountTripId);
-    try { const response = await this.withSession(currentSession, (accessToken) => this.api.openCustomerAccountTrip(accountTripId, accessToken)); await this.acceptAuthorized({ status: 'authorized', exchangeId: 'account', expiresAt: response.session.refreshExpiresAt, snapshot: response.snapshot, session: response.session }); }
-    catch (error) { this.error.set(this.apiError(error, 'We could not open that trip. Please refresh your account.')); }
-    finally { this.openingAccountTripId.set(null); }
+    try {
+      const response = await this.withSession(currentSession, (accessToken) => this.api.openCustomerAccountTrip(accountTripId, accessToken));
+      if (!this.isCurrentTrip(generation) || this.invitationToken()) { await this.savedTrips.save(response.snapshot, response.session, { reopened: true }); await this.reloadSavedTrips(); return; }
+      await this.acceptAuthorized({ status: 'authorized', exchangeId: 'account', expiresAt: response.session.refreshExpiresAt, snapshot: response.snapshot, session: response.session });
+    }
+    catch (error) { if (this.isCurrentTrip(generation)) this.error.set(this.apiError(error, 'We could not open that trip. Please refresh your account.')); }
+    finally { if (this.isCurrentTrip(generation)) this.openingAccountTripId.set(null); }
   }
 
+  /**
+   * "Sign out of this account": ends the sessions and removes the saved trips of the open trip's identity only (one
+   * Customer in one branch), and forgets that identity's trusted device. Other branches and Customers stay signed in.
+   */
+  protected async signOutAccount(): Promise<void> {
+    const identity = this.session()?.identityKey ?? null;
+    const brand = this.trip()?.brand.name ?? 'this company';
+    const saved = await this.savedTrips.all();
+    const openTripId = this.trip()?.tripId;
+    const mine = saved.filter((trip) => trip.snapshot.tripId === openTripId || (identity !== null && trip.identityKey === identity));
+    const others = saved.length - mine.length;
+    const message = `Sign out of your ${brand} account on this device? This removes ${mine.length === 1 ? 'this trip' : `${mine.length} trips`} and any documents saved for them.${others ? ` Your ${others} other saved ${others === 1 ? 'trip stays' : 'trips stay'} on this device.` : ''}`;
+    if (!window.confirm(message)) return;
+    const refreshTokens = [...new Set([this.session()?.refreshToken, ...mine.map((trip) => trip.session?.refreshToken)].filter((token): token is string => Boolean(token)))];
+    await Promise.allSettled(refreshTokens.map((refreshToken) => this.api.revokeSession(refreshToken)));
+    for (const trip of mine) { await this.savedTrips.remove(trip.snapshot.tripId); await this.clearTripLocalData(trip.snapshot.tripId); }
+    if (identity) {
+      await this.savedTrips.clearDeviceTrust(identity);
+      if (!this.savedTrips.native) await this.api.forgetDeviceTrust(identity).catch(() => undefined);
+    }
+    this.clearOpenTrip(); this.storedSecurely.set(false);
+    await this.reloadSavedTrips();
+    this.showTripLibrary.set(this.savedTripList().length > 0);
+    this.switchNotice.set(`Signed out of your ${brand} account on this device.`);
+  }
+
+  /** "Remove all data from this device": every saved trip, branch and Customer, every document and trusted device. */
   protected async signOutDevice(): Promise<void> {
-    if (!window.confirm('Sign out and remove all locally saved trips from this device?')) return;
+    if (!window.confirm('Remove all data from this device? Every trip saved here — for every travel company and account — is signed out and removed, along with saved documents and trusted-device settings.')) return;
     const saved = await this.savedTrips.all();
     const refreshTokens = [...new Set([this.session()?.refreshToken, ...saved.map((trip) => trip.session?.refreshToken)].filter((token): token is string => Boolean(token)))];
     await Promise.allSettled(refreshTokens.map((refreshToken) => this.api.revokeSession(refreshToken)));
-    for (const trip of saved) { await this.savedTrips.remove(trip.snapshot.tripId); await this.brandAssets.remove(trip.snapshot.tripId); this.customerNotifications.clear(trip.snapshot.tripId); }
+    for (const trip of saved) { await this.savedTrips.remove(trip.snapshot.tripId); await this.brandAssets.remove(trip.snapshot.tripId); this.customerNotifications.clear(trip.snapshot.tripId); clearChecklist(trip.snapshot.tripId); }
     await this.documentWallet.remove();
     await this.savedTrips.clearDeviceTrust();
     if (!this.savedTrips.native) await this.api.forgetDeviceTrust().catch(() => undefined);
     this.clearOpenTrip(); this.savedTripList.set([]); this.showTripLibrary.set(false); this.storedSecurely.set(false);
+    this.switchNotice.set('All trips and data were removed from this device.');
   }
 
   protected retryAccount(): void { void this.loadCustomerAccount(); }
@@ -789,9 +880,11 @@ export class App implements OnInit, OnDestroy {
 
   protected async openRelatedQuotation(comparisonId: string): Promise<void> {
     const currentSession = this.session(); if (!currentSession || this.openingRelatedId()) return;
+    const generation = this.tripGeneration;
     this.openingRelatedId.set(comparisonId); this.error.set('');
     try {
       const response = await this.withSession(currentSession, (accessToken) => this.api.openRelatedQuotation(comparisonId, accessToken));
+      if (!this.isCurrentTrip(generation) || this.invitationToken()) return; // The customer moved on; don't switch under them.
       await this.acceptAuthorized({ status: 'authorized', exchangeId: 'related', expiresAt: response.session.refreshExpiresAt, snapshot: response.snapshot, session: response.session });
     } catch (error) { this.error.set(this.apiError(error, 'We could not open that quotation. Refresh and try again.')); }
     finally { this.openingRelatedId.set(null); }
@@ -899,6 +992,7 @@ export class App implements OnInit, OnDestroy {
       await this.brandAssets.remove(tripId);
       await this.documentWallet.remove(tripId);
       this.customerNotifications.clear(tripId);
+      clearChecklist(tripId);
       this.savedTripList.update((trips) => trips.filter((trip) => trip.snapshot.tripId !== tripId));
       this.clearTripRefreshState(tripId);
       if (this.trip()?.tripId === tripId) this.clearOpenTrip();
@@ -962,6 +1056,7 @@ export class App implements OnInit, OnDestroy {
     this.messageTopic.set('itinerary');
     this.error.set('');
     this.signedOut.set(false);
+    this.switchNotice.set('');
     this.verificationNeeded.set(false); this.startingStepUp.set(false);
     this.accountError.set(''); this.accountSaveError.set(''); this.documentFailure.set(null); this.calendarError.set(''); this.creatingCalendar.set(false);
     return generation;
@@ -1293,3 +1388,16 @@ export function isShareCancelled(error: unknown): boolean {
   return /cancel/i.test(message) || (error instanceof DOMException && error.name === 'AbortError');
 }
 function delay(milliseconds: number): Promise<void> { return new Promise((resolve) => setTimeout(resolve, milliseconds)); }
+
+/**
+ * What to tell the customer after a trip opens. Silent when it is another trip of the same verified Customer in the
+ * same branch (opening trips from the account should not interrupt); otherwise says which branch or account is now
+ * shown, and that the previous trip is still saved.
+ */
+export function switchMessage(previous: { trip: TripSnapshot | null; identityKey: string | null }, next: TripSnapshot, nextIdentity: string | null, replacedAnotherCustomer: boolean): string {
+  if (replacedAnotherCustomer) return `You’re now signed in to ${next.summary.name} as a different customer. The copy saved here by the previous customer has been replaced.`;
+  if (!previous.trip || previous.trip.tripId === next.tripId && previous.identityKey === nextIdentity) return '';
+  if (previous.trip.brand.name !== next.brand.name) return `Now showing ${next.summary.name} from ${next.brand.name}. Your ${previous.trip.brand.name} trips are still saved in My trips.`;
+  if (previous.identityKey && nextIdentity && previous.identityKey !== nextIdentity) return `Switched to a different customer account: ${next.summary.name}. Your other trips are still saved in My trips.`;
+  return '';
+}

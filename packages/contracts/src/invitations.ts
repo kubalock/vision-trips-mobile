@@ -125,6 +125,7 @@ export const mobileSessionSchema = z.object({
   accessExpiresAt: isoDateTime,
   refreshToken: z.string().check(z.minLength(1)),
   refreshExpiresAt: isoDateTime,
+  identityKey: z.optional(z.string().check(z.regex(/^idk_[A-Za-z0-9_-]{22}$/))),
 });
 
 /** The trip snapshot is validated separately by the client's full TripSnapshot schema. */
@@ -139,6 +140,10 @@ export const invitationErrorCodes = [
   'invitation_invalid', 'invitation_expired', 'invitation_revoked', 'invitation_consumed',
   'code_invalid', 'code_expired', 'code_not_sent', 'attempts_exhausted', 'send_limit', 'resend_cooldown',
   'verification_in_progress', 'verification_required', 'delivery_failed', 'customer_unavailable',
+  /** A newer invitation for the same Booking, Customer and access level replaced this one. */
+  'invitation_replaced',
+  /** The invited Customer's email address changed after the invitation was created; a new invitation is needed. */
+  'destination_changed',
 ] as const;
 export const invitationErrorCodeSchema = z.enum(invitationErrorCodes);
 export type InvitationErrorCode = z.infer<typeof invitationErrorCodeSchema>;

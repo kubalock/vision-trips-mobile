@@ -34,7 +34,10 @@ authenticates the customer. There is no customer directory and no base selector.
 * **Single use**: a successful verification consumes the invitation. Opening it again (on any device) shows
   "already used — ask your agent for a new invitation". Fellow-traveller *share* links are the only reusable kind.
 * **One live agent link**: a new agent invitation for the same booking, customer and scope revokes the previous
-  unused one, so a "resend" replaces the old link.
+  unused one, so a "resend" replaces the old link. The old link then reports `invitation_replaced` ("A newer
+  invitation was sent…"), distinct from an agent's explicit revocation (`invitation_revoked`). Replacing a link never
+  ends a session the customer already has. Invitations for different Bookings, or for different Customers on one
+  Booking, are independent.
 * **Duplicate automation deliveries** (explicit, tested policy):
   1. the same `idempotencyKey` for the same booking and customer returns `status: "duplicate"` with the original
      invitation id and **no second email** (and `url: null`, because the raw token is not stored);
@@ -45,6 +48,10 @@ authenticates the customer. There is no customer directory and no base selector.
   `customerRecordId` revokes every unused invitation for it.
 * **Re-validation**: every resolve, code send and verification re-reads the Booking and Customer. Unlinking the
   Customer or removing their email stops the invitation working.
+* **Email changes**: each invitation stores a keyed hash of the email address it was created for. If the Customer's
+  email changes before the invitation is used — before or after a code was sent — the invitation stops working with
+  `destination_changed` and the agent sends a fresh one, which follows the new address. Invitations created before
+  this change (no stored hash) follow the Customer's current email.
 
 ### Email codes
 
@@ -71,8 +78,44 @@ Quotation acceptance, payment links (scheduled and custom), sharing with a fello
 `otp`/`trusted_device`. Trip snapshots for unverified sessions omit stored payment-page URLs, so "Pay" always goes
 through that check. Trips and quotations opened from a verified account inherit its assurance.
 
-Trusted-device tokens are now bound to booking **and** customer (v2). Older booking-only tokens, which a postcode
-answer could also earn, are ignored, so each device verifies by email once.
+Trusted-device tokens are now bound to base, booking **and** customer (v2). Older booking-only tokens, which a postcode
+answer could also earn, are ignored, so each device verifies by email once. **Decision:** they stay booking-specific.
+Other bookings of the same Customer are reached from the authenticated Account page (no code needed there), so a
+customer-wide trust token would add reach without adding convenience.
+
+### Customer identity, accounts and branches
+
+* **Identity root** = `Airtable Base ID + Customer Record ID`, taken from the verified session. The email address is
+  only where codes are delivered. The Booking's rolled-up `Customers | Email` never selects Customer records.
+* **Account discovery** (`GET /v1/trips/current/account`, related quotations): Bookings linked **both ways** to the
+  verified Customer (Customer `Trips` lists the Booking *and* the Booking's `Customers` lists the Customer), in the
+  session's base only, soft-deleted Bookings excluded. Listing a trip does not save it on the device.
+* **Preferences** are read from and written to the verified Customer only.
+* **Grouping duplicates** is opt-in: Customer records in the same base with the same non-empty `Customer Account ID`
+  (text field on Customers; letters, digits and `. _ : -`) form one account for discovery and preferences. Matching
+  emails never merge records, and Account IDs never reach across bases.
+* **Opening an account trip** re-checks the link, then issues a session for that Booking, the same base and the
+  verified Customer (or the grouped record the Booking is linked to), keeping the assurance. Unlinking a Booking stops
+  future opening; trips already saved offline are left as they are.
+* Sessions without a verified Customer (created before invitations) get `verification_required` from the account.
+* Every session carries an opaque `identityKey` (`idk_…`, an HMAC of base + Customer; share links: base + booking). The
+  app uses it to keep identities apart without seeing Airtable IDs.
+
+### On the device (app)
+
+* **My Trips** holds one saved copy per trip (`trp_…` = base + booking), so Branch A and Branch B never collide even
+  with identical record IDs. Each copy records the `identityKey` that saved it. When a different Customer verifies
+  the same Booking on the device, that identity **replaces** the copy, the app says so, and the previous identity's
+  documents, notifications and checklist for that trip are cleared. A late refresh from the previous identity cannot
+  overwrite the new owner's credential, and a token renewal never adopts another identity's session.
+* Trusted-device tokens are stored per base + booking + Customer (native secure storage) or per cookie (browser), so
+  a second person on a shared device does not evict the first.
+* **Sign out of this account** ends the sessions and removes the saved trips of the open trip's identity (one
+  Customer in one branch) and forgets that identity's trusted device; other branches and Customers stay.
+  **Remove all data from this device** removes everything.
+* Links opened while the app is running (`appUrlOpen`) or that launched it (`getLaunchUrl`) are accepted only as
+  `https://<host>/trip/<token>`; set `--define VISION_TRIP_LINK_HOSTS="'trips.example.com'"` to restrict hosts. The
+  open trip stays underneath the invitation screen; "Not now" returns to it.
 
 ### Fellow-traveller policy
 
@@ -95,6 +138,12 @@ answer could also earn, are ignored, so each device verifies by email once.
 | `App Invite Sent At` | Date with time (GMT) | Set from the API's `sentAt`. |
 | `App Trip Link` | URL, optional | Only filled when the automation's `writeLink` input is `true` — for agents who need to paste the link into WhatsApp. Never build it with a formula. |
 | `App Invite Requested At` | Formula, optional | `LAST_MODIFIED_TIME({Send App Invite})`. Makes Airtable's automatic retries idempotent. |
+
+### Field on Customers (optional)
+
+| Field | Type | Notes |
+|---|---|---|
+| `Customer Account ID` | Single line text | Leave empty by default. Give two or more Customer records in the **same base** the same value only when they are deliberately the same person (for example a duplicate created with an old email). They then share account discovery and preferences. Matching emails alone never do this. |
 
 ### Automation
 

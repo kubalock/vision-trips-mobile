@@ -3,7 +3,8 @@ import type { OpenRelatedQuotationResponse, RelatedQuotationSummary, RelatedQuot
 import { createHmac } from 'node:crypto';
 import { AirtableService, type AirtableRecord } from '../airtable/airtable.service.js';
 import { SessionsService, type SessionPrincipal } from '../sessions/sessions.service.js';
-import { bookingFields, customerFields, firstAttachmentThumbnail, firstString, numberValue, pick, strings, truthy } from '../trips/field-map.js';
+import { bookingFields, firstAttachmentThumbnail, firstString, numberValue, pick } from '../trips/field-map.js';
+import { accountBookings, resolveCustomerIdentity, type AccountBooking } from './customer-identity.js';
 import { resolveStage } from '../trips/stage.js';
 import { TripsService } from '../trips/trips.service.js';
 
@@ -13,38 +14,30 @@ export class RelatedQuotationsService {
 
   async list(principal: SessionPrincipal): Promise<RelatedQuotationsResponse> {
     if (principal.fellowTraveller) throw new ForbiddenException('Quotation comparison is only available to the lead customer.');
-    const records = (await this.related(principal)).bookings;
+    const records = (await this.related(principal)).map((booking) => booking.record);
     return { quotations: records.map((record) => this.summary(principal, record)).sort(compareQuotes) };
   }
 
   async open(principal: SessionPrincipal, comparisonId: string): Promise<OpenRelatedQuotationResponse> {
     if (principal.fellowTraveller) throw new ForbiddenException('Quotation comparison is only available to the lead customer.');
-    const { bookings, customers } = await this.related(principal);
-    const target = bookings.find((record) => this.id(principal.baseId, record.id) === comparisonId);
+    const target = (await this.related(principal)).find((booking) => this.id(principal.baseId, booking.record.id) === comparisonId);
     if (!target) throw new NotFoundException('That quotation is no longer available for this customer.');
-    const snapshot = await this.trips.snapshot(principal.baseId, target.id, 'primary_customer');
-    // The new session keeps the verification the customer already completed, for the Customer linked to that quotation.
-    const customerRecordId = customers.find((customer) => strings(pick(customer.fields, customerFields.trips)).includes(target.id))?.id ?? null;
-    return { snapshot, session: this.sessions.issue({ baseId: principal.baseId, recordId: target.id, fellowTraveller: false, customerRecordId, assurance: principal.assurance }) };
+    const snapshot = await this.trips.snapshot(principal.baseId, target.record.id, 'primary_customer');
+    // Same verified Customer (or the account member the quotation is linked to), same base, same assurance.
+    return { snapshot, session: this.sessions.issue({ baseId: principal.baseId, recordId: target.record.id, fellowTraveller: false, customerRecordId: target.ownerCustomerRecordId, assurance: principal.assurance }) };
   }
 
-  private async related(principal: SessionPrincipal): Promise<{ bookings: AirtableRecord[]; customers: AirtableRecord[] }> {
-    const profile = await this.trips.verificationProfile(principal.baseId, principal.recordId);
-    const email = profile.email.trim().toLowerCase();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { bookings: [], customers: [] };
-    const safe = email.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-    const customers = await this.airtable.list(principal.baseId, process.env.AIRTABLE_CUSTOMERS_TABLE?.trim() || 'Customers', {
-      filterByFormula: `OR(LOWER({Primary Email})='${safe}',LOWER({Secondary Email})='${safe}')`,
-      fields: ['Trips'], maxRecords: 20,
-    });
-    const ids = [...new Set(customers.flatMap((customer) => strings(pick(customer.fields, customerFields.trips))))];
-    const records = await this.airtable.records(principal.baseId, process.env.AIRTABLE_BOOKINGS_TABLE?.trim() || 'Bookings', ids);
-    const bookings = records.filter((record) => {
-      if (truthy(record.fields['Soft Delete'])) return false;
+  /**
+   * Quotations linked to the session's own Customer (see customer-identity.ts). Sessions without a verified Customer
+   * see none: the Booking's rolled-up email never selects Customer records.
+   */
+  private async related(principal: SessionPrincipal): Promise<AccountBooking[]> {
+    if (!principal.customerRecordId) return [];
+    const identity = await resolveCustomerIdentity(this.airtable, principal);
+    return (await accountBookings(this.airtable, principal, identity)).filter(({ record }) => {
       const stage = resolveStage(firstString(pick(record.fields, bookingFields.status)), date(pick(record.fields, bookingFields.departure)), date(pick(record.fields, bookingFields.return)), date(pick(record.fields, bookingFields.quoteExpiry)));
       return stage === 'quote' || stage === 'quote_expired';
     }).slice(0, 20);
-    return { bookings, customers };
   }
 
   private summary(principal: SessionPrincipal, record: AirtableRecord): RelatedQuotationSummary {

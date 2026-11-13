@@ -56,7 +56,17 @@ export interface StoredInvitation {
   /** A session to end once this (step-up) invitation is verified. */
   replacesSessionId: string | null;
   consumingUntil: number | null;
+  /**
+   * HMAC of the invited Customer's email at creation (see invitation-token.ts). If the Customer's email changes later,
+   * the invitation stops working rather than sending codes to an address the agent never chose. Null for share links
+   * and invitations created before this existed (those follow the Customer's current email).
+   */
+  destinationHash: string | null;
+  /** Why the invitation ended early: replaced by a newer one, revoked by the agent, or its email could not be sent. */
+  revokedReason: InvitationRevokedReason | null;
 }
+
+export type InvitationRevokedReason = 'replaced' | 'revoked' | 'delivery_failed';
 
 export interface InvitationOtp {
   invitationId: string;
@@ -74,6 +84,7 @@ interface InvitationRow {
   expires_at: number; sent_at: number | null; accepted_at: number | null; revoked_at: number | null;
   active_key: string | null; idempotency_key: string | null; email_requested: number; reusable: number;
   replaces_session_id: string | null; consuming_until: number | null;
+  destination_hash: string | null; revoked_reason: string | null;
 }
 
 interface OtpRow {
@@ -145,6 +156,13 @@ export class DurableAuthStore implements OnModuleDestroy {
       );
     `);
     this.migrateSessions();
+    this.migrateInvitations();
+  }
+
+  private migrateInvitations(): void {
+    const columns = new Set((this.database.prepare('PRAGMA table_info(customer_invitations)').all() as Array<{ name: string }>).map((column) => column.name));
+    if (!columns.has('destination_hash')) this.database.exec('ALTER TABLE customer_invitations ADD COLUMN destination_hash TEXT');
+    if (!columns.has('revoked_reason')) this.database.exec('ALTER TABLE customer_invitations ADD COLUMN revoked_reason TEXT');
   }
 
   /** Sessions created before invitations have no customer or assurance: they count as `legacy` (no sensitive actions). */
@@ -278,16 +296,19 @@ export class DurableAuthStore implements OnModuleDestroy {
     this.cleanup();
     this.transaction(() => {
       if (invitation.activeKey) {
-        this.database.prepare('UPDATE customer_invitations SET revoked_at = ?, active_key = NULL WHERE active_key = ?').run(invitation.createdAt, invitation.activeKey);
+        // Only the unused invitation is replaced; sessions already created from earlier invitations are unaffected.
+        this.database.prepare("UPDATE customer_invitations SET revoked_at = ?, revoked_reason = 'replaced', active_key = NULL WHERE active_key = ?").run(invitation.createdAt, invitation.activeKey);
       }
       this.database.prepare(`INSERT INTO customer_invitations
         (id, token_hash, tenant_id, base_id, booking_record_id, customer_record_id, scope, verification, source, created_at, expires_at,
-         sent_at, accepted_at, revoked_at, active_key, idempotency_key, email_requested, reusable, replaces_session_id, consuming_until)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+         sent_at, accepted_at, revoked_at, active_key, idempotency_key, email_requested, reusable, replaces_session_id, consuming_until,
+         destination_hash, revoked_reason)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
         invitation.id, invitation.tokenHash, invitation.tenantId, invitation.baseId, invitation.bookingRecordId, invitation.customerRecordId,
         invitation.scope, invitation.verification, invitation.source, invitation.createdAt, invitation.expiresAt, invitation.sentAt,
         invitation.acceptedAt, invitation.revokedAt, invitation.activeKey, invitation.idempotencyKey, Number(invitation.emailRequested),
         Number(invitation.reusable), invitation.replacesSessionId, invitation.consumingUntil,
+        invitation.destinationHash, invitation.revokedReason,
       );
     });
   }
@@ -303,13 +324,13 @@ export class DurableAuthStore implements OnModuleDestroy {
 
   /** Ends an invitation whose email could not be sent, and frees its idempotency key so a retry starts again. */
   abandonInvitation(id: string, now = Date.now()): void {
-    this.database.prepare('UPDATE customer_invitations SET revoked_at = COALESCE(revoked_at, ?), active_key = NULL, idempotency_key = NULL WHERE id = ?').run(now, id);
+    this.database.prepare("UPDATE customer_invitations SET revoked_at = COALESCE(revoked_at, ?), revoked_reason = COALESCE(revoked_reason, 'delivery_failed'), active_key = NULL, idempotency_key = NULL WHERE id = ?").run(now, id);
   }
 
   revokeInvitations(baseId: string, bookingRecordId: string, customerRecordId: string | null, now = Date.now()): number {
     const filter = customerRecordId ? ' AND customer_record_id = ?' : '';
     const values: SQLInputValue[] = [now, baseId, bookingRecordId, ...(customerRecordId ? [customerRecordId] : [])];
-    return Number(this.database.prepare(`UPDATE customer_invitations SET revoked_at = ?, active_key = NULL
+    return Number(this.database.prepare(`UPDATE customer_invitations SET revoked_at = ?, revoked_reason = 'revoked', active_key = NULL
       WHERE base_id = ? AND booking_record_id = ?${filter} AND revoked_at IS NULL AND accepted_at IS NULL`).run(...values).changes);
   }
 
@@ -410,5 +431,10 @@ function mapInvitation(row: InvitationRow | undefined): StoredInvitation | null 
     createdAt: row.created_at, expiresAt: row.expires_at, sentAt: row.sent_at, acceptedAt: row.accepted_at, revokedAt: row.revoked_at,
     activeKey: row.active_key, idempotencyKey: row.idempotency_key, emailRequested: Boolean(row.email_requested), reusable: Boolean(row.reusable),
     replacesSessionId: row.replaces_session_id, consumingUntil: row.consuming_until,
+    destinationHash: row.destination_hash ?? null, revokedReason: revokedReasonOf(row.revoked_reason),
   };
+}
+
+function revokedReasonOf(value: string | null | undefined): InvitationRevokedReason | null {
+  return value === 'replaced' || value === 'revoked' || value === 'delivery_failed' ? value : null;
 }

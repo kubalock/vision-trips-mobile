@@ -12,7 +12,7 @@ import { DurableAuthStore, type InvitationOtp, type InvitationSource, type Store
 import { SessionsService, type SessionPrincipal } from '../sessions/sessions.service.js';
 import { InvitationTargetError, TripsService, type InvitationContext } from '../trips/trips.service.js';
 import { InvitationEmailService } from './invitation-email.service.js';
-import { generateInvitationToken, generateOtpCode, hashInvitationToken, hashOtpCode, invitationUrl, isInvitationToken, maskEmail, otpMatches } from './invitation-token.js';
+import { generateInvitationToken, generateOtpCode, hashDestination, hashInvitationToken, hashOtpCode, invitationUrl, isInvitationToken, maskEmail, otpMatches } from './invitation-token.js';
 
 export const OTP_TTL_MS = 10 * 60_000;
 export const OTP_MAX_ATTEMPTS = 5;
@@ -38,6 +38,14 @@ const BOOKINGS_TABLE = () => process.env.AIRTABLE_BOOKINGS_TABLE?.trim() || 'Boo
  *     the duplicate window (VISION_INVITATION_DUPLICATE_WINDOW_SECONDS, default 10 minutes) is also a `duplicate`.
  *  3. Otherwise a fresh invitation is created and the previous active, unused one for that booking, customer and
  *     scope is revoked: there is only ever one live agent link per customer, so a resend replaces an older link.
+ *     Opening the older link then says it was replaced (`invitation_replaced`). Replacing a link never ends a session
+ *     the customer already has: sessions are only ended by sign-out, expiry, refresh-token reuse or step-up.
+ *  4. Invitations for different Bookings, or for different Customers on one Booking, are independent of each other.
+ *
+ * Identity binding: an invitation names one Customer Record ID in one base and remembers (as a keyed hash) the email
+ * address it was created for. Codes go only to that Customer, a code only works for the invitation it was sent for,
+ * and if the Customer's email changes before the invitation is used, the invitation stops working
+ * (`destination_changed`) instead of following the new address: the agent sends a fresh one.
  */
 @Injectable()
 export class CustomerInvitationsService {
@@ -71,7 +79,7 @@ export class CustomerInvitationsService {
     }
     const { invitation, url } = this.issue({
       source: 'agent', baseId, bookingRecordId, customerRecordId, scope, tenantId: context.tenantId,
-      ttlMs: invitationTtlMs(), activeKey, idempotencyKey, emailRequested: sendEmail,
+      ttlMs: invitationTtlMs(), activeKey, idempotencyKey, emailRequested: sendEmail, destinationHash: destinationOf(baseId, customerRecordId, context),
     }, now);
 
     let sentAt: number | null = null;
@@ -194,7 +202,7 @@ export class CustomerInvitationsService {
     this.limitInternal(`legacy-invitation:${baseId}:${bookingRecordId}`);
     const customerRecordId = await this.primaryCustomer(baseId, bookingRecordId);
     const context = await this.customerContext({ baseId, bookingRecordId, customerRecordId });
-    return this.issue({ source: 'legacy_link', baseId, bookingRecordId, customerRecordId, scope: 'primary_customer', tenantId: context.tenantId, ttlMs: LEGACY_INVITATION_TTL_MS }).token;
+    return this.issue({ source: 'legacy_link', baseId, bookingRecordId, customerRecordId, scope: 'primary_customer', tenantId: context.tenantId, ttlMs: LEGACY_INVITATION_TTL_MS, destinationHash: destinationOf(baseId, customerRecordId, context) }).token;
   }
 
   /** Lets a session without email verification (older sessions, legacy links) prove it before a sensitive action. */
@@ -206,6 +214,7 @@ export class CustomerInvitationsService {
     return this.issue({
       source: 'step_up', baseId: principal.baseId, bookingRecordId: principal.recordId, customerRecordId, scope: 'primary_customer',
       tenantId: context.tenantId, ttlMs: STEP_UP_INVITATION_TTL_MS, replacesSessionId: principal.sessionId ?? null,
+      destinationHash: destinationOf(principal.baseId, customerRecordId, context),
     }).token;
   }
 
@@ -242,6 +251,7 @@ export class CustomerInvitationsService {
       source: 'development', baseId: config.baseId, bookingRecordId: config.bookingRecordId, customerRecordId: config.customerRecordId,
       scope: 'primary_customer', tenantId: context.tenantId, ttlMs: DEV_INVITATION_TTL_MS,
       activeKey: `development:${config.baseId}:${config.bookingRecordId}:${config.customerRecordId}`,
+      destinationHash: destinationOf(config.baseId, config.customerRecordId, context),
     });
     return { invitationToken: token };
   }
@@ -270,6 +280,8 @@ export class CustomerInvitationsService {
       reusable: options.reusable ?? false,
       replacesSessionId: options.replacesSessionId ?? null,
       consumingUntil: null,
+      destinationHash: options.destinationHash ?? null,
+      revokedReason: null,
     };
     this.store.insertInvitation(invitation);
     if (options.source !== 'agent') this.log('invitation_created', invitation);
@@ -323,13 +335,23 @@ export class CustomerInvitationsService {
     }
   }
 
-  /** Re-checks the booking, customer link and email each time (an agent may have changed them since the invite). */
-  private async customerContext(invitation: Pick<StoredInvitation, 'baseId' | 'bookingRecordId' | 'customerRecordId'>): Promise<InvitationContext> {
+  /**
+   * Re-checks the booking, customer link and email each time (an agent may have changed them since the invite). An
+   * invitation bound to an email address stops working once the Customer's address differs from it.
+   */
+  private async customerContext(invitation: Pick<StoredInvitation, 'baseId' | 'bookingRecordId' | 'customerRecordId'> & Partial<Pick<StoredInvitation, 'destinationHash' | 'id' | 'source' | 'scope'>>): Promise<InvitationContext> {
+    let context: InvitationContext;
     try {
-      return await this.trips.invitationContext(invitation.baseId, invitation.bookingRecordId, invitation.customerRecordId);
+      context = await this.trips.invitationContext(invitation.baseId, invitation.bookingRecordId, invitation.customerRecordId);
     } catch (error) {
       throw customerSafe(error);
     }
+    if (invitation.destinationHash && invitation.customerRecordId && context.customer
+      && hashDestination(invitation.baseId, invitation.customerRecordId, context.customer.email) !== invitation.destinationHash) {
+      this.logger.warn(JSON.stringify({ event: 'invitation_destination_changed', invitationId: invitation.id, baseId: invitation.baseId, bookingRecordId: invitation.bookingRecordId }));
+      throw invitationError(409, 'destination_changed', 'The email address for this invitation has changed since it was sent. Ask your travel agent to send you a new invitation.');
+    }
+    return context;
   }
 
   private async agentContext(baseId: string, bookingRecordId: string, customerRecordId: string): Promise<InvitationContext> {
@@ -399,6 +421,11 @@ interface IssueOptions {
   emailRequested?: boolean;
   reusable?: boolean;
   replacesSessionId?: string | null;
+  destinationHash?: string | null;
+}
+
+function destinationOf(baseId: string, customerRecordId: string, context: InvitationContext): string | null {
+  return context.customer ? hashDestination(baseId, customerRecordId, context.customer.email) : null;
 }
 
 export function invitationError(status: number, code: InvitationErrorCode, message: string, extra: { retryAfterSeconds?: number; remainingAttempts?: number } = {}): HttpException {
@@ -423,6 +450,7 @@ function isInvitationBody(value: unknown): boolean {
 }
 
 function assertUsable(invitation: StoredInvitation, now: number): void {
+  if (invitation.revokedAt && invitation.revokedReason === 'replaced') throw invitationError(410, 'invitation_replaced', 'A newer invitation was sent for this trip, so this link no longer works. Open the most recent invitation email from your travel agent.');
   if (invitation.revokedAt) throw invitationError(410, 'invitation_revoked', 'This invitation has been replaced or cancelled. Use the newest link from your travel agent, or ask them for a new one.');
   if (invitation.acceptedAt && !invitation.reusable) throw invitationError(410, 'invitation_consumed', 'This invitation has already been used. Your trip is saved in My Trips on the device where you opened it. To use another device, ask your travel agent for a new invitation.');
   if (invitation.expiresAt <= now) throw invitationError(410, 'invitation_expired', 'This invitation has expired. Ask your travel agent to send you a new one.');

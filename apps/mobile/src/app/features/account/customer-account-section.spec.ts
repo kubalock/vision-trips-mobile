@@ -98,3 +98,34 @@ describe('CustomerAccountSection preferences', () => {
     expect(saved[0]).toEqual(preferences({ emailMarketing: true, postalMarketing: true }));
   });
 });
+
+describe('CustomerAccountSection trips and sign-out', () => {
+  const trip = (name: string, tripId: string, current = false) => ({ accountTripId: `acct-${name}`, tripId, reference: name.toUpperCase(), name, departureDate: null, returnDate: null, status: 'confirmed', heroImageUrl: null, current });
+  const withTrips = () => ({ ...account(), trips: [trip('Lisbon', 'trp_lisbon', true), trip('Japan', 'trp_japan'), trip('Rome', 'trp_rome')] }) as unknown as CustomerAccount;
+
+  it('distinguishes trips saved on this device from trips only available in the account', () => {
+    const { fixture, element } = setup(withTrips());
+    fixture.componentRef.setInput('savedTripIds', new Set(['trp_lisbon', 'trp_japan']));
+    fixture.componentRef.setInput('brandName', 'Branch A Travel');
+    fixture.detectChanges();
+    const labels = [...element.querySelectorAll('.vt-account-trip__saved')].map((item) => item.textContent?.trim());
+    expect(labels).toEqual(['Saved on this device', 'Saved on this device', 'Available in your account · not saved on this device']);
+    const buttons = [...element.querySelectorAll('.vt-account-trip__action')].map((item) => item.textContent?.trim());
+    expect(buttons).toEqual(['Open trip', 'Open and save trip']);
+    expect(element.querySelector('.vt-account-intro')?.textContent).toContain('Branch A Travel');
+  });
+
+  it('offers a scoped sign-out and a separate “remove all data” action with accurate wording', () => {
+    const { fixture, section, element } = setup(withTrips());
+    fixture.componentRef.setInput('brandName', 'Branch A Travel');
+    fixture.detectChanges();
+    let signOut = 0; let removeAll = 0;
+    section.signOut.subscribe(() => { signOut += 1; });
+    section.removeAll.subscribe(() => { removeAll += 1; });
+    const button = (text: string) => [...element.querySelectorAll('button')].find((item) => item.textContent?.trim() === text)!;
+    expect(element.textContent).toContain('Trips from other travel companies or other customers stay saved');
+    button('Sign out of this account').click();
+    button('Remove all data').click();
+    expect([signOut, removeAll]).toEqual([1, 1]);
+  });
+});

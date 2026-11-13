@@ -151,7 +151,7 @@ describe('CustomerInvitationsService', () => {
       const later = await service.create(request(), now + 11 * 60_000);
       expect(later.status).toBe('sent');
       expect(email.sendInvitation).toHaveBeenCalledTimes(2);
-      expect(await rejection(service.resolve(tokenOf(first.url), []))).toMatchObject({ status: 410, body: { code: 'invitation_revoked' } });
+      expect(await rejection(service.resolve(tokenOf(first.url), []))).toMatchObject({ status: 410, body: { code: 'invitation_replaced' } });
       expect((await service.resolve(tokenOf(later.url), [])).status).toBe('pending');
     });
 

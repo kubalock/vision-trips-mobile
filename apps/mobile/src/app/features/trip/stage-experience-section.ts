@@ -61,5 +61,9 @@ export class StageExperienceSection implements OnDestroy {
   reviewUrl(): string | null { return this.trip().brand.profile.reviewLinks.find((link) => link.provider === 'google')?.url ?? this.trip().brand.profile.reviewLinks[0]?.url ?? null; }
   async recommend(): Promise<void> { const trip = this.trip(); await Share.share({ title: trip.brand.name, text: `We booked with ${trip.brand.name} and they looked after our trip. ${trip.support.phone || trip.support.websiteUrl || ''}` }); }
 }
+/** Forgets the ticked checklist items of one trip (when it is removed, or another Customer takes over its saved copy). */
+export function clearChecklist(tripId: string): void {
+  try { localStorage.setItem('vision-trips:checklist', JSON.stringify(readChecks().filter((item) => !item.startsWith(`${tripId}:`)))); } catch { /* Storage unavailable. */ }
+}
 function readChecks(): string[] { try { const value = JSON.parse(localStorage.getItem('vision-trips:checklist') || '[]') as unknown; return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []; } catch { return []; } }
 function slug(value: string): string { return value.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }

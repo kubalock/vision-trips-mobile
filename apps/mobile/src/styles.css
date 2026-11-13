@@ -1898,3 +1898,11 @@ body.vt .vt-app .vt-account-danger button:active { transform: scale(.97); }
   .vt-app .vt-accept-item__confirm { margin-left: -14px; padding-left: 14px; }
 }
 @media (prefers-reduced-motion: reduce) { .vt-app .vt-accept-progress__bar > span { transition: none; } }
+
+/* Identity and multi-branch cues */
+.vt-app .vt-account-trip__saved { margin: -6px 0 12px; color: var(--ink-2); font-size: .8rem; font-weight: 600; }
+.vt-app .vt-account-trip__saved.is-saved { color: color-mix(in srgb, var(--vt-accent-text, #0f766e) 90%, var(--ink)); }
+.vt-app .vt-saved-trip__brand { margin: 0 0 4px; color: var(--ink-2); font-size: .74rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.vt-app .vt-switch-notice { margin-bottom: 16px; }
+.vt-app .vt-invite__switch { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 14px; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--tint, #e6f4f1) 70%, transparent); font-size: .9rem; line-height: 1.45; }
+.vt-app .vt-invite__switch vt-icon { flex: none; margin-top: 2px; }

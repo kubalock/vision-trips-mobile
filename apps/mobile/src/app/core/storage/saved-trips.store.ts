@@ -12,7 +12,18 @@ export interface SavedTrip {
    *  refreshing it or acting on it needs the trip link again. */
   session: MobileSession | null;
   savedAt: string;
+  /**
+   * Who saved this copy (the session's opaque, base-scoped identity key). Kept after sign-out, so a late write from
+   * another identity can be recognised. Null for trips saved by older versions.
+   */
+  identityKey: string | null;
 }
+
+/** Outcome of saving a trip; `replacedIdentity` is set when a different verified identity took over the trip's slot. */
+export interface SaveResult { saved: boolean; replacedIdentity: boolean }
+
+/** A trusted-device token and the identity it was issued to (null for tokens saved by older versions). */
+interface TrustEntry { token: string; identityKey: string | null }
 
 const MAX_TRUSTED_BOOKINGS = 20;
 /** Keys an older version kept in localStorage, tokens included; removed on first use. */
@@ -37,51 +48,84 @@ export class SavedTripsStore {
   private readonly removed = new Set<string>();
   private queue: Promise<unknown> = Promise.resolve();
 
-  /** Trusted-device tokens, one per booking, so remembering a second booking does not forget the first. Browsers keep these in cookies. */
+  /**
+   * Trusted-device tokens, one per base, booking and Customer, so remembering a second booking — or a second person
+   * on a shared device — does not forget the first. Browsers keep these in cookies.
+   */
   async deviceTrusts(now = Date.now()): Promise<string[]> {
-    if (!this.native) { this.clearLegacyWebStorage(); return []; }
-    const value = await this.secure.get('device:trust');
-    const tokens = Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : typeof value === 'string' ? [value] : [];
-    return tokens.filter((token) => { const payload = trustPayload(token); return !payload || payload.e > now; });
+    return (await this.trustEntries(now)).map((entry) => entry.token);
   }
 
-  async saveDeviceTrust(token: string): Promise<void> {
+  async saveDeviceTrust(token: string, identityKey: string | null = null): Promise<void> {
     if (!this.native) return;
     const payload = trustPayload(token);
-    const others = (await this.deviceTrusts()).filter((existing) => {
-      const current = trustPayload(existing);
-      return existing !== token && !(payload && current && current.b === payload.b && current.r === payload.r);
+    const others = (await this.trustEntries()).filter((existing) => {
+      const current = trustPayload(existing.token);
+      return existing.token !== token && !(payload && current && current.b === payload.b && current.r === payload.r && current.c === payload.c);
     });
-    await this.secure.set('device:trust', [token, ...others].slice(0, MAX_TRUSTED_BOOKINGS));
+    await this.secure.set('device:trust', [{ token, identityKey }, ...others].slice(0, MAX_TRUSTED_BOOKINGS) as unknown as Record<string, unknown>);
   }
 
-  async clearDeviceTrust(): Promise<void> {
-    if (this.native) await this.secure.remove('device:trust');
+  /** Forgets every trusted-device token, or only those issued to one identity ("sign out of this account"). */
+  async clearDeviceTrust(identityKey?: string): Promise<void> {
+    if (!this.native) return;
+    if (!identityKey) { await this.secure.remove('device:trust'); return; }
+    const keep = (await this.trustEntries()).filter((entry) => entry.identityKey !== identityKey);
+    await this.secure.set('device:trust', keep as unknown as Record<string, unknown>);
+  }
+
+  /** The identity that saved a trip on this device, if any. */
+  async identityFor(tripId: string): Promise<string | null> {
+    return this.exclusive(async () => (await this.readOne(tripId))?.identityKey ?? null);
+  }
+
+  private async trustEntries(now = Date.now()): Promise<TrustEntry[]> {
+    if (!this.native) { this.clearLegacyWebStorage(); return []; }
+    const value = await this.secure.get('device:trust');
+    const items: unknown[] = Array.isArray(value) ? value : typeof value === 'string' ? [value] : [];
+    const entries = items.flatMap((item): TrustEntry[] => {
+      if (typeof item === 'string') return [{ token: item, identityKey: null }]; // Saved by an older version.
+      const entry = item as Partial<TrustEntry> | null;
+      return entry && typeof entry.token === 'string' ? [{ token: entry.token, identityKey: typeof entry.identityKey === 'string' ? entry.identityKey : null }] : [];
+    });
+    return entries.filter((entry) => { const payload = trustPayload(entry.token); return !payload || payload.e > now; });
   }
 
   /**
    * Saves a trip. A trip removed during this visit stays removed: a late refresh, token renewal or background
    * reload that finishes afterwards is ignored. Only opening the trip again (`reopened`, from its link or the
    * customer's account) brings it back.
+   *
+   * One saved copy per trip (base + booking). If a different verified identity (another Customer on the same
+   * Booking) opens it, that identity takes the slot — `replacedIdentity` tells the app to say so and to clear the
+   * previous identity's local data. A late, non-reopening write from an identity that no longer owns the slot is
+   * refused, so it can never overwrite the new owner's credential.
    */
   save(snapshot: TripSnapshot, session: MobileSession, options: { reopened?: boolean } = {}): Promise<boolean> {
+    return this.saveDetailed(snapshot, session, options).then((result) => result.saved);
+  }
+
+  saveDetailed(snapshot: TripSnapshot, session: MobileSession, options: { reopened?: boolean } = {}): Promise<SaveResult> {
     return this.exclusive(async () => {
       const tripId = snapshot.tripId;
-      if (this.removed.has(tripId)) {
-        if (!options.reopened) return false;
-        this.removed.delete(tripId);
-      }
+      const refused = { saved: false, replacedIdentity: false };
+      if (this.removed.has(tripId) && !options.reopened) return refused;
+      // A raw refresh token must never reach browser storage; only the cookie handle may.
+      if (!this.native && !isWebSessionHandle(session.refreshToken)) return refused;
+      const identityKey = session.identityKey ?? null;
+      const owner = (await this.readOne(tripId))?.identityKey ?? null;
+      const differentOwner = Boolean(owner && identityKey && owner !== identityKey);
+      if (differentOwner && !options.reopened) return refused;
+      this.removed.delete(tripId);
       const savedAt = new Date().toISOString();
       if (this.native) {
-        await this.secure.set(`trip:${tripId}`, { snapshot, session, savedAt } as unknown as Record<string, unknown>);
+        await this.secure.set(`trip:${tripId}`, { snapshot, session, savedAt, identityKey } as unknown as Record<string, unknown>);
         const ids = await this.ids();
         if (!ids.includes(tripId)) await this.secure.set('trip:index', [...ids, tripId]);
       } else {
-        // A raw refresh token must never reach browser storage; only the cookie handle may.
-        if (!isWebSessionHandle(session.refreshToken)) return false;
-        await this.browserDb.set(tripId, { snapshot, session: withoutAccessToken(session), savedAt });
+        await this.browserDb.set(tripId, { snapshot, session: withoutAccessToken(session), savedAt, identityKey });
       }
-      return true;
+      return { saved: true, replacedIdentity: differentOwner };
     });
   }
 
@@ -138,6 +182,11 @@ export class SavedTripsStore {
     return run;
   }
 
+  private async readOne(tripId: string): Promise<SavedTrip | null> {
+    if (!(await this.ids()).includes(tripId)) return null;
+    return decodeSavedTrip(this.native ? await this.secure.get(`trip:${tripId}`) : await this.browserDb.get(tripId))?.trip ?? null;
+  }
+
   private async readAll(): Promise<SavedTrip[]> {
     const ids = await this.ids();
     const stored = await Promise.all(ids.map((id) => this.native ? this.secure.get(`trip:${id}`) : this.browserDb.get(id)));
@@ -192,12 +241,13 @@ export function isSessionExpired(session: MobileSession, now = Date.now()): bool
 /** Checks a stored trip; null when it cannot be used. A damaged session counts as signed out, not as a reason to drop the trip. */
 function decodeSavedTrip(value: unknown): { trip: SavedTrip; migrated: boolean } | null {
   if (!value || typeof value !== 'object') return null;
-  const candidate = value as { snapshot?: unknown; session?: unknown; savedAt?: unknown };
+  const candidate = value as { snapshot?: unknown; session?: unknown; savedAt?: unknown; identityKey?: unknown };
   try {
     const { snapshot, migrated } = decodeTripSnapshot(candidate.snapshot);
     const session = parseStoredSession(candidate.session);
     const savedAt = typeof candidate.savedAt === 'string' && Number.isFinite(Date.parse(candidate.savedAt)) ? candidate.savedAt : new Date(0).toISOString();
-    return { trip: { snapshot, session, savedAt }, migrated };
+    const identityKey = typeof candidate.identityKey === 'string' ? candidate.identityKey : session?.identityKey ?? null;
+    return { trip: { snapshot, session, savedAt, identityKey }, migrated };
   } catch (error) {
     console.warn('Removed a saved trip that this version cannot read.', isTripDataError(error) ? error.message : error);
     return null;
@@ -205,10 +255,10 @@ function decodeSavedTrip(value: unknown): { trip: SavedTrip; migrated: boolean }
 }
 
 /** Reads the booking and expiry from a trust token (`payload.signature`); the server still verifies the signature. */
-function trustPayload(token: string): { b: string; r: string; e: number } | null {
+function trustPayload(token: string): { b: string; r: string; c: string | null; e: number } | null {
   try {
     const encoded = token.split('.')[0].replace(/-/g, '+').replace(/_/g, '/');
-    const value = JSON.parse(atob(encoded.padEnd(Math.ceil(encoded.length / 4) * 4, '='))) as { b?: unknown; r?: unknown; e?: unknown };
-    return typeof value.b === 'string' && typeof value.r === 'string' && typeof value.e === 'number' ? { b: value.b, r: value.r, e: value.e } : null;
+    const value = JSON.parse(atob(encoded.padEnd(Math.ceil(encoded.length / 4) * 4, '='))) as { b?: unknown; r?: unknown; c?: unknown; e?: unknown };
+    return typeof value.b === 'string' && typeof value.r === 'string' && typeof value.e === 'number' ? { b: value.b, r: value.r, c: typeof value.c === 'string' ? value.c : null, e: value.e } : null;
   } catch { return null; }
 }

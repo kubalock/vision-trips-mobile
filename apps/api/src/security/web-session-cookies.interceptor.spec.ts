@@ -3,6 +3,7 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { identityKey } from './identity-key.js';
 import { WebSessionCookiesInterceptor } from './web-session-cookies.interceptor.js';
 
 const session = (refreshToken: string) => ({ accessToken: 'vta_access', accessExpiresAt: '2030-01-01T00:00:00.000Z', refreshToken, refreshExpiresAt: '2030-01-30T00:00:00.000Z' });
@@ -94,5 +95,16 @@ describe('web session cookies', () => {
     const response = await request(app.getHttpServer()).delete('/v1/link-exchanges/device-trust').set('X-Vision-Client', 'web').set('Cookie', 'vt_dt_one=a; vt_dt_two=b; other=c');
     const cleared = (response.headers['set-cookie'] as unknown as string[]).map((cookie) => cookie.split('=')[0]);
     expect(cleared).toEqual(['vt_dt_one', 'vt_dt_two']);
+  });
+
+  it('forgets only one identity’s trusted-device cookies when asked (sign out of this account)', async () => {
+    const token = (b: string, c: string) => `${Buffer.from(JSON.stringify({ v: 2, b, r: 'recBOOKING1111111', c, e: Date.parse('2030-01-30T00:00:00Z') })).toString('base64url')}.sig`;
+    const graceA = token('appBRANCHAAAAAAAA', 'recCUSTOMERGRACE1');
+    const graceB = token('appBRANCHBBBBBBBB', 'recCUSTOMERGRACE1');
+    const target = identityKey({ baseId: 'appBRANCHAAAAAAAA', recordId: 'recBOOKING1111111', customerRecordId: 'recCUSTOMERGRACE1', fellowTraveller: false });
+    const response = await request(app.getHttpServer()).delete('/v1/link-exchanges/device-trust').set('X-Vision-Client', 'web')
+      .set('Cookie', `vt_dt_a=${graceA}; vt_dt_b=${graceB}`).send({ identityKey: target });
+    const cleared = (response.headers['set-cookie'] as unknown as string[]).map((cookie) => cookie.split('=')[0]);
+    expect(cleared).toEqual(['vt_dt_a']); // Branch B's trust for the same record IDs and email survives.
   });
 });

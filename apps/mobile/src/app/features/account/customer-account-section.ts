@@ -33,7 +33,7 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
               <h2 id="account-trips-title">All your trips</h2>
             </div>
           </header>
-          <p class="vt-account-intro">Discovered using {{ data.emailHint }}. Only trips linked to that verified customer account are shown.</p>
+          <p class="vt-account-intro">Your trips with {{ brandName() || 'this travel company' }}, for the customer verified as {{ data.emailHint }}. Trips in your account aren’t saved on this device until you open them.</p>
           <div class="vt-account-trips">
             @for (trip of data.trips; track trip.accountTripId) {
               <article class="vt-account-trip" [class.vt-account-trip--current]="trip.current">
@@ -47,9 +47,10 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
                     <span class="vt-account-status" [class.vt-account-status--past]="isPastTrip(trip)">{{ tripStatusLabel(trip) }}</span>
                   </div>
                   <p class="vt-account-trip__dates">{{ (trip.departureDate | europeanDate) || 'Dates to be confirmed' }}@if (trip.returnDate) { — {{ trip.returnDate | europeanDate }} }</p>
+                  <p class="vt-account-trip__saved" [class.is-saved]="isSaved(trip)">{{ isSaved(trip) ? 'Saved on this device' : 'Available in your account · not saved on this device' }}</p>
                   @if (!trip.current) {
-                    <button type="button" class="vt-account-trip__action" [disabled]="openingTripId() === trip.accountTripId" (click)="openTrip.emit(trip.accountTripId)">
-                      @if (openingTripId() === trip.accountTripId) { Opening… } @else { Open and save trip <vt-icon name="arrow-right" [size]="17" /> }
+                    <button type="button" class="vt-account-trip__action" [disabled]="openingTripId() === trip.accountTripId" [attr.aria-label]="(isSaved(trip) ? 'Open ' : 'Open and save ') + trip.name" (click)="openTrip.emit(trip.accountTripId)">
+                      @if (openingTripId() === trip.accountTripId) { Opening… } @else { {{ isSaved(trip) ? 'Open trip' : 'Open and save trip' }} <vt-icon name="arrow-right" [size]="17" /> }
                     </button>
                   }
                 </div>
@@ -158,8 +159,13 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
 
         <section class="vt-account-danger" aria-labelledby="account-signout-title">
           <span class="vt-account-danger__icon"><vt-icon name="alert" [size]="21" /></span>
-          <div><h2 id="account-signout-title">Sign out of this device</h2><p>Signs out every trip saved on this device and removes them, along with any documents saved for offline use.</p></div>
-          <button type="button" (click)="signOut.emit()">Sign out</button>
+          <div><h2 id="account-signout-title">Sign out of this account</h2><p>Signs out of your {{ brandName() || 'travel company' }} account on this device and removes its saved trips and documents. Trips from other travel companies or other customers stay saved.</p></div>
+          <button type="button" (click)="signOut.emit()">Sign out of this account</button>
+        </section>
+        <section class="vt-account-danger" aria-labelledby="account-remove-title">
+          <span class="vt-account-danger__icon"><vt-icon name="trash" [size]="21" /></span>
+          <div><h2 id="account-remove-title">Remove all data from this device</h2><p>Signs out of every account and removes every saved trip, document and trusted-device setting on this device.</p></div>
+          <button type="button" (click)="removeAll.emit()">Remove all data</button>
         </section>
       </section>
     } @else {
@@ -172,7 +178,11 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
 })
 export class CustomerAccountSection {
   readonly account = input<CustomerAccount | null>(null); readonly loading = input(false); readonly saving = input(false); readonly savedNotice = input(''); readonly openingTripId = input<string | null>(null); readonly error = input('');
-  readonly save = output<CustomerPreferences>(); readonly openTrip = output<string>(); readonly signOut = output<void>(); readonly retry = output<void>();
+  readonly save = output<CustomerPreferences>(); readonly openTrip = output<string>(); readonly signOut = output<void>(); readonly removeAll = output<void>(); readonly retry = output<void>();
+  /** Public trip IDs saved in My Trips, so the list can tell "saved on this device" from "available in your account". */
+  readonly savedTripIds = input<ReadonlySet<string>>(new Set());
+  readonly brandName = input<string | null>(null);
+  isSaved(trip: CustomerAccountTrip): boolean { return this.savedTripIds().has(trip.tripId); }
   /**
    * The traveller's edits, kept apart from the server's preferences until a save succeeds. The draft restarts
    * from the server's copy whenever that copy changes: a different account, or the reply to a successful save.

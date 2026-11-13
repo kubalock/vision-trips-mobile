@@ -168,3 +168,71 @@ describe('SavedTripsStore in the installed app', () => {
     expect(saved.session).toEqual(session('vrt_raw'));
   });
 });
+
+describe('SavedTripsStore identities (one booking, several customers or branches)', () => {
+  const as = (refreshToken: string, identityKey: string): MobileSession => ({ ...session(refreshToken), identityKey });
+  const customerTrust = (baseId: string, recordId: string, customer: string) => {
+    const payload = btoa(JSON.stringify({ b: baseId, r: recordId, c: customer, e: Date.now() + 86_400_000 })).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return `${payload}.sig`;
+  };
+
+  it('records who saved a trip, and keeps it after sign-out', async () => {
+    const store = nativeStore();
+    await store.save(snapshot('trp_1'), as('vrt_a', 'idk_customerA'));
+    await store.signOut('trp_1');
+    expect(await store.identityFor('trp_1')).toBe('idk_customerA');
+    expect((await store.all())[0]).toMatchObject({ session: null, identityKey: 'idk_customerA' });
+  });
+
+  it('lets a newly verified Customer take over a trip slot and reports the switch', async () => {
+    const store = nativeStore();
+    await store.save(snapshot('trp_1'), as('vrt_a', 'idk_customerA'));
+    expect(await store.saveDetailed(snapshot('trp_1'), as('vrt_b', 'idk_customerB'), { reopened: true })).toEqual({ saved: true, replacedIdentity: true });
+    const [trip] = await store.all();
+    expect(trip).toMatchObject({ identityKey: 'idk_customerB', session: { refreshToken: 'vrt_b' } });
+  });
+
+  it('refuses a late background write from the identity that no longer owns the slot', async () => {
+    const store = nativeStore();
+    await store.save(snapshot('trp_1'), as('vrt_a', 'idk_customerA'));
+    await store.save(snapshot('trp_1'), as('vrt_b', 'idk_customerB'), { reopened: true });
+    expect(await store.save(snapshot('trp_1'), as('vrt_a2', 'idk_customerA'))).toBe(false); // e.g. A's refresh finishing late.
+    expect((await store.all())[0].session?.refreshToken).toBe('vrt_b');
+  });
+
+  it('keeps trips from two branches side by side', async () => {
+    const store = nativeStore();
+    await store.save(snapshot('trp_branchA'), as('vrt_a', 'idk_branchA'));
+    await store.save(snapshot('trp_branchB'), as('vrt_b', 'idk_branchB'), { reopened: true });
+    expect((await store.all()).map((trip) => [trip.snapshot.tripId, trip.identityKey])).toEqual([['trp_branchA', 'idk_branchA'], ['trp_branchB', 'idk_branchB']]);
+  });
+
+  it('keeps the identity in a browser too (snapshot and handle only)', async () => {
+    const store = new SavedTripsStore();
+    await store.save(snapshot('trp_1'), as('web:handle123456789012', 'idk_customerA'));
+    const [trip] = await store.all();
+    expect(trip.identityKey).toBe('idk_customerA');
+    expect(trip.session?.identityKey).toBe('idk_customerA');
+  });
+
+  it('keeps one trust token per Customer, so a second person on the device does not evict the first', async () => {
+    const store = nativeStore();
+    const grace = customerTrust('app1', 'recA', 'recGrace');
+    const alan = customerTrust('app1', 'recA', 'recAlan');
+    await store.saveDeviceTrust(grace, 'idk_grace');
+    await store.saveDeviceTrust(alan, 'idk_alan');
+    expect((await store.deviceTrusts()).sort()).toEqual([alan, grace].sort());
+  });
+
+  it('forgets only one identity’s trust when that account signs out', async () => {
+    const store = nativeStore();
+    const branchA = customerTrust('appA', 'recA', 'recGrace');
+    const branchB = customerTrust('appB', 'recA', 'recGrace');
+    await store.saveDeviceTrust(branchA, 'idk_branchA');
+    await store.saveDeviceTrust(branchB, 'idk_branchB');
+    await store.clearDeviceTrust('idk_branchA');
+    expect(await store.deviceTrusts()).toEqual([branchB]);
+    await store.clearDeviceTrust();
+    expect(await store.deviceTrusts()).toEqual([]);
+  });
+});

@@ -34,6 +34,10 @@
     </div>
   </header>
   <main id="main-content" class="vt-wrap vt-main" [class.vt-main--home]="displayedTrip() && activeView() === 'home'" [class.vt-main--itinerary]="displayedTrip() && activeView() === 'itinerary'" [class.vt-main--payments]="displayedTrip() && activeView() === 'payments'" [class.vt-main--documents]="displayedTrip() && activeView() === 'documents'" [class.vt-main--help]="displayedTrip() && activeView() === 'help'" [class.vt-main--account]="displayedTrip() && activeView() === 'account'" [class.vt-main--trips]="showTripLibrary()" [class.vt-main--entry]="!displayedTrip() && !showTripLibrary()" tabindex="-1">
+    <p class="vt-sr-only" role="status" aria-live="polite">{{ switchNotice() }}</p>
+    @if (switchNotice() && !invitationToken()) {
+      <div class="vt-status-card vt-switch-notice" data-tone="info"><span class="vt-status-card__icon" aria-hidden="true"><vt-icon name="check" [size]="20" /></span><div class="vt-status-card__copy"><p>{{ switchNotice() }}</p></div><button type="button" class="vt-status-card__close" aria-label="Dismiss" (click)="dismissSwitchNotice()"><vt-icon name="close" [size]="18" /></button></div>
+    }
 
     @if (displayedTrip(); as currentTrip) {
       @if (signedOut()) {
@@ -210,7 +214,7 @@
         }
         <section class="vt-section vt-help-card vt-help-protection"><span class="vt-help-protection__icon"><vt-icon name="shield" [size]="24" /></span><div class="vt-help-protection__body"><h2>Financial protection</h2><p class="vt-help-intro">{{ currentTrip.protection.summary }}</p>@if (currentTrip.protection.holderName) { <p class="vt-help-protection__holder">Holder: {{ currentTrip.protection.holderName }}</p> }</div></section>
       } @else {
-        <app-customer-account-section [account]="customerAccount()" [loading]="accountLoading()" [saving]="accountSaving()" [savedNotice]="accountNotice()" [openingTripId]="openingAccountTripId()" [error]="accountError()" [saveError]="accountSaveError()" (retry)="retryAccount()" (save)="saveCustomerPreferences($event)" (openTrip)="openCustomerAccountTrip($event)" (signOut)="signOutDevice()" />
+        <app-customer-account-section [account]="customerAccount()" [loading]="accountLoading()" [saving]="accountSaving()" [savedNotice]="accountNotice()" [openingTripId]="openingAccountTripId()" [error]="accountError()" [saveError]="accountSaveError()" (retry)="retryAccount()" (save)="saveCustomerPreferences($event)" (openTrip)="openCustomerAccountTrip($event)" [savedTripIds]="savedTripIds()" [brandName]="currentTrip.brand.name" (signOut)="signOutAccount()" (removeAll)="signOutDevice()" />
       }
 
       <nav class="vt-nav" aria-label="Trip navigation">
@@ -221,12 +225,12 @@
         <button type="button" [class.is-active]="activeView() === 'help'" [attr.aria-current]="activeView() === 'help' ? 'page' : null" (click)="selectView('help')"><span class="vt-nav__icon"><vt-icon name="help" [size]="22" /></span><span>Help</span></button>
       </nav>
     } @else if (invitationToken(); as token) {
-      <app-invitation-flow [token]="token" [online]="online()" (authorized)="invitationAuthorized($event)" (cancelled)="invitationCancelled()" />
+      <app-invitation-flow [token]="token" [online]="online()" [activeBrandName]="trip()?.brand?.name ?? null" (authorized)="invitationAuthorized($event)" (cancelled)="invitationCancelled()" />
     } @else if (showTripLibrary()) {
       <section class="vt-trip-library">
         @if (error() && !trip()) { <div class="vt-status-card vt-trip-library__notice" data-tone="warn" role="alert"><span class="vt-status-card__icon" aria-hidden="true"><vt-icon name="alert" [size]="20" /></span><div class="vt-status-card__copy"><strong>That link didn’t work</strong><p>{{ error() }}</p></div><button type="button" class="vt-status-card__close" aria-label="Dismiss" (click)="dismissError()"><vt-icon name="close" [size]="18" /></button></div> }
         <header class="vt-trip-library__header">
-          <div><p class="vt-page-kicker vt-trip-library__kicker">Saved on this device</p><h1 class="vt-page-title">My trips</h1><p class="vt-page-description">Open any trip saved on this device, even offline.</p></div>
+          <div><p class="vt-page-kicker vt-trip-library__kicker">Saved on this device</p><h1 class="vt-page-title">My trips</h1><p class="vt-page-description">Open any trip saved on this device, even offline.@if (multipleBrands()) { Trips from different travel companies are kept separate — each has its own sign-in.}</p></div>
           <button type="button" class="vt-primary-action vt-trip-library__add" (click)="addAnotherTrip()"><vt-icon name="plus" [size]="19" /> Add another trip</button>
         </header>
         @if (tripGroups().upcoming.length) {
@@ -236,7 +240,7 @@
                 <div class="vt-saved-trip__media" aria-hidden="true">@if (saved.snapshot.summary.heroImageUrl) { <img class="vt-saved-trip__image" [src]="heroSource(saved.snapshot.summary, 360)" [attr.srcset]="img.srcset(saved.snapshot.summary.heroImage)" [attr.sizes]="img.sizes.card" alt="" loading="lazy" decoding="async" (error)="hideBrokenTripImage($event)" /> }</div>
                 <div class="vt-saved-trip__body">
                   <header class="vt-saved-trip__header">
-                    <div><h3>{{ saved.snapshot.summary.name }}</h3><p>{{ saved.snapshot.summary.reference }}</p></div>
+                    <div>@if (multipleBrands()) { <p class="vt-saved-trip__brand">{{ saved.snapshot.brand.name }}</p> }<h3>{{ saved.snapshot.summary.name }}</h3><p>{{ saved.snapshot.summary.reference }}</p></div>
                     <div class="vt-saved-trip__aside">
                       <span class="vt-saved-trip__status" [class.vt-saved-trip__status--danger]="saved.snapshot.stage === 'cancelled' || saved.snapshot.stage === 'quote_expired'">{{ stageLabel(saved.snapshot.stage) }}</span>
                       <div class="vt-saved-trip__utilities">
@@ -260,7 +264,7 @@
                 <div class="vt-saved-trip__media" aria-hidden="true">@if (saved.snapshot.summary.heroImageUrl) { <img class="vt-saved-trip__image" [src]="heroSource(saved.snapshot.summary, 360)" [attr.srcset]="img.srcset(saved.snapshot.summary.heroImage)" [attr.sizes]="img.sizes.card" alt="" loading="lazy" decoding="async" (error)="hideBrokenTripImage($event)" /> }</div>
                 <div class="vt-saved-trip__body">
                   <header class="vt-saved-trip__header">
-                    <div><h3>{{ saved.snapshot.summary.name }}</h3><p>{{ saved.snapshot.summary.reference }}</p></div>
+                    <div>@if (multipleBrands()) { <p class="vt-saved-trip__brand">{{ saved.snapshot.brand.name }}</p> }<h3>{{ saved.snapshot.summary.name }}</h3><p>{{ saved.snapshot.summary.reference }}</p></div>
                     <div class="vt-saved-trip__aside">
                       <span class="vt-saved-trip__status vt-saved-trip__status--past">{{ stageLabel(saved.snapshot.stage) }}</span>
                       <div class="vt-saved-trip__utilities">

@@ -129,8 +129,11 @@ export class VisionApiService {
   customerAccount(accessToken: string): Promise<CustomerAccount> { return firstValueFrom(this.http.get<CustomerAccount>(`${this.baseUrl}/trips/current/account`, { headers: { Authorization: `Bearer ${accessToken}` } })); }
   updateCustomerPreferences(preferences: CustomerPreferences, accessToken: string): Promise<UpdateCustomerPreferencesResponse> { return firstValueFrom(this.http.post<UpdateCustomerPreferencesResponse>(`${this.baseUrl}/trips/current/account/preferences`, preferences, this.writeOptions(accessToken))); }
   openCustomerAccountTrip(accountTripId: string, accessToken: string): Promise<OpenCustomerAccountTripResponse> { return withParsedSnapshot(firstValueFrom(this.http.post<OpenCustomerAccountTripResponse>(`${this.baseUrl}/trips/current/account/trips/${encodeURIComponent(accountTripId)}/open`, {}, this.writeOptions(accessToken)))); }
-  /** Browsers: clears the HttpOnly trusted-device cookies (the installed app clears its secure storage instead). */
-  forgetDeviceTrust(): Promise<void> { return firstValueFrom(this.http.delete<void>(`${this.baseUrl}/link-exchanges/device-trust`, this.writeOptions())); }
+  /**
+   * Browsers: clears the HttpOnly trusted-device cookies — only that identity's when `identityKey` is given, otherwise
+   * all of them (the installed app clears its secure storage instead).
+   */
+  forgetDeviceTrust(identityKey?: string): Promise<void> { return firstValueFrom(this.http.delete<void>(`${this.baseUrl}/link-exchanges/device-trust`, { body: identityKey ? { identityKey } : {}, ...this.writeOptions() })); }
   revokeSession(refreshToken: string): Promise<void> { return firstValueFrom(this.http.delete<void>(`${this.baseUrl}/sessions/current`, { body: { refreshToken }, ...this.writeOptions() })); }
 
   paymentLink(paymentId: string, accessToken: string): Promise<PaymentLinkResponse> {

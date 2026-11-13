@@ -5,6 +5,7 @@ import { groupSavedTrips } from './trip-library';
 function savedTrip(tripId: string, departureDate: string, returnDate: string | null, savedAt: string, stage: TripSnapshot['stage'] = 'confirmed'): SavedTrip {
   return {
     savedAt,
+    identityKey: null,
     session: { accessToken: 'access', refreshToken: 'refresh', refreshExpiresAt: '2027-01-01T00:00:00Z' } as MobileSession,
     snapshot: {
       tripId,

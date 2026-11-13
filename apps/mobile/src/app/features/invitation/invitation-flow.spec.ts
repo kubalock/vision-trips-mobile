@@ -130,7 +130,9 @@ describe('InvitationFlow', () => {
   it.each([
     ['invitation_expired', 'This invitation has expired'],
     ['invitation_consumed', 'This invitation has been used'],
-    ['invitation_revoked', 'This invitation was replaced'],
+    ['invitation_revoked', 'This invitation was cancelled'],
+    ['invitation_replaced', 'This invitation was replaced'],
+    ['destination_changed', 'Your email address has changed'],
     ['invitation_invalid', 'This link isn’t valid'],
   ])('shows a recovery screen for %s', async (code, title) => {
     const view = await render();
@@ -225,5 +227,61 @@ describe('InvitationFlow', () => {
     await view.settle();
     expect(view.button('Send my code in')?.disabled).toBe(true);
     expect(view.element.querySelector('[role="alert"]')?.textContent).toContain('Please wait');
+  });
+
+  it('tells the customer when the invitation is from a different branch than the open trip', async () => {
+    const view = await render();
+    vi.spyOn(view.api, 'resolveInvitation').mockResolvedValue(state({ brand: { name: 'Branch B Travel', logoUrl: null, primaryColor: null } }));
+    view.fixture.componentRef.setInput('activeBrandName', 'Branch A Travel');
+    view.fixture.componentRef.setInput('token', OTHER);
+    await view.settle();
+    expect(view.element.textContent).toContain('You’re opening a trip from Branch B Travel');
+    expect(view.element.textContent).toContain('Your Branch A Travel trip stays saved');
+    expect(view.element.textContent).toContain('gr***@example.com'); // Masked email and branch before any code is sent.
+  });
+
+  it('does not interrupt with a branch note for the same branch', async () => {
+    const view = await render();
+    vi.spyOn(view.api, 'resolveInvitation').mockResolvedValue(state());
+    view.fixture.componentRef.setInput('activeBrandName', 'Example Travel');
+    view.fixture.componentRef.setInput('token', OTHER);
+    await view.settle();
+    expect(view.element.querySelector('.vt-invite__switch')).toBeNull();
+  });
+
+  it('drops a code request for invitation A when invitation B arrives while it is in flight', async () => {
+    const view = await render();
+    vi.spyOn(view.api, 'resolveInvitation')
+      .mockResolvedValueOnce(state())
+      .mockResolvedValueOnce(state({ brand: { name: 'Branch B Travel', logoUrl: null, primaryColor: null }, destinationHint: 'b***@example.com' }));
+    let finish!: (value: ReturnType<typeof otpSent>) => void;
+    vi.spyOn(view.api, 'sendInvitationCode').mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    await view.settle();
+    view.button('Send my code')!.click();
+    await view.settle();
+
+    view.fixture.componentRef.setInput('token', OTHER);
+    await view.settle();
+    finish(otpSent());
+    await view.settle();
+
+    expect(view.element.querySelector('#invite-otp')).toBeNull(); // Still B's welcome screen, not A's code screen.
+    expect(view.element.textContent).toContain('Branch B Travel');
+    expect(view.element.textContent).toContain('b***@example.com');
+  });
+
+  it('handles two invitation links arriving back to back by showing only the second', async () => {
+    const view = await render();
+    let finishFirst!: (value: InvitationState) => void;
+    vi.spyOn(view.api, 'resolveInvitation')
+      .mockReturnValueOnce(new Promise((resolve) => { finishFirst = resolve; }))
+      .mockResolvedValueOnce(state({ brand: { name: 'Second Travel', logoUrl: null, primaryColor: null } }));
+    await view.settle();
+    view.fixture.componentRef.setInput('token', OTHER);
+    await view.settle();
+    finishFirst(state({ brand: { name: 'First Travel', logoUrl: null, primaryColor: null } }));
+    await view.settle();
+    expect(view.element.textContent).toContain('Second Travel');
+    expect(view.element.textContent).not.toContain('First Travel');
   });
 });

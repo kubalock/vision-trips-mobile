@@ -3,6 +3,7 @@ import type { MobileSession } from '@vision-trips/contracts';
 import { createHash, randomBytes } from 'node:crypto';
 import type { CookieOptions, Request, Response } from 'express';
 import { Observable, map } from 'rxjs';
+import { trustIdentityKey } from './identity-key.js';
 
 /**
  * Browser clients (header `X-Vision-Client: web`) never see refresh or trusted-device tokens.
@@ -49,7 +50,17 @@ export class WebSessionCookiesInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       map((result: unknown) => {
-        if (forgetTrust) for (const name of cookies.keys()) if (name.startsWith(TRUST_COOKIE)) response.clearCookie(name, cookieOptions('link-exchanges', secure));
+        if (forgetTrust) {
+          // With an identity key, only that Customer's trusted-device cookies go ("sign out of this account");
+          // without one, every trusted identity in this browser is forgotten ("remove all data from this device").
+          const only = body && typeof body.identityKey === 'string' ? body.identityKey : null;
+          for (const [name, value] of cookies) {
+            if (!name.startsWith(TRUST_COOKIE)) continue;
+            const payload = only ? trustPayload(value) : null;
+            if (only && (!payload || trustIdentityKey(payload) !== only)) continue;
+            response.clearCookie(name, cookieOptions('link-exchanges', secure));
+          }
+        }
         if (revoking && handleId) response.clearCookie(SESSION_COOKIE + handleId, cookieOptions('sessions', secure));
         return this.secureResult(result, response, secure, handleId);
       }),

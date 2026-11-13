@@ -818,7 +818,7 @@ function document(id: string, title: string, description: string, kind: TripDocu
 }
 
 
-function publicTripId(baseId: string, recordId: string): string {
+export function publicTripId(baseId: string, recordId: string): string {
   const secret = process.env.VISION_LINK_SECRET;
   if (!secret) throw new Error('VISION_LINK_SECRET is not configured.');
   return `trp_${createHmac('sha256', secret).update(`${baseId}|${recordId}`).digest('base64url').slice(0, 22)}`;

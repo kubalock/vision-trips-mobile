@@ -47,6 +47,9 @@ export function sanitizeOtp(value: string): string {
                 @if (current.brand.logoUrl) { <img class="vt-invite__logo" [src]="current.brand.logoUrl" [alt]="current.brand.name" decoding="async" /> }
                 @else { <span class="vt-invite__brand-name">{{ current.brand.name }}</span> }
               </div>
+              @if (activeBrandName() && activeBrandName() !== current.brand.name) {
+                <p class="vt-invite__switch" role="note"><vt-icon name="alert" [size]="17" /> You’re opening a trip from <strong>{{ current.brand.name }}</strong>. Your {{ activeBrandName() }} trip stays saved in My trips and isn’t affected.</p>
+              }
               @if (current.verification === 'none') {
                 <p class="vt-invite__lead">A fellow traveller has shared the itinerary, documents and contact details with you. Prices and payments aren’t included.</p>
                 <button type="button" class="vt-invite__primary" [disabled]="busy() || !online()" (click)="openWithoutCode()">{{ busy() ? 'Opening…' : 'Open the trip' }}</button>
@@ -55,7 +58,7 @@ export function sanitizeOtp(value: string): string {
                 <button type="button" class="vt-invite__primary" [disabled]="busy() || !online()" (click)="openWithoutCode()">{{ busy() ? 'Opening…' : 'Open my trip' }}</button>
                 <button type="button" class="vt-invite__link" [disabled]="busy() || !online()" (click)="sendCode()">Send me a code instead</button>
               } @else {
-                <p class="vt-invite__lead">To keep your booking safe, we’ll email a six-digit code to <strong>{{ current.destinationHint }}</strong>.</p>
+                <p class="vt-invite__lead">To keep your booking safe, {{ current.brand.name }} will email a six-digit code to <strong>{{ current.destinationHint }}</strong>.</p>
                 <button type="button" class="vt-invite__primary" [disabled]="busy() || !online() || resendSeconds() > 0" (click)="sendCode()"><vt-icon name="mail" [size]="19" /> {{ busy() ? 'Sending…' : resendSeconds() > 0 ? 'Send my code in ' + resendSeconds() + 's' : 'Send my code' }}</button>
                 <p class="vt-invite__fine">Not your email address? Contact {{ current.brand.name }} — they can update it and send a new invitation.</p>
               }
@@ -116,6 +119,8 @@ export class InvitationFlow {
 
   readonly token = input.required<string>();
   readonly online = input(true);
+  /** Brand of the trip currently open behind this screen, if any; a different brand gets a "you're opening…" note. */
+  readonly activeBrandName = input<string | null>(null);
   readonly authorized = output<InvitationAuthorized>();
   readonly cancelled = output<void>();
 
@@ -326,7 +331,9 @@ export function describe(error: unknown): Failure {
   switch (code) {
     case 'invitation_invalid': return { code, terminal: true, title: 'This link isn’t valid', message };
     case 'invitation_expired': return { code, terminal: true, title: 'This invitation has expired', message };
-    case 'invitation_revoked': return { code, terminal: true, title: 'This invitation was replaced', message };
+    case 'invitation_replaced': return { code, terminal: true, title: 'This invitation was replaced', message };
+    case 'invitation_revoked': return { code, terminal: true, title: 'This invitation was cancelled', message };
+    case 'destination_changed': return { code, terminal: true, title: 'Your email address has changed', message };
     case 'invitation_consumed': return { code, terminal: true, title: 'This invitation has been used', message };
     case 'customer_unavailable': return { code, terminal: true, title: 'This invitation can’t be used', message };
     case null: break;

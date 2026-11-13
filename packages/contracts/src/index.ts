@@ -280,6 +280,8 @@ export interface CustomerPreferences {
 
 export interface CustomerAccountTrip {
   accountTripId: string;
+  /** The public trip ID the trip would have once opened, so the app can say whether it is already saved on this device. */
+  tripId: string;
   reference: string;
   name: string;
   departureDate: string | null;
@@ -298,6 +300,8 @@ export interface CustomerAccount {
 }
 
 export interface UpdateCustomerPreferencesResponse { saved: true; updatedRecords: number; preferences: CustomerPreferences }
+/** Body of DELETE /v1/link-exchanges/device-trust: omit `identityKey` to forget every trusted identity in this browser. */
+export interface ForgetDeviceTrustRequest { identityKey?: string }
 export interface OpenCustomerAccountTripResponse { snapshot: TripSnapshot; session: MobileSession }
 
 export interface DestinationGuide {
@@ -570,6 +574,12 @@ export interface MobileSession {
   accessExpiresAt: string;
   refreshToken: string;
   refreshExpiresAt: string;
+  /**
+   * Opaque, base-scoped label for the verified identity (Base + Customer, or Base + Booking for share links). Equal
+   * keys mean the same Customer in the same base; it reveals no Airtable IDs or email. Absent on sessions saved by
+   * older versions.
+   */
+  identityKey?: string;
 }
 
 export interface RefreshSessionRequest {

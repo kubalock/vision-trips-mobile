@@ -268,12 +268,15 @@ export function decodeTripSnapshot(value: unknown): { snapshot: TripSnapshot; mi
 const sessionSchema = z.object({
   accessToken: z.string(), accessExpiresAt: z.string(),
   refreshToken: nonEmpty, refreshExpiresAt: z.string(),
+  identityKey: z.optional(z.string()),
 });
 
 /** A stored session that does not look right is treated as signed out rather than sent to the server. */
 export function parseStoredSession(value: unknown): MobileSession | null {
   const parsed = sessionSchema.safeParse(value);
-  return parsed.success ? parsed.data : null;
+  if (!parsed.success) return null;
+  const { identityKey, ...session } = parsed.data;
+  return identityKey ? { ...session, identityKey } : session;
 }
 
 // ---------------------------------------------------------------------------------------------------------------

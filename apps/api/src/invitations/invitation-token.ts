@@ -45,6 +45,14 @@ export function invitationUrl(token: string): string {
   return `${base}/${token}`;
 }
 
+/**
+ * Binds an invitation to the email address it was created for. Keyed with the server secret, so the stored value does
+ * not reveal the address; scoped to base and Customer, so equal emails on different Customers never compare equal.
+ */
+export function hashDestination(baseId: string, customerRecordId: string, email: string): string {
+  return createHmac('sha256', otpSecret()).update(`vision-invitation-destination:${baseId}:${customerRecordId}:${email.trim().toLowerCase()}`).digest('hex');
+}
+
 export function maskEmail(email: string): string | null {
   const [name, domain] = email.split('@');
   return name && domain ? `${name.slice(0, 2)}${'*'.repeat(Math.max(2, name.length - 2))}@${domain}` : null;

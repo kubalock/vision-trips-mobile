@@ -84,7 +84,7 @@ export class SessionManager {
     if (pending) return pending;
 
     const request = (async () => {
-      const newer = await this.newerStoredSession(refreshToken);
+      const newer = await this.newerStoredSession(refreshToken, expired.identityKey);
       const fromServer = !newer || isAccessExpiring(newer);
       const current = newer ?? expired;
       if (fromServer && isRefreshExpired(current)) return this.expire(refreshToken, null);
@@ -123,11 +123,13 @@ export class SessionManager {
     }
   }
 
-  private async newerStoredSession(refreshToken: string): Promise<MobileSession | null> {
+  private async newerStoredSession(refreshToken: string, identityKey: string | undefined): Promise<MobileSession | null> {
     const tripId = this.hooks.tripIdFor(refreshToken);
     if (!tripId) return null;
     const stored = (await this.savedTrips.all()).find((trip) => trip.snapshot.tripId === tripId)?.session;
-    return stored && stored.refreshToken !== refreshToken ? stored : null;
+    if (!stored || stored.refreshToken === refreshToken) return null;
+    // Another Customer may have taken this trip's slot on the device: never adopt their session as ours.
+    return identityKey && stored.identityKey && stored.identityKey !== identityKey ? null : stored;
   }
 }
 
