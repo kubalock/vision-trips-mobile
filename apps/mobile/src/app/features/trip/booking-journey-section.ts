@@ -1,5 +1,5 @@
-import { Component, input, output } from '@angular/core';
-import type { BookingJourney, RelatedQuotationSummary } from '@vision-trips/contracts';
+import { Component, computed, input, output } from '@angular/core';
+import type { BookingJourney, RelatedQuotationSummary, TripStage } from '@vision-trips/contracts';
 import { VtIcon } from '../../shared/lucide-icon';
 import { EuropeanDatePipe } from '../../shared/european-date.pipe';
 
@@ -8,7 +8,7 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
   imports: [EuropeanDatePipe, VtIcon],
   template: `
     <section class="vt-booking-journey-card" aria-labelledby="booking-journey-title">
-      <header class="vt-booking-journey-card__header"><p>Your booking journey</p><h2 id="booking-journey-title">What happens next</h2></header>
+      <header class="vt-booking-journey-card__header"><p>Your booking journey</p><h2 id="booking-journey-title">{{ returned() ? 'From booking to home' : 'What happens next' }}</h2></header>
       <ol class="vt-booking-timeline">
         @for (step of journey().steps; track step.id) {
           <li class="vt-booking-step" [class.is-complete]="step.status === 'complete'" [class.is-current]="step.status === 'current'" [class.is-upcoming]="step.status === 'upcoming'">
@@ -96,6 +96,9 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
 })
 export class BookingJourneySection {
   readonly journey = input.required<BookingJourney>();
+  /** The trip's stage; after return the card looks back ("From booking to home") instead of ahead. */
+  readonly stage = input<TripStage | null>(null);
+  protected readonly returned = computed(() => ['home', 'past', 'closed'].includes(this.stage() ?? ''));
   readonly related = input<RelatedQuotationSummary[]>([]);
   readonly openingId = input<string | null>(null);
   readonly enquire = output<string>();

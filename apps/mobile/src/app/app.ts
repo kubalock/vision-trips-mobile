@@ -755,6 +755,18 @@ export class App implements OnInit, OnDestroy {
     this.applyAppearance(this.appearance());
   }
 
+  /** The trip is over (back home, long past or closed): the home screen looks back instead of counting down. */
+  protected isReturned(stage: TripStage): boolean { return isReturnedStage(stage); }
+
+  protected heroKicker(trip: TripSnapshot): string {
+    // The header chip already says "Welcome home" / "Past trip"; the hero says when, rather than repeating it.
+    if (isReturnedStage(trip.stage)) { const travelled = monthYear(trip.summary.departureDate); return travelled ? `Travelled ${travelled}` : 'Your past trip'; }
+    return this.stageLabel(trip.stage);
+  }
+
+  protected tripDates(summary: TripSnapshot['summary'], unknown?: string): string { return tripDateRange(summary.departureDate, summary.returnDate, unknown); }
+  protected nightsLabel(nights: number | null): string | null { return nightsText(nights); }
+
   protected stageLabel(stage: TripStage): string {
     if (stage === 'quote') return 'Quotation';
     if (stage === 'quote_expired') return 'Quote expired';
@@ -1400,4 +1412,25 @@ export function switchMessage(previous: { trip: TripSnapshot | null; identityKey
   if (previous.trip.brand.name !== next.brand.name) return `Now showing ${next.summary.name} from ${next.brand.name}. Your ${previous.trip.brand.name} trips are still saved in My trips.`;
   if (previous.identityKey && nextIdentity && previous.identityKey !== nextIdentity) return `Switched to a different customer account: ${next.summary.name}. Your other trips are still saved in My trips.`;
   return '';
+}
+
+export function isReturnedStage(stage: TripStage): boolean { return stage === 'home' || stage === 'past' || stage === 'closed'; }
+
+/** "06/08/2026" for a day trip, "06/08/2026 — 13/08/2026" otherwise; never the same date twice. */
+export function tripDateRange(departure: string | null, returns: string | null, unknown = 'Dates to be confirmed'): string {
+  const from = formatEuropeanDate(departure);
+  if (!from) return unknown;
+  const to = formatEuropeanDate(returns);
+  return to && to !== from ? `${from} — ${to}` : from;
+}
+
+/** "1 night", "7 nights"; nothing for zero or unknown (a day trip shouldn't say "0 nights"). */
+export function nightsText(nights: number | null): string | null {
+  return nights && nights > 0 ? `${nights} ${nights === 1 ? 'night' : 'nights'}` : null;
+}
+
+function monthYear(value: string | null): string {
+  if (!value || !/^\d{4}-\d{2}/.test(value)) return '';
+  const [year, month] = value.split('-').map(Number);
+  return new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month - 1, 1)));
 }

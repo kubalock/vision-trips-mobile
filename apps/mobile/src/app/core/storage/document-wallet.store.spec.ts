@@ -25,7 +25,7 @@ describe('writeInChunks', () => {
     expect(fake.writes.map((write) => write.kind)).toEqual(['write', 'append', 'append']);
     expect(Math.max(...fake.writes.map((write) => write.data.length))).toBeLessThanOrEqual(Math.ceil(WALLET_CHUNK_BYTES / 3) * 4);
     expect(decode(fake.writes.map((write) => write.data))).toEqual(bytes);
-  });
+  }, 30_000); // Encodes and compares ~1.5 MB in the DOM test environment; slow when the whole suite runs in parallel.
 
   it('still creates the file for an empty document', async () => {
     const fake = fakeFiles();

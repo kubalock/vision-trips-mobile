@@ -1906,3 +1906,53 @@ body.vt .vt-app .vt-account-danger button:active { transform: scale(.97); }
 .vt-app .vt-switch-notice { margin-bottom: 16px; }
 .vt-app .vt-invite__switch { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 14px; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--tint, #e6f4f1) 70%, transparent); font-size: .9rem; line-height: 1.45; }
 .vt-app .vt-invite__switch vt-icon { flex: none; margin-top: 2px; }
+
+/* Returned trips (home, past, closed): a compact look-back header instead of the full-height countdown hero */
+.vt-app .vt-hero.vt-hero--returned,
+.vt-app .vt-main--home .vt-hero.vt-hero--returned { min-height: 0; }
+.vt-app .vt-main--home .vt-hero.vt-hero--returned.has-image { min-height: min(34dvh, 280px); }
+.vt-app .vt-main--home .vt-hero.vt-hero--returned:not(.has-image)::after { display: none; }
+.vt-app .vt-main--home .vt-hero.vt-hero--returned .vt-hero__body { padding-block: clamp(20px, 3vw, 28px); }
+.vt-app .vt-main--home .vt-hero.vt-hero--returned .vt-hero__title { max-width: none; font-size: clamp(1.6rem, 4vw, 2.2rem); }
+.vt-app .vt-freshness.vt-freshness--quiet { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin: 10px var(--vt-flat-gutter, 0) 0; padding: 0; border: 0; background: none; color: var(--ink-2); font-size: .78rem; font-weight: 550; }
+.vt-app .vt-freshness__refresh { min-height: 32px; padding: 4px 12px; border: 1px solid var(--line-2); border-radius: var(--r-pill); background: var(--surface); color: var(--ink); font-size: .78rem; font-weight: 650; }
+.vt-app .vt-freshness__refresh:hover:not(:disabled) { border-color: var(--vt-accent); }
+.vt-app .vt-freshness__refresh:focus-visible { outline: 3px solid var(--tint-2); outline-offset: 2px; }
+.vt-app .vt-freshness__refresh:disabled { color: var(--ink-3); cursor: not-allowed; }
+
+/* My Trips: a group holding a single trip spans the row as a horizontal card on wider screens, instead of a phone card
+   sitting in half of a two-column grid with empty space beside it. */
+@media (min-width: 640px) {
+  .vt-app .vt-trip-grid:has(> .vt-saved-trip:only-child) { grid-template-columns: minmax(0, 1fr); grid-auto-rows: auto; }
+  .vt-app .vt-saved-trip:only-child { flex-direction: row; min-height: 196px; }
+  .vt-app .vt-saved-trip:only-child .vt-saved-trip__media { flex: 0 0 clamp(200px, 32%, 340px); height: auto; }
+  .vt-app .vt-saved-trip:only-child .vt-saved-trip__image { position: absolute; inset: 0; height: 100%; }
+  .vt-app .vt-saved-trip:only-child .vt-saved-trip__body { padding: 22px 24px; }
+  .vt-app .vt-saved-trip:only-child .vt-saved-trip__aside { grid-auto-flow: column; align-items: center; }
+  .vt-app .vt-saved-trip:only-child .vt-saved-trip__open { align-self: flex-start; width: auto; min-width: 200px; margin-top: auto; }
+}
+
+/* Saved-trip card header: the title and reference get the card's full width when the text area is narrow (status chip
+   and icon buttons move to a row above), names wrap only between words, and references never break mid-code. */
+.vt-app .vt-saved-trip__body { container-type: inline-size; container-name: saved-trip; }
+.vt-app .vt-saved-trip__header h3 { overflow-wrap: break-word; }
+.vt-app .vt-saved-trip__header > div:first-child > p:last-child { overflow: hidden; overflow-wrap: normal; white-space: nowrap; text-overflow: ellipsis; }
+@container saved-trip (max-width: 460px) {
+  .vt-app .vt-saved-trip__header { grid-template-columns: minmax(0, 1fr); }
+  .vt-app .vt-saved-trip__aside { order: -1; grid-auto-flow: column; align-items: center; justify-content: space-between; justify-items: start; }
+}
+@media (min-width: 640px) {
+  .vt-app .vt-saved-trip:only-child .vt-saved-trip__media { flex-basis: clamp(160px, 28%, 320px); }
+}
+
+/* Returned-trip thank-you card: the same card, header and rhythm as the other Home sections. */
+.vt-app .vt-returned-card { margin: 24px var(--vt-flat-gutter) 0; padding: var(--card-pad); border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-card); }
+body.vt .vt-app .vt-returned-card { padding: 16px; }
+.vt-app .vt-returned-card__lead { max-width: 62ch; margin: 8px 0 0; color: var(--ink-2); font-size: .95rem; line-height: 1.5; }
+.vt-app .vt-returned-card__actions { display: grid; gap: 10px; margin-top: 16px; }
+@media (min-width: 640px) { .vt-app .vt-returned-card__actions { grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); } }
+.vt-app .vt-returned-card__gallery { display: flex; gap: 8px; margin-top: 16px; overflow-x: auto; scroll-snap-type: x mandatory; }
+.vt-app .vt-returned-card__gallery img { flex: 0 0 auto; width: 208px; height: 128px; border-radius: var(--r-s, 12px); object-fit: cover; scroll-snap-align: center; }
+:root[data-theme="dark"] .vt-app .vt-returned-card { border-color: var(--card-border); box-shadow: var(--shadow-card); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .vt-app .vt-returned-card { border-color: var(--card-border); } }
+.vt-app .vt-home-footer__contacts strong.vt-email { overflow-wrap: break-word; }

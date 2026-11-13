@@ -48,10 +48,14 @@
           </div>
         </section>
       } @else {
+        @if (isReturned(currentTrip.stage) && currentTrip.freshness.status === 'fresh') {
+          <p class="vt-freshness vt-freshness--quiet"><span>Updated {{ currentTrip.freshness.sourceUpdatedAt | europeanDate: 'dateTime' }}</span><button type="button" class="vt-freshness__refresh" [disabled]="refreshing() || !online()" (click)="refreshCurrentTrip()">{{ refreshing() ? 'Refreshing…' : 'Refresh' }}</button></p>
+        } @else {
         <aside class="vt-freshness vt-trip-status-card" [class.vt-freshness--fresh]="currentTrip.freshness.status === 'fresh'" [class.vt-freshness--stale]="currentTrip.freshness.status === 'stale'" [class.vt-freshness--offline]="currentTrip.freshness.status === 'offline'">
           <div class="vt-trip-status-card__copy"><span class="vt-trip-status-card__indicator" aria-hidden="true"></span><div><strong>{{ currentTrip.freshness.status === 'fresh' ? 'Trip up to date' : currentTrip.freshness.status === 'offline' ? 'Offline — showing saved trip' : 'Trip may be out of date' }}</strong><div>Last updated {{ currentTrip.freshness.sourceUpdatedAt | europeanDate: 'dateTime' }}</div></div></div>
           <button type="button" class="vt-trip-status-card__refresh" [disabled]="refreshing() || !online()" (click)="refreshCurrentTrip()">{{ refreshing() ? 'Refreshing…' : 'Refresh' }}</button>
         </aside>
+        }
       }
       @if (verificationNeeded() && !signedOut()) {
         <section class="vt-status-card vt-step-up" role="status" aria-labelledby="step-up-title">
@@ -76,17 +80,19 @@
         </section>
       }
       @if (activeView() === 'home') {
-        <article class="vt-hero" [class.has-image]="currentTrip.summary.heroImageUrl">
+        <article class="vt-hero" [class.has-image]="currentTrip.summary.heroImageUrl" [class.vt-hero--returned]="isReturned(currentTrip.stage)">
           @if (currentTrip.summary.heroImageUrl) { <img class="vt-hero__img" [src]="heroSource(currentTrip.summary, 800)" [attr.srcset]="img.srcset(currentTrip.summary.heroImage)" [attr.sizes]="img.sizes.hero" [attr.width]="currentTrip.summary.heroImage?.width ?? null" [attr.height]="currentTrip.summary.heroImage?.height ?? null" alt="" decoding="async" fetchpriority="high" /> }
-          <div class="vt-hero__body"><p class="vt-hero__kicker">{{ stageLabel(currentTrip.stage) }}</p><h1 class="vt-hero__title">{{ currentTrip.summary.name }}</h1><p class="vt-hero__sub">{{ currentTrip.summary.reference }} · {{ (currentTrip.summary.departureDate | europeanDate) || 'Dates to be confirmed' }}@if (currentTrip.summary.returnDate) { — {{ currentTrip.summary.returnDate | europeanDate }} }</p>
-            <ul class="vt-hero__facts" role="list">@for (type of currentTrip.summary.holidayTypes; track type) { <li>{{ type }}</li> }@if (currentTrip.summary.durationDays !== null) { <li>{{ currentTrip.summary.durationDays }} nights</li> }</ul>
-            <p class="vt-small">{{ storedSecurely() ? (savedInBrowser ? 'Saved in this browser for offline viewing.' : 'Saved securely on this device.') : 'This trip has not been saved for offline viewing.' }}</p>
-            <div class="vt-hero__actions"><button type="button" class="vt-hero__calendar" [disabled]="creatingCalendar()" (click)="downloadCalendar()"><vt-icon name="calendar" [size]="18" /> {{ creatingCalendar() ? 'Preparing…' : 'Add to calendar' }}</button></div>
+          <div class="vt-hero__body"><p class="vt-hero__kicker">{{ heroKicker(currentTrip) }}</p><h1 class="vt-hero__title">{{ currentTrip.summary.name }}</h1><p class="vt-hero__sub">{{ currentTrip.summary.reference }} · {{ tripDates(currentTrip.summary) }}</p>
+            <ul class="vt-hero__facts" role="list">@for (type of currentTrip.summary.holidayTypes; track type) { <li>{{ type }}</li> }@if (nightsLabel(currentTrip.summary.durationDays); as nights) { <li>{{ nights }}</li> }</ul>
+            @if (!isReturned(currentTrip.stage)) {
+              <p class="vt-small">{{ storedSecurely() ? (savedInBrowser ? 'Saved in this browser for offline viewing.' : 'Saved securely on this device.') : 'This trip has not been saved for offline viewing.' }}</p>
+              @if (currentTrip.stage !== 'cancelled') { <div class="vt-hero__actions"><button type="button" class="vt-hero__calendar" [disabled]="creatingCalendar()" (click)="downloadCalendar()"><vt-icon name="calendar" [size]="18" /> {{ creatingCalendar() ? 'Preparing…' : 'Add to calendar' }}</button></div> }
+            }
             @if (calendarError()) { <section class="vt-status-card vt-retry" data-tone="warn" role="alert"><span class="vt-status-card__icon" aria-hidden="true"><vt-icon name="alert" [size]="20" /></span><div class="vt-status-card__copy"><strong>Calendar file not created</strong><p>{{ calendarError() }}</p><button type="button" class="vt-status-card__action" [disabled]="creatingCalendar()" (click)="downloadCalendar()">Try again</button></div></section> }
           </div>
         </article>
         <app-stage-experience-section [trip]="currentTrip" [external]="externalContent()" (planNext)="planNextTrip()" />
-        @if (currentTrip.bookingJourney; as journey) { <app-booking-journey-section [journey]="journey" [related]="relatedQuotations()" [openingId]="openingRelatedId()" (enquire)="enquireAboutExtra($event)" (open)="openRelatedQuotation($event)" /> }
+        @if (currentTrip.bookingJourney; as journey) { <app-booking-journey-section [journey]="journey" [stage]="currentTrip.stage" [related]="relatedQuotations()" [openingId]="openingRelatedId()" (enquire)="enquireAboutExtra($event)" (open)="openRelatedQuotation($event)" /> }
         @if (acceptanceComplete()) {
           <section class="vt-accept-card vt-accept-card--done" aria-labelledby="accept-done-title">
             <div class="vt-accept-done">
@@ -139,7 +145,7 @@
             </form>
           </section>
         }
-        @if (currentTrip.timeline.nextItemTitle || currentTrip.timeline.daysUntilDeparture !== null) {
+        @if (!isReturned(currentTrip.stage) && (currentTrip.timeline.nextItemTitle || currentTrip.timeline.daysUntilDeparture !== null)) {
           <section class="vt-home-info-card vt-home-up-next"><p class="vt-home-info-card__kicker">Up next</p><h2>{{ currentTrip.timeline.nextItemTitle || 'Your trip is coming up' }}</h2>@if (currentTrip.timeline.nextItemDate) { <p class="vt-home-up-next__date">{{ currentTrip.timeline.nextItemDate | europeanDate }}{{ currentTrip.timeline.nextItemTime ? ' at ' + currentTrip.timeline.nextItemTime : '' }}</p> }@if (currentTrip.timeline.daysUntilDeparture !== null && currentTrip.timeline.daysUntilDeparture > 0) { <p class="vt-home-up-next__countdown">{{ currentTrip.timeline.daysUntilDeparture }} days until departure</p> }</section>
         }
         @if (currentTrip.experience.overview || currentTrip.experience.personalisedMessage) {
@@ -148,7 +154,7 @@
         @if (currentTrip.stage === 'cancelled') { <section class="vt-section vt-notice vt-notice--bad"><p class="font-semibold">This booking has been cancelled.</p>@if (currentTrip.bookingStatus.cancellationReason) { <p class="mt-2 text-sm">{{ currentTrip.bookingStatus.cancellationReason }}</p> }</section> }
         @if (currentTrip.travellers.length) {
           <section class="vt-travellers-card" aria-labelledby="travellers-title">
-            <header class="vt-lower-section__header"><p>Your party</p><h2 id="travellers-title">Travelling</h2></header>
+            <header class="vt-lower-section__header"><p>Your party</p><h2 id="travellers-title">{{ isReturned(currentTrip.stage) ? 'Travelled' : 'Travelling' }}</h2></header>
             <ul class="vt-traveller-list">@for (traveller of currentTrip.travellers; track traveller.name) { <li><span class="vt-traveller-list__icon"><vt-icon name="user" [size]="16" /></span><span>{{ traveller.name }}</span></li> }</ul>
           </section>
         }
@@ -240,7 +246,7 @@
                 <div class="vt-saved-trip__media" aria-hidden="true">@if (saved.snapshot.summary.heroImageUrl) { <img class="vt-saved-trip__image" [src]="heroSource(saved.snapshot.summary, 360)" [attr.srcset]="img.srcset(saved.snapshot.summary.heroImage)" [attr.sizes]="img.sizes.card" alt="" loading="lazy" decoding="async" (error)="hideBrokenTripImage($event)" /> }</div>
                 <div class="vt-saved-trip__body">
                   <header class="vt-saved-trip__header">
-                    <div>@if (multipleBrands()) { <p class="vt-saved-trip__brand">{{ saved.snapshot.brand.name }}</p> }<h3>{{ saved.snapshot.summary.name }}</h3><p>{{ saved.snapshot.summary.reference }}</p></div>
+                    <div>@if (multipleBrands()) { <p class="vt-saved-trip__brand">{{ saved.snapshot.brand.name }}</p> }<h3>{{ saved.snapshot.summary.name }}</h3><p [attr.title]="saved.snapshot.summary.reference">{{ saved.snapshot.summary.reference }}</p></div>
                     <div class="vt-saved-trip__aside">
                       <span class="vt-saved-trip__status" [class.vt-saved-trip__status--danger]="saved.snapshot.stage === 'cancelled' || saved.snapshot.stage === 'quote_expired'">{{ stageLabel(saved.snapshot.stage) }}</span>
                       <div class="vt-saved-trip__utilities">
@@ -249,7 +255,7 @@
                       </div>
                     </div>
                   </header>
-                  <p class="vt-saved-trip__dates">{{ (saved.snapshot.summary.departureDate | europeanDate) || 'Dates to be confirmed' }}@if (saved.snapshot.summary.returnDate) { — {{ saved.snapshot.summary.returnDate | europeanDate }} }</p>
+                  <p class="vt-saved-trip__dates">{{ tripDates(saved.snapshot.summary) }}</p>
                   <p class="vt-saved-trip__freshness" [class.is-fresh]="tripRefreshStates()[saved.snapshot.tripId] === 'fresh'" [class.is-error]="tripRefreshStates()[saved.snapshot.tripId] === 'error' || !saved.session">{{ refreshStateLabel(saved) }}</p>
                   <button type="button" class="vt-primary-action vt-saved-trip__open" (click)="openSavedTrip(saved)">Open trip <vt-icon name="arrow-right" [size]="18" /></button>
                 </div>
@@ -264,7 +270,7 @@
                 <div class="vt-saved-trip__media" aria-hidden="true">@if (saved.snapshot.summary.heroImageUrl) { <img class="vt-saved-trip__image" [src]="heroSource(saved.snapshot.summary, 360)" [attr.srcset]="img.srcset(saved.snapshot.summary.heroImage)" [attr.sizes]="img.sizes.card" alt="" loading="lazy" decoding="async" (error)="hideBrokenTripImage($event)" /> }</div>
                 <div class="vt-saved-trip__body">
                   <header class="vt-saved-trip__header">
-                    <div>@if (multipleBrands()) { <p class="vt-saved-trip__brand">{{ saved.snapshot.brand.name }}</p> }<h3>{{ saved.snapshot.summary.name }}</h3><p>{{ saved.snapshot.summary.reference }}</p></div>
+                    <div>@if (multipleBrands()) { <p class="vt-saved-trip__brand">{{ saved.snapshot.brand.name }}</p> }<h3>{{ saved.snapshot.summary.name }}</h3><p [attr.title]="saved.snapshot.summary.reference">{{ saved.snapshot.summary.reference }}</p></div>
                     <div class="vt-saved-trip__aside">
                       <span class="vt-saved-trip__status vt-saved-trip__status--past">{{ stageLabel(saved.snapshot.stage) }}</span>
                       <div class="vt-saved-trip__utilities">
@@ -273,7 +279,7 @@
                       </div>
                     </div>
                   </header>
-                  <p class="vt-saved-trip__dates">{{ (saved.snapshot.summary.departureDate | europeanDate) || 'Date unavailable' }}@if (saved.snapshot.summary.returnDate) { — {{ saved.snapshot.summary.returnDate | europeanDate }} }</p>
+                  <p class="vt-saved-trip__dates">{{ tripDates(saved.snapshot.summary, 'Date unavailable') }}</p>
                   <p class="vt-saved-trip__freshness" [class.is-fresh]="tripRefreshStates()[saved.snapshot.tripId] === 'fresh'" [class.is-error]="tripRefreshStates()[saved.snapshot.tripId] === 'error' || !saved.session">{{ refreshStateLabel(saved) }}</p>
                   <button type="button" class="vt-primary-action vt-saved-trip__open" (click)="openSavedTrip(saved)">Open trip <vt-icon name="arrow-right" [size]="18" /></button>
                 </div>

@@ -45,3 +45,20 @@ describe('BookingJourneySection quotation comparison', () => {
     expect(actions[0].querySelector('vt-icon')).not.toBeNull();
   });
 });
+
+describe('BookingJourneySection heading', () => {
+  const heading = (stage: string | null) => {
+    const fixture = TestBed.createComponent(BookingJourneySection);
+    fixture.componentRef.setInput('journey', journey);
+    fixture.componentRef.setInput('stage', stage);
+    fixture.detectChanges();
+    return (fixture.nativeElement as HTMLElement).querySelector('#booking-journey-title')?.textContent?.trim();
+  };
+
+  it('looks back after the trip and ahead before it', () => {
+    expect(heading('past')).toBe('From booking to home');
+    expect(heading('home')).toBe('From booking to home');
+    expect(heading('countdown')).toBe('What happens next');
+    expect(heading(null)).toBe('What happens next');
+  });
+});

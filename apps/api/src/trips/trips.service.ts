@@ -306,12 +306,16 @@ function mapBookingJourney(input: {
   const balanceKnown = input.payments?.balance !== null && input.payments?.balance !== undefined;
   const balanceDone = !input.payments || (balanceKnown && input.payments.balance! <= 0);
   const balanceDate = input.payments?.balanceDueDate ?? input.payments?.nextDueDate ?? null;
+  // Once the trip has started, the before-travel steps have happened whether or not the agent ticked them in Airtable.
+  // The balance and the post-trip follow-up still reflect real data.
+  const travelled = TRAVELLED_STAGES.includes(input.stage);
+  const returned = RETURNED_STAGES.includes(input.stage);
   const raw = [
-    { id: 'confirmation' as const, title: 'Confirmation', description: 'We confirm every part of your booking with the suppliers.', date: null, done: input.tasks.confirmation || !['quote', 'quote_expired'].includes(input.stage) },
+    { id: 'confirmation' as const, title: 'Confirmation', description: 'We confirm every part of your booking with the suppliers.', date: null, done: input.tasks.confirmation || travelled || !['quote', 'quote_expired'].includes(input.stage) },
     { id: 'balance' as const, title: 'Balance payment', description: balanceDone ? 'Your booking balance is paid.' : balanceKnown ? `Your remaining balance is ${formatMoney(input.payments?.balance, input.payments?.currency ?? 'GBP')}.` : 'Your travel agent will confirm your remaining balance.', date: balanceDate, done: balanceDone },
-    { id: 'reconfirmation' as const, title: 'Reconfirmation', description: 'We recheck the important arrangements shortly before travel.', date: shiftDate(input.departure, -14), done: input.tasks.reconfirmed },
-    { id: 'documents' as const, title: 'Travel documents', description: 'Your final documents are prepared and added to your travel wallet.', date: shiftDate(input.departure, -10), done: input.tasks.travelDocuments },
-    { id: 'pre_departure_call' as const, title: 'Pre-departure call', description: 'Your travel expert checks that you are ready and answers final questions.', date: shiftDate(input.departure, -3), done: input.tasks.preDepartureCall },
+    { id: 'reconfirmation' as const, title: 'Reconfirmation', description: 'We recheck the important arrangements shortly before travel.', date: shiftDate(input.departure, -14), done: input.tasks.reconfirmed || travelled },
+    { id: 'documents' as const, title: 'Travel documents', description: 'Your final documents are prepared and added to your travel wallet.', date: shiftDate(input.departure, -10), done: input.tasks.travelDocuments || travelled },
+    { id: 'pre_departure_call' as const, title: 'Pre-departure call', description: 'Your travel expert checks that you are ready and answers final questions.', date: shiftDate(input.departure, -3), done: input.tasks.preDepartureCall || travelled },
     { id: 'post_trip_follow_up' as const, title: 'Post-trip follow-up', description: 'We get in touch after you return to hear how everything went.', date: shiftDate(input.returns, 5), done: input.tasks.followUp },
   ];
   const firstIncomplete = raw.findIndex((step) => !step.done);
@@ -320,9 +324,13 @@ function mapBookingJourney(input: {
   const hasStay = input.itinerary.some((item) => item.kind === 'stay');
   const hasCruise = input.itinerary.some((item) => item.kind === 'cruise');
   const has = (kind: ItineraryKind) => input.itinerary.some((item) => item.kind === kind);
+  const owesBalance = Boolean(input.payments && (!balanceKnown || input.payments.balance! > 0));
+  const balanceFaq = { id: 'balance', question: 'When is my balance due?', answer: balanceDate ? `Your current balance due date is ${balanceDate}. The Payments screen shows the latest amount and payment options.` : 'Open the Payments screen for the latest balance, or ask your travel expert to confirm the due date.' };
+  // After the trip only an outstanding balance can still matter (contact details are on the Home screen). No add-ons.
+  if (returned) return { steps, faqs: owesBalance ? [balanceFaq] : [], suggestedExtras: [] };
   const faqs: TripSnapshot['bookingJourney']['faqs'] = [
     { id: 'changes', question: 'Can I make changes to this trip?', answer: input.stage === 'quote' ? 'Yes. Ask your travel expert before accepting and they can revise the quotation, subject to availability.' : 'Ask your travel expert as soon as possible. Supplier availability, amendment charges and fare rules may apply.' },
-    ...(input.payments && (!balanceKnown || input.payments.balance! > 0) ? [{ id: 'balance', question: 'When is my balance due?', answer: balanceDate ? `Your current balance due date is ${balanceDate}. The Payments screen shows the latest amount and payment options.` : 'Open the Payments screen for the latest balance, or ask your travel expert to confirm the due date.' }] : []),
+    ...(owesBalance ? [balanceFaq] : []),
     { id: 'documents', question: 'When will I receive my travel documents?', answer: input.tasks.travelDocuments ? 'Your available documents are already in the Documents wallet.' : 'Final documents are normally added after supplier reconfirmation, usually around 7–14 days before departure.' },
     ...(hasFlight ? [{ id: 'flight', question: 'What if my flight time changes?', answer: 'The airline or your travel expert will confirm material schedule changes. Live operational updates also appear in the app when the provider is configured.' }] : []),
     { id: 'help', question: 'Who do I contact if I need help?', answer: 'Use Help to message your travel expert. While travelling, the emergency contact is shown prominently on your Today screen.' },
@@ -340,6 +348,9 @@ function mapBookingJourney(input: {
   if ((input.itinerary.length > 0) && !['departure', 'travelling', 'returning', 'home', 'past'].includes(input.stage)) add('extra_nights', 'Extra nights', 'Extend the trip before departure or after your main itinerary.');
   return { steps, faqs, suggestedExtras: suggestions };
 }
+
+const TRAVELLED_STAGES: ReadonlyArray<TripSnapshot['stage']> = ['departure', 'travelling', 'returning', 'home', 'past', 'closed'];
+const RETURNED_STAGES: ReadonlyArray<TripSnapshot['stage']> = ['home', 'past', 'closed'];
 
 function shiftDate(value: string | null, days: number): string | null {
   if (!value) return null;

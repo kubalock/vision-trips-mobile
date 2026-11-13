@@ -1,4 +1,4 @@
-import { Component, OnInit, input } from '@angular/core';
+import { Component, OnInit, computed, input } from '@angular/core';
 import type { TripSnapshot } from '@vision-trips/contracts';
 import { PhotoGallery } from '../../shared/photo-gallery';
 import { VtIcon, type VtIconName } from '../../shared/lucide-icon';
@@ -6,7 +6,9 @@ import { VtIcon, type VtIconName } from '../../shared/lucide-icon';
 @Component({
   selector: 'app-brand-support-section', imports: [PhotoGallery, VtIcon],
   template: `
+    @if (!returned()) {
     <section class="vt-value-props" aria-labelledby="value-props-title"><header class="vt-lower-section__header"><p>Travel with confidence</p><h2 id="value-props-title">Why you can relax</h2></header><ul class="vt-value-props__grid">@for (item of trip().brand.profile.reassurance; track item.title; let i = $index) { <li><span class="vt-value-props__icon"><vt-icon [name]="reassuranceIcon(i)" [size]="21" /></span><span><strong>{{ item.title }}</strong><small>{{ item.text }}</small></span></li> }</ul></section>
+    }
     @if (trip().brand.profile.whyBook.length || trip().brand.profile.about) { <section class="vt-why-book-card" aria-labelledby="why-book-title"><header class="vt-lower-section__header"><p>Your travel agency</p><h2 id="why-book-title">Why book with {{ trip().brand.name }}</h2></header>@if (trip().brand.profile.about) { <div class="vt-why-book-card__bio"><p>{{ trip().brand.profile.about }}</p></div> }@if (trip().brand.profile.whyBook.length) { <div class="vt-why-book-card__reasons">@for (reason of trip().brand.profile.whyBook; track reason.title; let i = $index) { <article><span>{{ i + 1 }}</span><div><h3>{{ reason.title }}</h3>@if (reason.text) { <p>{{ reason.text }}</p> }</div></article> }</div> }@if (reviewUrl()) { <a class="vt-why-book-card__review" [href]="reviewUrl()" target="_blank" rel="noopener">See what our customers say <vt-icon name="external" [size]="15" /></a> }</section> }
     @if (trip().brand.profile.teamPhotoUrl) { <section class="vt-section overflow-hidden rounded-3xl bg-white ring-1 ring-slate-200"><div class="grid md:grid-cols-2"><img class="h-full min-h-64 w-full object-cover" [src]="trip().brand.profile.teamPhotoUrl" [alt]="'The team at ' + trip().brand.name" loading="lazy" decoding="async" /><div class="p-6 md:p-8"><p class="text-xs font-semibold uppercase tracking-widest text-teal-700">Your travel experts</p><h2 class="mt-2 text-2xl font-semibold">Real people, here when you need us</h2><p class="mt-3 leading-7 text-slate-600">{{ trip().experience.agentName ? trip().experience.agentName + ' and the wider team' : 'Our team' }} will look after your journey from planning through to your return home.</p></div></div></section> }
     @if (trip().summary.gallery.length || trip().brand.profile.gallery.length) { <section class="vt-inspiration" aria-labelledby="inspiration-title"><header class="vt-lower-section__header"><p>Dream a little</p><h2 id="inspiration-title">Travel inspiration</h2></header><div class="vt-inspiration-gallery"><app-photo-gallery [photos]="combinedGallery()" [showCaptions]="true" /></div></section> }
@@ -17,7 +19,7 @@ import { VtIcon, type VtIconName } from '../../shared/lucide-icon';
         </div>
         <div class="vt-home-footer__contacts">
           @if (trip().support.phone) { <a [href]="'tel:' + trip().support.phone"><span><vt-icon name="phone" [size]="19" /></span><span><small>Call us</small><strong>{{ trip().support.phone }}</strong></span></a> }
-          @if (trip().support.email) { <a [href]="'mailto:' + trip().support.email"><span><vt-icon name="mail" [size]="19" /></span><span><small>Email us</small><strong>{{ trip().support.email }}</strong></span></a> }
+          @if (trip().support.email; as email) { <a [href]="'mailto:' + email"><span><vt-icon name="mail" [size]="19" /></span><span><small>Email us</small><strong class="vt-email">@for (part of emailParts(email); track $index) {@if ($index) {<wbr />}{{ part }}}</strong></span></a> }
           @if (trip().support.whatsappUrl) { <a [href]="trip().support.whatsappUrl" target="_blank" rel="noopener"><span><vt-icon name="message" [size]="19" /></span><span><small>WhatsApp</small><strong>Start a conversation</strong></span></a> }
           @if (trip().brand.profile.address) { @if (trip().brand.profile.mapUrl) { <a [href]="trip().brand.profile.mapUrl" target="_blank" rel="noopener"><span><vt-icon name="map-pin" [size]="19" /></span><span><small>Visit us</small><strong>{{ trip().brand.profile.address }}</strong></span></a> } @else { <div><span><vt-icon name="map-pin" [size]="19" /></span><span><small>Visit us</small><strong>{{ trip().brand.profile.address }}</strong></span></div> } }
         </div>
@@ -28,6 +30,10 @@ import { VtIcon, type VtIconName } from '../../shared/lucide-icon';
 })
 export class BrandSupportSection implements OnInit {
   readonly trip = input.required<TripSnapshot>();
+  /** After the trip, the "Why you can relax" travel reassurance no longer applies. */
+  protected readonly returned = computed(() => ['home', 'past', 'closed'].includes(this.trip().stage));
+  /** Splits an address so a narrow screen breaks it after "@" or before a dot, never mid-word. */
+  protected emailParts(email: string): string[] { return email.split(/(?=@|\.)/); }
   reassuranceIcon(index: number): VtIconName { return (['compass', 'circle-dot', 'badge-check', 'phone-call'] as const)[index % 4]; }
   ngOnInit(): void { const profile = this.trip().brand.profile; profile.whyBook ??= []; profile.gallery ??= []; profile.reassurance ??= [{ title: 'Your own travel expert', text: 'Personal support throughout your journey' }, { title: 'Built around you', text: 'Tailored, not off the shelf' }]; profile.footerImages ??= []; }
   reviewUrl(): string | null { return this.trip().brand.profile.reviewLinks.find((link) => link.provider === 'google')?.url ?? this.trip().brand.profile.reviewLinks[0]?.url ?? null; }
