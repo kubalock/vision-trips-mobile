@@ -1,4 +1,4 @@
-import { Component, HostListener, OnDestroy, OnInit, computed, effect, inject, isDevMode, signal } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, PendingTasks, computed, effect, inject, isDevMode, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
@@ -30,10 +30,13 @@ import { CustomerAccountSection } from './features/account/customer-account-sect
 import { BrandSupportSection } from './features/trip/brand-support-section';
 import { InvitationFlow } from './features/invitation/invitation-flow';
 import { VtIcon, type VtIconName } from './shared/lucide-icon';
+import { VtLogoMark } from './shared/logo-mark';
 import { brandPalette } from './shared/brand-palette';
 import { EuropeanDatePipe, formatEuropeanDate } from './shared/european-date.pipe';
 import { isReturnedStage, monthYear, nightsText, stageLabel, tripDateRange } from './shared/trip-format';
 
+/** The start-up screen never stays longer than this, even if storage or the network hangs. */
+const STARTUP_TIMEOUT_MS = 8_000;
 type AppView = 'home' | 'itinerary' | 'payments' | 'documents' | 'help' | 'account';
 type TripRefreshState = 'idle' | 'refreshing' | 'fresh' | 'stale' | 'offline' | 'error' | 'signed_out';
 type Appearance = 'light' | 'dark';
@@ -41,7 +44,7 @@ type AppearancePreference = Appearance | 'system';
 
 @Component({
   selector: 'app-root',
-  imports: [BookingJourneySection, BrandSupportSection, CommunicationsSection, CustomerAccountSection, DestinationsSection, DocumentsSection, EuropeanDatePipe, ExtrasSection, ExternalContentSection, InvitationFlow, ItinerarySection, PaymentsSection, StageExperienceSection, VtIcon],
+  imports: [BookingJourneySection, BrandSupportSection, CommunicationsSection, CustomerAccountSection, DestinationsSection, DocumentsSection, EuropeanDatePipe, ExtrasSection, ExternalContentSection, InvitationFlow, ItinerarySection, PaymentsSection, StageExperienceSection, VtIcon, VtLogoMark],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -53,6 +56,7 @@ export class App implements OnInit, OnDestroy {
   private readonly customerNotifications = inject(CustomerNotificationsStore);
   private readonly externalPages = inject(ExternalPages);
   private readonly shareSheet = inject(ShareSheet);
+  private readonly pendingTasks = inject(PendingTasks);
   /** Set when the browser blocked a payment page; the template offers a direct link instead. */
   protected readonly blockedPageUrl = signal<string | null>(null);
   /**
@@ -107,6 +111,13 @@ export class App implements OnInit, OnDestroy {
   protected readonly showTripLibrary = signal(false);
   /** The open trip's session ended: its saved copy stays readable, but live actions need the trip link again. */
   protected readonly signedOut = signal(false);
+  /**
+   * True until the app knows what to open first (a link, the saved trip, My Trips or the entry screen), so nothing
+   * flashes before it. Shows the same start-up screen as index.html, which covers the time before Angular starts.
+   */
+  protected readonly starting = signal(true);
+  /** The page took a while to load: show the spinner straight away instead of restarting its delay (no blink). */
+  protected readonly bootLate = typeof performance !== 'undefined' && performance.now() > 500;
   /** Saved trips being removed right now (their controls are locked until it finishes). */
   protected readonly removingTrips = signal<ReadonlySet<string>>(new Set());
   protected readonly img = { srcset, sizes: IMAGE_SIZES };
@@ -202,7 +213,7 @@ export class App implements OnInit, OnDestroy {
     // Decide up front which wins at launch: a booking link in the URL beats re-opening the last saved trip.
     const launchLink = tripLinkFromPath(window.location.pathname);
     if (launchLink) void this.openTripLink(launchLink);
-    void this.initializeOfflineState(!launchLink);
+    void this.startUp(!launchLink);
     if (isDevMode() && !launchLink) void this.checkDevInvitation();
     if (Capacitor.isNativePlatform()) {
       // Universal Links / App Links: `appUrlOpen` covers a link opened while the app is running (warm or from the
@@ -651,6 +662,21 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
+  /** Loads saved trips and decides the first screen, then lifts the start-up screen (at most after 8 s, whatever happens). */
+  private async startUp(activateSaved: boolean): Promise<void> {
+    const failSafe = setTimeout(() => this.starting.set(false), STARTUP_TIMEOUT_MS);
+    const done = this.pendingTasks.add(); // The app isn't "stable" (tests, hydration) until the first screen is chosen.
+    try {
+      await this.initializeOfflineState(activateSaved);
+    } catch (error) {
+      console.warn('Start-up could not read saved trips.', error);
+    } finally {
+      clearTimeout(failSafe);
+      this.starting.set(false);
+      done();
+    }
+  }
+
   private async initializeOfflineState(activateSaved = true): Promise<void> {
     const status = await Network.getStatus();
     this.online.set(status.connected);
@@ -664,11 +690,12 @@ export class App implements OnInit, OnDestroy {
     this.setSavedTripList(saved, status.connected);
     if (!activateSaved || !saved.length || this.trip() || this.invitationToken()) return;
     if (saved.length > 1) {
+      this.showTripLibrary.set(true); // Before activating, so the last trip's Home never flashes on the way to My Trips.
       await this.activateSavedTrip(saved[0], false);
-      this.showTripLibrary.set(true);
       return;
     }
-    await this.activateSavedTrip(saved[0], status.connected);
+    // Show the saved copy straight away; the network refresh carries on in the background.
+    await this.activateSavedTrip(saved[0], status.connected, { awaitRefresh: false });
   }
 
   private markFreshness(status: 'stale' | 'offline'): void {
@@ -1068,7 +1095,7 @@ export class App implements OnInit, OnDestroy {
     return generation === this.tripGeneration;
   }
 
-  private async activateSavedTrip(saved: SavedTrip, refresh: boolean): Promise<void> {
+  private async activateSavedTrip(saved: SavedTrip, refresh: boolean, options: { awaitRefresh?: boolean } = {}): Promise<void> {
     const generation = this.beginTrip();
     this.session.set(saved.session);
     this.signedOut.set(!saved.session);
@@ -1082,7 +1109,10 @@ export class App implements OnInit, OnDestroy {
     await this.syncCustomerNotifications(null, snapshot);
     if (refresh) { void this.loadExternalContent(); void this.loadRelatedQuotations(); }
     await this.refreshDocumentStatuses(snapshot, generation);
-    if (refresh && this.isCurrentTrip(generation)) await this.refreshCurrentTrip(false);
+    if (refresh && this.isCurrentTrip(generation)) {
+      const refreshing = this.refreshCurrentTrip(false);
+      if (options.awaitRefresh !== false) await refreshing;
+    }
   }
 
   private async reloadSavedTrips(): Promise<void> {

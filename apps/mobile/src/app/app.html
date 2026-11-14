@@ -2,7 +2,7 @@
   <a class="vt-skip" href="#main-content">Skip to main content</a>
   <header class="vt-top">
     <div class="vt-wrap vt-top__inner">
-      <div class="vt-top__brand">@if (brandLogoUrl(); as logo) { <img class="vt-top__logo" decoding="async" [src]="logo" [alt]="trip()?.brand?.name || 'Vision Trips'" (error)="handleBrandLogoError()" /> } @else { <span class="vt-top__mark">V</span><span class="vt-top__name">{{ trip()?.brand?.name || 'Vision Trips' }}</span> }</div>
+      <div class="vt-top__brand">@if (brandLogoUrl(); as logo) { <img class="vt-top__logo" decoding="async" [src]="logo" [alt]="trip()?.brand?.name || 'Vision Trips'" (error)="handleBrandLogoError()" /> } @else { <span class="vt-top__mark"><vt-logo-mark variant="glyph" /></span><span class="vt-top__name">{{ trip()?.brand?.name || 'Vision Trips' }}</span> }</div>
       <div class="vt-top__meta">
         @if (trip(); as headerTrip) {
           <div class="vt-top__booking">
@@ -39,7 +39,9 @@
       <div class="vt-status-card vt-switch-notice" data-tone="info"><span class="vt-status-card__icon" aria-hidden="true"><vt-icon name="check" [size]="20" /></span><div class="vt-status-card__copy"><p>{{ switchNotice() }}</p></div><button type="button" class="vt-status-card__close" aria-label="Dismiss" (click)="dismissSwitchNotice()"><vt-icon name="close" [size]="18" /></button></div>
     }
 
-    @if (displayedTrip(); as currentTrip) {
+    @if (starting()) {
+      <div class="vt-boot" [class.vt-boot--late]="bootLate" role="status"><svg class="vt-boot__mark" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="16" fill="#0b3b38"/><path d="M32 53C24 44 17 37 17 28a15 15 0 0 1 30 0c0 9-7 16-15 25Z" fill="#fff"/><circle cx="32" cy="28" r="10" fill="#0b3b38"/><path d="M25.5 31.9a6.5 6.5 0 0 1 13 0Z" fill="#ffb35c"/><path d="M21 33.2H43" stroke="#fff" stroke-width="3.2"/></svg><span class="vt-boot__spinner" aria-hidden="true"></span><span class="vt-sr-only">Opening Vision Trips…</span></div>
+    } @else if (displayedTrip(); as currentTrip) {
       @if (signedOut()) {
         <section class="vt-status-card vt-signed-out" data-tone="warn" role="status">
           <span class="vt-status-card__icon" aria-hidden="true"><vt-icon name="alert" [size]="20" /></span>

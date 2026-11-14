@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Vision Trips">
+  <!-- Golden hour: a map pin framing the sun setting on the horizon. -->
+  <rect width="64" height="64" rx="16" fill="#0b3b38"/>
+  <path d="M32 53C24 44 17 37 17 28a15 15 0 0 1 30 0c0 9-7 16-15 25Z" fill="#fff"/>
+  <circle cx="32" cy="28" r="10" fill="#0b3b38"/>
+  <path d="M25.5 31.9a6.5 6.5 0 0 1 13 0Z" fill="#ffb35c"/>
+  <path d="M21 33.2H43" stroke="#fff" stroke-width="3.2"/>
+</svg>

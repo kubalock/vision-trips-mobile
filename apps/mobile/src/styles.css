@@ -1966,3 +1966,7 @@ body.vt .vt-app .vt-account-kicker { font-size: 12px; line-height: 16px; font-we
 @media (min-width: 700px) and (max-width: 999px) {
   .vt-app .vt-channel-grid { grid-template-columns: minmax(0, 1fr); }
 }
+.vt-app .vt-top__mark .vt-logo-mark { width: 100%; height: 100%; }
+.vt-app .vt-top__mark { --vt-logo-bg: var(--vt-accent); }
+/* The pin and horizon stay white in every theme; only the tile takes the agency colour. */
+.vt-app .vt-top__mark .vt-logo-mark { color: #fff; }

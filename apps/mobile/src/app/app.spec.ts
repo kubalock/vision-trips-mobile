@@ -248,6 +248,7 @@ describe('App', () => {
 
     it('signs out of a trip whose session cannot be renewed, keeps the saved copy and stops retrying', async () => {
       const { app, api, fixture } = setup();
+      await fixture.whenStable(); // Let start-up finish reading (empty) storage before this test sets up its trip.
       nativeStorage();
       const store = TestBed.inject(SavedTripsStore);
       const trip = { ...(minimalTrip() as object), tripId: 'trip-1', payments: { paid: 0, items: [] } };
@@ -450,8 +451,9 @@ describe('App', () => {
       expect(app.savedTripList()[0].session.refreshToken).toBe('new-refresh');
     });
 
-    it('shows trip errors on every trip tab', () => {
+    it('shows trip errors on every trip tab', async () => {
       const { app, fixture } = setup();
+      await fixture.whenStable();
       app.trip.set(minimalTrip());
       // The banner sits outside the per-tab @if blocks; these tabs render with a minimal snapshot.
       for (const view of ['itinerary', 'payments', 'documents']) {

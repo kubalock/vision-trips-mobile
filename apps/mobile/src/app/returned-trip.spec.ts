@@ -105,6 +105,7 @@ describe('My trips cards', () => {
 
   it('shows a day trip’s date once on its card', async () => {
     const fixture = TestBed.createComponent(App);
+    await fixture.whenStable();
     const app = fixture.componentInstance as unknown as { savedTripList: { set: (value: unknown) => void }; showTripLibrary: { set: (value: boolean) => void } };
     app.savedTripList.set([{ snapshot: trip('past'), session: null, savedAt: '2026-11-01T00:00:00Z', identityKey: null }]);
     app.showTripLibrary.set(true);

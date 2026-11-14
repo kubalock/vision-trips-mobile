@@ -41,7 +41,17 @@ npm run build:device --workspace @vision-trips/mobile   # bakes in http://<this 
 
 The app sends API requests through Capacitor's native HTTP layer (`CapacitorHttp`), so browser CORS and mixed-content rules don't apply inside it. iOS still blocks plain HTTP to local addresses unless `NSAllowsLocalNetworking` is set in `Info.plist`.
 
-## Customer invitations and sign-in
+## Logo and app icons
+
+The Vision Trips mark, "Golden hour" (a map pin framing an amber sun setting on the horizon: any destination, however you travel there), has one source per use:
+
+- `apps/mobile/public/brand/logo-mark.svg`: the mark on its rounded tile; the app draws the same artwork with `vt-logo-mark` (`apps/mobile/src/app/shared/logo-mark.ts`) and inline on the start-up screen in `index.html`.
+- `apps/mobile/public/favicon.svg` and `favicon.ico`, `brand/apple-touch-icon.png`, `brand/icon-192.png`, `brand/icon-512.png`, `brand/icon-maskable-512.png` and `manifest.webmanifest`: browser tabs, home-screen bookmarks and installed web apps.
+- `apps/mobile/resources/icon.png` (1024×1024, full-bleed) and `icon-maskable.png`, with their SVG sources: for the native apps. After `npx cap add ios` / `npx cap add android`, generate every platform size with `npx @capacitor/assets generate --iconBackgroundColor '#0b3b38'` from `apps/mobile`.
+
+A travel agency's own logo still replaces the mark in the header when its trip is open.
+
+
 
 Customers open a trip from an invitation link (`https://<host>/trip/vt_<token>`) and confirm it's them with a six-digit code emailed to the Customer the agent invited; the trip is then saved in My Trips. Agents create invitations from Airtable (`POST /v1/customer-invitations`, `X-Vision-Key`). The app never asks for Airtable IDs — in development, set `VISION_DEV_BASE_ID`, `VISION_DEV_BOOKING_RECORD_ID` and `VISION_DEV_CUSTOMER_RECORD_ID` in `apps/api/.env` and use **Open development test trip** on the entry screen. Older signed links still find the booking but now ask for an email code. See [docs/customer-app-invitations.md](docs/customer-app-invitations.md) for the Airtable fields and automation, environment variables, migration notes and security model.
 

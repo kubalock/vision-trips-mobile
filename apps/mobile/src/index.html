@@ -10,9 +10,28 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="favicon.ico" sizes="32x32">
+  <link rel="apple-touch-icon" href="brand/apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <script>
+    // Apply a saved light/dark choice before the first paint, so the start-up screen matches the app.
+    try { var appearance = localStorage.getItem('vision-trips:appearance'); if (appearance === 'light' || appearance === 'dark') document.documentElement.dataset.theme = appearance; } catch (e) {}
+  </script>
+  <style>
+    /* Start-up screen: shown here before the app loads, and by the app until it knows which screen to open. */
+    .vt-boot { position: fixed; inset: 0; z-index: 1000; display: grid; place-content: center; justify-items: center; gap: 22px; background: #f4f4f1; }
+    .vt-boot__mark { display: block; width: 64px; height: 64px; }
+    .vt-boot__spinner { width: 26px; height: 26px; border: 3px solid rgba(255, 179, 92, .25); border-top-color: #ffb35c; border-radius: 50%; opacity: 0; animation: vt-boot-in .2s ease .5s forwards, vt-boot-spin .8s linear infinite; }
+    .vt-boot--late .vt-boot__spinner { opacity: 1; animation: vt-boot-spin .8s linear infinite; }
+    @keyframes vt-boot-spin { to { transform: rotate(360deg); } }
+    @keyframes vt-boot-in { to { opacity: 1; } }
+    @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .vt-boot { background: #121415; } }
+    :root[data-theme="dark"] .vt-boot { background: #121415; }
+    @media (prefers-reduced-motion: reduce) { .vt-boot__spinner { animation: vt-boot-in .2s ease .5s forwards, vt-boot-spin 2.4s linear infinite; } }
+  </style>
 </head>
 <body>
-  <app-root></app-root>
+  <app-root><div class="vt-boot" role="status"><svg class="vt-boot__mark" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="16" fill="#0b3b38"/><path d="M32 53C24 44 17 37 17 28a15 15 0 0 1 30 0c0 9-7 16-15 25Z" fill="#fff"/><circle cx="32" cy="28" r="10" fill="#0b3b38"/><path d="M25.5 31.9a6.5 6.5 0 0 1 13 0Z" fill="#ffb35c"/><path d="M21 33.2H43" stroke="#fff" stroke-width="3.2"/></svg><span class="vt-boot__spinner" aria-hidden="true"></span></div></app-root>
 </body>
 </html>
