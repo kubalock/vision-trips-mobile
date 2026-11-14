@@ -1,11 +1,11 @@
 import { Component, computed, effect, input, linkedSignal, output, untracked } from '@angular/core';
 import type { CustomerAccount, CustomerAccountTrip, CustomerPreferences } from '@vision-trips/contracts';
+import { stageLabel, tripDateRange } from '../../shared/trip-format';
 import { VtIcon } from '../../shared/lucide-icon';
-import { EuropeanDatePipe } from '../../shared/european-date.pipe';
 
 @Component({
   selector: 'app-customer-account-section',
-  imports: [EuropeanDatePipe, VtIcon],
+  imports: [VtIcon],
   template: `
     <!-- A reload of an account already on screen keeps it (and any unsaved edits) visible. -->
     @if (loading() && !account()) {
@@ -42,13 +42,15 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
                   <div class="vt-account-trip__topline">
                     <div>
                       <h3>{{ trip.name }}</h3>
-                      <p>{{ trip.reference }}</p>
+                      <p class="vt-account-trip__ref" [attr.title]="trip.reference">{{ trip.reference }}</p>
                     </div>
                     <span class="vt-account-status" [class.vt-account-status--past]="isPastTrip(trip)">{{ tripStatusLabel(trip) }}</span>
                   </div>
-                  <p class="vt-account-trip__dates">{{ (trip.departureDate | europeanDate) || 'Dates to be confirmed' }}@if (trip.returnDate) { — {{ trip.returnDate | europeanDate }} }</p>
+                  <p class="vt-account-trip__dates">{{ dates(trip) }}</p>
                   <p class="vt-account-trip__saved" [class.is-saved]="isSaved(trip)">{{ isSaved(trip) ? 'Saved on this device' : 'Available in your account · not saved on this device' }}</p>
-                  @if (!trip.current) {
+                  @if (trip.current) {
+                    <p class="vt-account-trip__current"><vt-icon name="check" [size]="16" /> You’re viewing this trip</p>
+                  } @else {
                     <button type="button" class="vt-account-trip__action" [disabled]="openingTripId() === trip.accountTripId" [attr.aria-label]="(isSaved(trip) ? 'Open ' : 'Open and save ') + trip.name" (click)="openTrip.emit(trip.accountTripId)">
                       @if (openingTripId() === trip.accountTripId) { Opening… } @else { {{ isSaved(trip) ? 'Open trip' : 'Open and save trip' }} <vt-icon name="arrow-right" [size]="17" /> }
                     </button>
@@ -215,7 +217,9 @@ export class CustomerAccountSection {
   removeAirport(airport: string): void { this.edit((draft) => ({ ...draft, preferredAirports: draft.preferredAirports.filter((item) => item !== airport) })); }
   toggleMonth(month: string, event: Event): void { const checked = (event.target as HTMLInputElement).checked; this.edit((draft) => ({ ...draft, preferredMonths: checked ? [...new Set([...draft.preferredMonths, month])] : draft.preferredMonths.filter((item) => item !== month) })); }
   isPastTrip(trip: CustomerAccountTrip): boolean { return ['closed', 'cancelled', 'home', 'past'].includes(trip.status); }
-  tripStatusLabel(trip: CustomerAccountTrip): string { if (trip.current) return 'Open'; if (this.isPastTrip(trip)) return 'Past'; return trip.status === 'confirmed' ? 'Confirmed' : trip.status.replaceAll('_', ' '); }
+  /** The same customer-facing stage words as My Trips (never internal names such as "countdown"). */
+  tripStatusLabel(trip: CustomerAccountTrip): string { return stageLabel(trip.status); }
+  dates(trip: CustomerAccountTrip): string { return tripDateRange(trip.departureDate, trip.returnDate); }
   submit(event: Event): void {
     event.preventDefault();
     const draft = this.draft();

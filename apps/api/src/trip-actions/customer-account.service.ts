@@ -82,4 +82,19 @@ function mergePreferences(customers: AirtableRecord[]): CustomerPreferences {
 function cleanList(value: unknown, maximum: number, allowed: string[], label: string): string[] { if (!Array.isArray(value)) throw new BadRequestException(`Choose valid ${label}.`); const clean = [...new Set(value.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean))]; if (clean.length > maximum || clean.some((item) => !allowed.includes(item))) throw new BadRequestException(`Choose valid ${label}.`); return clean; }
 function date(value: unknown): string | null { const text = firstString(value); return /^\d{4}-\d{2}-\d{2}/.test(text) ? text.slice(0, 10) : null; }
 function maskEmail(value: string): string { const [local = '', domain = ''] = value.split('@'); return local && domain ? `${local.slice(0, 2)}${'*'.repeat(Math.max(2, local.length - 2))}@${domain}` : ''; }
-function compareTrips(a: CustomerAccountTrip, b: CustomerAccountTrip): number { if (a.current !== b.current) return a.current ? -1 : 1; return (b.departureDate ?? '').localeCompare(a.departureDate ?? ''); }
+/**
+ * The open trip first; then upcoming and in-progress trips (soonest first, undated last), quotations, and finally
+ * past, closed or cancelled trips (most recent first).
+ */
+function compareTrips(a: CustomerAccountTrip, b: CustomerAccountTrip): number {
+  if (a.current !== b.current) return a.current ? -1 : 1;
+  const group = tripGroup(a) - tripGroup(b);
+  if (group) return group;
+  if (tripGroup(a) === 3) return (b.departureDate ?? '').localeCompare(a.departureDate ?? '');
+  return (a.departureDate ?? '9999-12-31').localeCompare(b.departureDate ?? '9999-12-31');
+}
+function tripGroup(trip: CustomerAccountTrip): number {
+  if (['home', 'past', 'closed', 'cancelled'].includes(trip.status)) return 3;
+  if (trip.status === 'quote' || trip.status === 'quote_expired') return 2;
+  return 1;
+}

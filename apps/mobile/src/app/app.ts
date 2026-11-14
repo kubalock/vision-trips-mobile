@@ -32,6 +32,7 @@ import { InvitationFlow } from './features/invitation/invitation-flow';
 import { VtIcon, type VtIconName } from './shared/lucide-icon';
 import { brandPalette } from './shared/brand-palette';
 import { EuropeanDatePipe, formatEuropeanDate } from './shared/european-date.pipe';
+import { isReturnedStage, monthYear, nightsText, stageLabel, tripDateRange } from './shared/trip-format';
 
 type AppView = 'home' | 'itinerary' | 'payments' | 'documents' | 'help' | 'account';
 type TripRefreshState = 'idle' | 'refreshing' | 'fresh' | 'stale' | 'offline' | 'error' | 'signed_out';
@@ -767,18 +768,7 @@ export class App implements OnInit, OnDestroy {
   protected tripDates(summary: TripSnapshot['summary'], unknown?: string): string { return tripDateRange(summary.departureDate, summary.returnDate, unknown); }
   protected nightsLabel(nights: number | null): string | null { return nightsText(nights); }
 
-  protected stageLabel(stage: TripStage): string {
-    if (stage === 'quote') return 'Quotation';
-    if (stage === 'quote_expired') return 'Quote expired';
-    if (stage === 'closed') return 'Closed';
-    if (stage === 'cancelled') return 'Cancelled';
-    if (stage === 'departure') return 'Departure day';
-    if (stage === 'travelling') return 'Travelling';
-    if (stage === 'returning') return 'Returning home';
-    if (stage === 'home') return 'Welcome home';
-    if (stage === 'past') return 'Past trip';
-    return 'Confirmed';
-  }
+  protected stageLabel(stage: TripStage): string { return stageLabel(stage); }
 
   private applyAppearance(appearance: Appearance): void {
     document.documentElement.dataset['theme'] = appearance;
@@ -1414,23 +1404,4 @@ export function switchMessage(previous: { trip: TripSnapshot | null; identityKey
   return '';
 }
 
-export function isReturnedStage(stage: TripStage): boolean { return stage === 'home' || stage === 'past' || stage === 'closed'; }
-
-/** "06/08/2026" for a day trip, "06/08/2026 — 13/08/2026" otherwise; never the same date twice. */
-export function tripDateRange(departure: string | null, returns: string | null, unknown = 'Dates to be confirmed'): string {
-  const from = formatEuropeanDate(departure);
-  if (!from) return unknown;
-  const to = formatEuropeanDate(returns);
-  return to && to !== from ? `${from} — ${to}` : from;
-}
-
-/** "1 night", "7 nights"; nothing for zero or unknown (a day trip shouldn't say "0 nights"). */
-export function nightsText(nights: number | null): string | null {
-  return nights && nights > 0 ? `${nights} ${nights === 1 ? 'night' : 'nights'}` : null;
-}
-
-function monthYear(value: string | null): string {
-  if (!value || !/^\d{4}-\d{2}/.test(value)) return '';
-  const [year, month] = value.split('-').map(Number);
-  return new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month - 1, 1)));
-}
+export { isReturnedStage, nightsText, tripDateRange } from './shared/trip-format';

@@ -129,3 +129,19 @@ describe('CustomerAccountSection trips and sign-out', () => {
     expect([signOut, removeAll]).toEqual([1, 1]);
   });
 });
+
+describe('CustomerAccountSection trip cards', () => {
+  const card = (overrides: Record<string, unknown>) => ({ accountTripId: 'a', tripId: 'trp_a', reference: 'TTA-GREGG-0000429G', name: 'Trip', departureDate: '2026-08-06', returnDate: '2026-08-06', status: 'countdown', heroImageUrl: null, current: false, ...overrides });
+
+  it('uses customer-facing stage words, one date for a day trip, and marks the open trip', () => {
+    const { fixture, element } = setup({ ...account(), trips: [card({ accountTripId: 'cur', current: true, status: 'past' }), card({ accountTripId: 'cd', status: 'countdown', returnDate: '2026-08-13' }), card({ accountTripId: 'q', status: 'quote' })] } as unknown as CustomerAccount);
+    fixture.detectChanges();
+    expect([...element.querySelectorAll('.vt-account-status')].map((chip) => chip.textContent?.trim())).toEqual(['Past trip', 'Confirmed', 'Quotation']);
+    expect([...element.querySelectorAll('.vt-account-trip__dates')].map((line) => line.textContent?.trim())).toEqual(['06/08/2026', '06/08/2026 — 13/08/2026', '06/08/2026']);
+    const current = element.querySelector('.vt-account-trip--current')!;
+    expect(current.querySelector('.vt-account-trip__current')?.textContent).toContain('You’re viewing this trip');
+    expect(current.querySelector('button')).toBeNull();
+    expect(element.querySelector('.vt-account-trip__ref')?.getAttribute('title')).toBe('TTA-GREGG-0000429G');
+  });
+});
+

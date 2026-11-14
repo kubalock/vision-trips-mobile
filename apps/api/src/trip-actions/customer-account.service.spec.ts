@@ -245,3 +245,28 @@ describe('RelatedQuotationsService identity', () => {
     expect(airtable.record).not.toHaveBeenCalled();
   });
 });
+
+describe('CustomerAccountService trip order', () => {
+  beforeEach(() => { process.env.VISION_LINK_SECRET = 'test-secret-at-least-32-characters'; });
+  afterEach(() => { delete process.env.VISION_LINK_SECRET; });
+
+  it('lists the open trip, then upcoming (soonest first, undated last), quotations, then past trips (latest first)', async () => {
+    const future = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+    const ids = ['recTRIPCURRENT001', 'recTRIPPASTOLD001', 'recTRIPPASTNEW001', 'recTRIPSOON000001', 'recTRIPLATER00001', 'recTRIPUNDATED001', 'recTRIPQUOTE00001'];
+    const tables = world();
+    tables[BASE_A].Customers[GRACE].Trips = ids;
+    tables[BASE_A].Bookings = {
+      recTRIPCURRENT001: booking('Current', [GRACE], { 'Departure Date': '2025-01-01', 'Return Date': '2025-01-02' }),
+      recTRIPPASTOLD001: booking('Past old', [GRACE], { 'Departure Date': '2024-05-01', 'Return Date': '2024-05-08' }),
+      recTRIPPASTNEW001: booking('Past new', [GRACE], { 'Departure Date': '2025-06-01', 'Return Date': '2025-06-08' }),
+      recTRIPSOON000001: booking('Soon', [GRACE], { 'Departure Date': future(40), 'Return Date': future(47) }),
+      recTRIPLATER00001: booking('Later', [GRACE], { 'Departure Date': future(400), 'Return Date': future(407) }),
+      recTRIPUNDATED001: booking('Undated', [GRACE], { 'Departure Date': '' }),
+      recTRIPQUOTE00001: booking('Quote', [GRACE], { Status: 'Quotation', 'Departure Date': future(200), 'Quotation Expiry': future(30) }),
+    };
+    const { account } = setup(tables);
+    const result = await account.account(principal({ recordId: 'recTRIPCURRENT001' }));
+    expect(result.trips.map((trip) => trip.name)).toEqual(['Current', 'Soon', 'Later', 'Undated', 'Quote', 'Past new', 'Past old']);
+  });
+});
+

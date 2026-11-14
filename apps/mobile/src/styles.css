@@ -1956,3 +1956,13 @@ body.vt .vt-app .vt-returned-card { padding: 16px; }
 :root[data-theme="dark"] .vt-app .vt-returned-card { border-color: var(--card-border); box-shadow: var(--shadow-card); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .vt-app .vt-returned-card { border-color: var(--card-border); } }
 .vt-app .vt-home-footer__contacts strong.vt-email { overflow-wrap: break-word; }
+
+/* Account page: references stay on one line, the open trip says so instead of leaving an empty card, kickers match
+   the rest of the app, and the three contact channels only sit side by side when there is room for them. */
+.vt-app .vt-account-trip__topline > div { min-width: 0; }
+.vt-app .vt-account-trip__ref { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.vt-app .vt-account-trip__current { display: inline-flex; align-items: center; gap: 6px; margin: auto 0 0; padding-top: 12px; color: var(--vt-accent-text); font-size: .85rem; font-weight: 650; }
+body.vt .vt-app .vt-account-kicker { font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: .05em; }
+@media (min-width: 700px) and (max-width: 999px) {
+  .vt-app .vt-channel-grid { grid-template-columns: minmax(0, 1fr); }
+}
