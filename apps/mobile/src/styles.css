@@ -1970,3 +1970,47 @@ body.vt .vt-app .vt-account-kicker { font-size: 12px; line-height: 16px; font-we
 .vt-app .vt-top__mark { --vt-logo-bg: var(--vt-accent); }
 /* The pin and horizon stay white in every theme; only the tile takes the agency colour. */
 .vt-app .vt-top__mark .vt-logo-mark { color: #fff; }
+
+/* Sign-out cards use the same scale as the other Account controls (the global 20px h2 / 14px p rules outrank the
+   card's own sizes otherwise). */
+body.vt .vt-app .vt-account-danger h2 { margin: 1px 0 0; font-size: 15px; line-height: 20px; font-weight: 650; }
+body.vt .vt-app .vt-account-danger p { margin: 4px 0 0; font-size: 13px; line-height: 18px; }
+body.vt .vt-app .vt-account-danger button { height: 40px; min-height: 40px; padding: 0 16px; font-size: 13px; }
+body.vt .vt-app .vt-account-danger__icon { width: 40px; height: 40px; }
+
+/* Notifications: a panel under the bell, over the current screen. It sits in the sticky header, so it stays in reach
+   wherever the page is scrolled; a backdrop catches outside clicks (lightly dimmed on phones). */
+.vt-app .vt-top__inner { position: relative; }
+.vt-app .vt-top .vt-notifications {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 2;
+  width: min(420px, calc(100vw - 24px)); max-height: calc(100dvh - 92px - var(--nav-h, 0px) - env(safe-area-inset-bottom, 0px));
+  margin: 0; overflow-y: auto; overscroll-behavior: contain;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, .18), 0 2px 8px rgba(0, 0, 0, .08);
+  animation: vt-notifications-in .16s ease-out;
+}
+.vt-app .vt-top .vt-notifications .vt-notifications__list { max-height: none; overflow: visible; }
+.vt-app .vt-notifications-backdrop { position: fixed; inset: 0; z-index: 1; background: transparent; }
+.vt-app .vt-notifications__header h2:focus { outline: none; }
+@keyframes vt-notifications-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@media (max-width: 639px) {
+  .vt-app .vt-top .vt-notifications { right: -4px; left: -4px; width: auto; }
+  .vt-app .vt-notifications-backdrop { background: rgba(0, 0, 0, .28); }
+}
+@media (prefers-reduced-motion: reduce) { .vt-app .vt-top .vt-notifications { animation: none; } }
+
+/* Header: one row that adapts to the width it actually has. The brand and booking text shorten with an ellipsis and
+   never run under the buttons; the reference and status step out when the header is narrow (the trip page shows
+   them), and the agency name follows on very narrow headers, leaving the logo. */
+.vt-app .vt-top__inner { container: vt-top / inline-size; }
+.vt-app .vt-top__brand { flex: 0 1 auto; min-width: 0; }
+.vt-app .vt-top__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vt-app .vt-top__meta { flex: 1 1 auto; min-width: 0; }
+.vt-app .vt-top__booking { flex: 0 1 auto; min-width: 0; overflow: hidden; }
+.vt-app .vt-top__booking .vt-ref { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vt-app .vt-top__actions { flex: 0 0 auto; }
+@container vt-top (max-width: 620px) {
+  .vt-app .vt-top__booking { display: none; }
+}
+@container vt-top (max-width: 400px) {
+  .vt-app .vt-top__brand:has(.vt-top__mark, .vt-top__logo) .vt-top__name { display: none; }
+}

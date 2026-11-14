@@ -113,10 +113,10 @@ function isSession(value: unknown): value is MobileSession {
   return Boolean(session && typeof session === 'object' && typeof session.refreshToken === 'string' && typeof session.accessToken === 'string');
 }
 
-function trustPayload(token: string): { b: string; r: string; c?: string; e: number } | null {
+function trustPayload(token: string): { b: string; r: string; c?: string; k?: string; e: number } | null {
   try {
-    const value = JSON.parse(Buffer.from(token.split('.')[0], 'base64url').toString()) as { b?: unknown; r?: unknown; c?: unknown; e?: unknown };
-    return typeof value.b === 'string' && typeof value.r === 'string' && typeof value.e === 'number' ? { b: value.b, r: value.r, ...(typeof value.c === 'string' ? { c: value.c } : {}), e: value.e } : null;
+    const value = JSON.parse(Buffer.from(token.split('.')[0], 'base64url').toString()) as { b?: unknown; r?: unknown; c?: unknown; k?: unknown; e?: unknown };
+    return typeof value.b === 'string' && typeof value.r === 'string' && typeof value.e === 'number' ? { b: value.b, r: value.r, ...(typeof value.c === 'string' ? { c: value.c } : {}), ...(typeof value.k === 'string' ? { k: value.k } : {}), e: value.e } : null;
   } catch { return null; }
 }
 

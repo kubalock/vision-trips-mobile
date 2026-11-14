@@ -14,6 +14,10 @@ export interface StoredSession {
   /** How the session was established; only `otp` and `trusted_device` may perform sensitive actions. */
   assurance: SessionAssurance;
   invitationId: string | null;
+  /** The verified Customer's account within the base (`account:<Customer Account ID>` or `customer:<record>`). */
+  accountKey: string | null;
+  /** The Customer linked to this booking when it is an explicitly grouped duplicate of the verified Customer. */
+  bookingOwnerCustomerRecordId: string | null;
   refreshHash: string;
   refreshExpiresAt: number;
   accessHash: string;
@@ -24,6 +28,7 @@ export interface StoredSession {
 interface SessionRow {
   id: string; base_id: string; record_id: string; fellow_traveller: number;
   customer_record_id: string | null; assurance: string | null; invitation_id: string | null;
+  account_key: string | null; booking_owner_customer_record_id: string | null;
   refresh_hash: string; refresh_expires_at: number; access_hash: string;
   access_expires_at: number; revoked: number;
 }
@@ -64,6 +69,8 @@ export interface StoredInvitation {
   destinationHash: string | null;
   /** Why the invitation ended early: replaced by a newer one, revoked by the agent, or its email could not be sent. */
   revokedReason: InvitationRevokedReason | null;
+  /** Step-up on a booking linked to an explicitly grouped duplicate: that duplicate (the code still goes to the Customer). */
+  bookingOwnerCustomerRecordId: string | null;
 }
 
 export type InvitationRevokedReason = 'replaced' | 'revoked' | 'delivery_failed';
@@ -84,7 +91,7 @@ interface InvitationRow {
   expires_at: number; sent_at: number | null; accepted_at: number | null; revoked_at: number | null;
   active_key: string | null; idempotency_key: string | null; email_requested: number; reusable: number;
   replaces_session_id: string | null; consuming_until: number | null;
-  destination_hash: string | null; revoked_reason: string | null;
+  destination_hash: string | null; revoked_reason: string | null; booking_owner_customer_record_id: string | null;
 }
 
 interface OtpRow {
@@ -163,6 +170,7 @@ export class DurableAuthStore implements OnModuleDestroy {
     const columns = new Set((this.database.prepare('PRAGMA table_info(customer_invitations)').all() as Array<{ name: string }>).map((column) => column.name));
     if (!columns.has('destination_hash')) this.database.exec('ALTER TABLE customer_invitations ADD COLUMN destination_hash TEXT');
     if (!columns.has('revoked_reason')) this.database.exec('ALTER TABLE customer_invitations ADD COLUMN revoked_reason TEXT');
+    if (!columns.has('booking_owner_customer_record_id')) this.database.exec('ALTER TABLE customer_invitations ADD COLUMN booking_owner_customer_record_id TEXT');
   }
 
   /** Sessions created before invitations have no customer or assurance: they count as `legacy` (no sensitive actions). */
@@ -171,14 +179,16 @@ export class DurableAuthStore implements OnModuleDestroy {
     if (!columns.has('customer_record_id')) this.database.exec('ALTER TABLE auth_sessions ADD COLUMN customer_record_id TEXT');
     if (!columns.has('assurance')) this.database.exec("ALTER TABLE auth_sessions ADD COLUMN assurance TEXT NOT NULL DEFAULT 'legacy'");
     if (!columns.has('invitation_id')) this.database.exec('ALTER TABLE auth_sessions ADD COLUMN invitation_id TEXT');
+    if (!columns.has('account_key')) this.database.exec('ALTER TABLE auth_sessions ADD COLUMN account_key TEXT');
+    if (!columns.has('booking_owner_customer_record_id')) this.database.exec('ALTER TABLE auth_sessions ADD COLUMN booking_owner_customer_record_id TEXT');
   }
 
   putSession(session: StoredSession): void {
     this.cleanup();
     this.database.prepare(`INSERT INTO auth_sessions
-      (id, base_id, record_id, fellow_traveller, customer_record_id, assurance, invitation_id, refresh_hash, refresh_expires_at, access_hash, access_expires_at, revoked)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(session.id, session.baseId, session.recordId, Number(session.fellowTraveller), session.customerRecordId, session.assurance, session.invitationId, session.refreshHash, session.refreshExpiresAt, session.accessHash, session.accessExpiresAt, Number(session.revoked));
+      (id, base_id, record_id, fellow_traveller, customer_record_id, assurance, invitation_id, account_key, booking_owner_customer_record_id, refresh_hash, refresh_expires_at, access_hash, access_expires_at, revoked)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(session.id, session.baseId, session.recordId, Number(session.fellowTraveller), session.customerRecordId, session.assurance, session.invitationId, session.accountKey, session.bookingOwnerCustomerRecordId, session.refreshHash, session.refreshExpiresAt, session.accessHash, session.accessExpiresAt, Number(session.revoked));
   }
 
   sessionByRefreshHash(hash: string): StoredSession | null {
@@ -302,13 +312,13 @@ export class DurableAuthStore implements OnModuleDestroy {
       this.database.prepare(`INSERT INTO customer_invitations
         (id, token_hash, tenant_id, base_id, booking_record_id, customer_record_id, scope, verification, source, created_at, expires_at,
          sent_at, accepted_at, revoked_at, active_key, idempotency_key, email_requested, reusable, replaces_session_id, consuming_until,
-         destination_hash, revoked_reason)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+         destination_hash, revoked_reason, booking_owner_customer_record_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
         invitation.id, invitation.tokenHash, invitation.tenantId, invitation.baseId, invitation.bookingRecordId, invitation.customerRecordId,
         invitation.scope, invitation.verification, invitation.source, invitation.createdAt, invitation.expiresAt, invitation.sentAt,
         invitation.acceptedAt, invitation.revokedAt, invitation.activeKey, invitation.idempotencyKey, Number(invitation.emailRequested),
         Number(invitation.reusable), invitation.replacesSessionId, invitation.consumingUntil,
-        invitation.destinationHash, invitation.revokedReason,
+        invitation.destinationHash, invitation.revokedReason, invitation.bookingOwnerCustomerRecordId,
       );
     });
   }
@@ -415,7 +425,7 @@ export class DurableAuthStore implements OnModuleDestroy {
 }
 
 function mapSession(row: SessionRow | undefined): StoredSession | null {
-  return row ? { id: row.id, baseId: row.base_id, recordId: row.record_id, fellowTraveller: Boolean(row.fellow_traveller), customerRecordId: row.customer_record_id ?? null, assurance: assuranceOf(row.assurance), invitationId: row.invitation_id ?? null, refreshHash: row.refresh_hash, refreshExpiresAt: row.refresh_expires_at, accessHash: row.access_hash, accessExpiresAt: row.access_expires_at, revoked: Boolean(row.revoked) } : null;
+  return row ? { id: row.id, baseId: row.base_id, recordId: row.record_id, fellowTraveller: Boolean(row.fellow_traveller), customerRecordId: row.customer_record_id ?? null, assurance: assuranceOf(row.assurance), invitationId: row.invitation_id ?? null, accountKey: row.account_key ?? null, bookingOwnerCustomerRecordId: row.booking_owner_customer_record_id ?? null, refreshHash: row.refresh_hash, refreshExpiresAt: row.refresh_expires_at, accessHash: row.access_hash, accessExpiresAt: row.access_expires_at, revoked: Boolean(row.revoked) } : null;
 }
 
 function assuranceOf(value: string | null): SessionAssurance {
@@ -431,7 +441,7 @@ function mapInvitation(row: InvitationRow | undefined): StoredInvitation | null 
     createdAt: row.created_at, expiresAt: row.expires_at, sentAt: row.sent_at, acceptedAt: row.accepted_at, revokedAt: row.revoked_at,
     activeKey: row.active_key, idempotencyKey: row.idempotency_key, emailRequested: Boolean(row.email_requested), reusable: Boolean(row.reusable),
     replacesSessionId: row.replaces_session_id, consumingUntil: row.consuming_until,
-    destinationHash: row.destination_hash ?? null, revokedReason: revokedReasonOf(row.revoked_reason),
+    destinationHash: row.destination_hash ?? null, revokedReason: revokedReasonOf(row.revoked_reason), bookingOwnerCustomerRecordId: row.booking_owner_customer_record_id ?? null,
   };
 }
 

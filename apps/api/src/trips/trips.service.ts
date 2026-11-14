@@ -9,7 +9,8 @@ import { themeTokens } from './theme.js';
 export interface InvitationContext {
   tenantId: string | null;
   tripName: string;
-  customer: { email: string; firstName: string | null } | null;
+  /** `accountId` is the Customer's `Customer Account ID` (explicit grouping of duplicate records), when set. */
+  customer: { email: string; firstName: string | null; accountId?: string | null } | null;
   brand: { name: string; logoUrl: string | null; primaryColor: string | null; supportEmail: string | null; supportPhone: string | null };
 }
 
@@ -94,22 +95,28 @@ export class TripsService {
    * its Brand and the Customer (three Airtable reads, not a full snapshot). Throws InvitationTargetError when the
    * Customer is not linked to the Booking or has no usable email address.
    */
-  async invitationContext(baseId: string, bookingRecordId: string, customerRecordId: string | null): Promise<InvitationContext> {
+  async invitationContext(baseId: string, bookingRecordId: string, customerRecordId: string | null, bookingOwnerCustomerRecordId: string | null = null): Promise<InvitationContext> {
     const booking = await this.airtable.record(baseId, 'Bookings', bookingRecordId);
     const brandId = strings(pick(booking.fields, bookingFields.brand))[0] ?? null;
     const linkedCustomers = strings(pick(booking.fields, bookingFields.customers));
-    if (customerRecordId && !linkedCustomers.includes(customerRecordId)) throw new InvitationTargetError('customer_not_linked');
-    const [brand, customer] = await Promise.all([
+    // The verified Customer must be on the booking — or an explicitly grouped duplicate of them must be (checked below).
+    const owner = bookingOwnerCustomerRecordId && bookingOwnerCustomerRecordId !== customerRecordId ? bookingOwnerCustomerRecordId : null;
+    if (customerRecordId && !linkedCustomers.includes(owner ?? customerRecordId)) throw new InvitationTargetError('customer_not_linked');
+    const customersTable = process.env.AIRTABLE_CUSTOMERS_TABLE?.trim() || 'Customers';
+    const [brand, customer, ownerRecord] = await Promise.all([
       brandId ? this.airtable.record(baseId, 'Brands & Branches', brandId).catch(() => emptyRecord()) : Promise.resolve(emptyRecord()),
-      customerRecordId ? this.airtable.record(baseId, process.env.AIRTABLE_CUSTOMERS_TABLE?.trim() || 'Customers', customerRecordId) : Promise.resolve(null),
+      customerRecordId ? this.airtable.record(baseId, customersTable, customerRecordId) : Promise.resolve(null),
+      owner ? this.airtable.record(baseId, customersTable, owner) : Promise.resolve(null),
     ]);
+    const accountId = customer ? firstString(customer.fields['Customer Account ID']) || null : null;
+    if (ownerRecord && (!accountId || firstString(ownerRecord.fields['Customer Account ID']) !== accountId)) throw new InvitationTargetError('customer_not_linked');
     const email = customer ? safeEmail(pick(customer.fields, customerFields.primaryEmail)) ?? safeEmail(pick(customer.fields, customerFields.secondaryEmail)) : null;
     if (customer && !email) throw new InvitationTargetError('customer_email_missing');
     const colour = firstString(pick(brand.fields, brandFields.colour)).trim();
     return {
       tenantId: brandId,
       tripName: safeText(pick(booking.fields, bookingFields.name)) || 'Your trip',
-      customer: customer && email ? { email, firstName: safeText(pick(customer.fields, customerFields.first)) || null } : null,
+      customer: customer && email ? { email, firstName: safeText(pick(customer.fields, customerFields.first)) || null, accountId } : null,
       brand: {
         name: safeText(pick(brand.fields, brandFields.name)) || 'Your travel company',
         logoUrl: safeHttpsUrl(firstAttachmentUrl(pick(brand.fields, brandFields.logo))),

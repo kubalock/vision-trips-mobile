@@ -760,6 +760,7 @@ export class App implements OnInit, OnDestroy {
   }
 
   protected selectView(view: AppView): void {
+    this.closeNotifications(false);
     this.error.set('');
     this.showTripLibrary.set(false);
     this.activeView.set(view);
@@ -1163,19 +1164,30 @@ export class App implements OnInit, OnDestroy {
     this.brandLogoUrl.set(url);
   }
 
+  /**
+   * Notifications open as a panel over the current screen (under the bell, which stays in the sticky header), so they
+   * can be read from anywhere without scrolling or leaving the screen the traveller is on.
+   */
   protected toggleNotifications(): void {
+    if (this.showNotifications()) { this.closeNotifications(); return; }
     const tripId = this.trip()?.tripId;
     if (!tripId) return;
-    if (this.showTripLibrary()) {
-      this.showTripLibrary.set(false);
-      this.activeView.set('home');
-    }
-    const opening = !this.showNotifications();
-    this.showNotifications.set(opening);
-    if (opening) {
-      this.customerNotifications.markAllRead(tripId);
-      this.loadCustomerNotifications(tripId);
-    }
+    this.showNotifications.set(true);
+    this.customerNotifications.markAllRead(tripId);
+    this.loadCustomerNotifications(tripId);
+    requestAnimationFrame(() => document.getElementById('customer-notifications-title')?.focus({ preventScroll: true }));
+  }
+
+  /** Closes the panel and, unless focus has moved elsewhere on purpose, returns it to the bell. */
+  protected closeNotifications(returnFocus = true): void {
+    if (!this.showNotifications()) return;
+    this.showNotifications.set(false);
+    if (returnFocus) requestAnimationFrame(() => document.querySelector<HTMLElement>('[aria-controls="customer-notifications"]')?.focus({ preventScroll: true }));
+  }
+
+  @HostListener('document:keydown.escape')
+  protected onEscape(): void {
+    this.closeNotifications();
   }
 
   protected async toggleDeviceNotifications(event: Event): Promise<void> {

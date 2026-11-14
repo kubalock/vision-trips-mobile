@@ -4,7 +4,7 @@ import { createHmac } from 'node:crypto';
 import { AirtableService, type AirtableRecord } from '../airtable/airtable.service.js';
 import { SessionsService, type SessionPrincipal } from '../sessions/sessions.service.js';
 import { bookingFields, firstAttachmentThumbnail, firstString, numberValue, pick } from '../trips/field-map.js';
-import { accountBookings, resolveCustomerIdentity, type AccountBooking } from './customer-identity.js';
+import { accountBookings, accountTripGrant, resolveCustomerIdentity, type AccountBooking, type CustomerIdentity } from './customer-identity.js';
 import { resolveStage } from '../trips/stage.js';
 import { TripsService } from '../trips/trips.service.js';
 
@@ -20,11 +20,12 @@ export class RelatedQuotationsService {
 
   async open(principal: SessionPrincipal, comparisonId: string): Promise<OpenRelatedQuotationResponse> {
     if (principal.fellowTraveller) throw new ForbiddenException('Quotation comparison is only available to the lead customer.');
-    const target = (await this.related(principal)).find((booking) => this.id(principal.baseId, booking.record.id) === comparisonId);
-    if (!target) throw new NotFoundException('That quotation is no longer available for this customer.');
+    const related = await this.relatedWithIdentity(principal);
+    const target = related?.bookings.find((booking) => this.id(principal.baseId, booking.record.id) === comparisonId);
+    if (!related || !target) throw new NotFoundException('That quotation is no longer available for this customer.');
     const snapshot = await this.trips.snapshot(principal.baseId, target.record.id, 'primary_customer');
-    // Same verified Customer (or the account member the quotation is linked to), same base, same assurance.
-    return { snapshot, session: this.sessions.issue({ baseId: principal.baseId, recordId: target.record.id, fellowTraveller: false, customerRecordId: target.ownerCustomerRecordId, assurance: principal.assurance }) };
+    // Same verified Customer and account, same base, same assurance.
+    return { snapshot, session: this.sessions.issue(accountTripGrant(principal, related.identity, target)) };
   }
 
   /**
@@ -32,12 +33,17 @@ export class RelatedQuotationsService {
    * see none: the Booking's rolled-up email never selects Customer records.
    */
   private async related(principal: SessionPrincipal): Promise<AccountBooking[]> {
-    if (!principal.customerRecordId) return [];
+    return (await this.relatedWithIdentity(principal))?.bookings ?? [];
+  }
+
+  private async relatedWithIdentity(principal: SessionPrincipal): Promise<{ identity: CustomerIdentity; bookings: AccountBooking[] } | null> {
+    if (!principal.customerRecordId) return null;
     const identity = await resolveCustomerIdentity(this.airtable, principal);
-    return (await accountBookings(this.airtable, principal, identity)).filter(({ record }) => {
+    const bookings = (await accountBookings(this.airtable, principal, identity)).filter(({ record }) => {
       const stage = resolveStage(firstString(pick(record.fields, bookingFields.status)), date(pick(record.fields, bookingFields.departure)), date(pick(record.fields, bookingFields.return)), date(pick(record.fields, bookingFields.quoteExpiry)));
       return stage === 'quote' || stage === 'quote_expired';
     }).slice(0, 20);
+    return { identity, bookings };
   }
 
   private summary(principal: SessionPrincipal, record: AirtableRecord): RelatedQuotationSummary {

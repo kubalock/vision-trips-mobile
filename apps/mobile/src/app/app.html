@@ -12,7 +12,7 @@
         }
         <div class="vt-top__actions" aria-label="Trip utilities">
           @if (trip(); as headerTrip) {
-            <button type="button" class="vt-iconbtn relative" [attr.aria-expanded]="showNotifications()" aria-controls="customer-notifications" aria-label="Open notifications" title="Notifications" (click)="toggleNotifications()">
+            <button type="button" class="vt-iconbtn relative" [attr.aria-expanded]="showNotifications()" aria-controls="customer-notifications" aria-haspopup="dialog" aria-label="Open notifications" title="Notifications" (click)="toggleNotifications()">
               <vt-icon class="vt-action-icon" name="bell" />
               @if (unreadNotifications()) { <span class="vt-notification-count" [attr.aria-label]="unreadNotifications() + ' unread notifications'">{{ unreadNotifications() }}</span> }
             </button>
@@ -31,6 +31,15 @@
           </button>
         </div>
       </div>
+      @if (showNotifications()) {
+        <div class="vt-notifications-backdrop" aria-hidden="true" (click)="closeNotifications()"></div>
+        <section id="customer-notifications" class="vt-notifications" role="dialog" aria-modal="false" aria-labelledby="customer-notifications-title">
+          <header class="vt-notifications__header"><div><h2 id="customer-notifications-title" tabindex="-1">Notifications</h2><p>Updates and reminders for this trip</p></div><button type="button" class="vt-notifications__close" aria-label="Close notifications" (click)="closeNotifications()"><vt-icon name="close" [size]="20" /></button></header>
+          <label class="vt-notifications__device"><input type="checkbox" [checked]="deviceNotificationsEnabled()" (change)="toggleDeviceNotifications($event)"><span class="vt-notifications__switch" aria-hidden="true"><span></span></span><span class="vt-notifications__device-copy"><strong>Device notifications</strong><span>Optional alerts on this phone or browser. You can change this permission in device settings.</span></span></label>
+          @if (notifications().length) { <div class="vt-notifications__list">@for (notification of notifications(); track notification.id) { <article class="vt-notification-row" [class.vt-notification-row--alert]="notification.kind === 'balance_reminder'" [class.vt-notification-row--success]="notification.kind === 'payment_received' || notification.kind === 'documents_ready'"><span class="vt-notification-row__icon">@switch (notification.kind) { @case ('payment_received') { <vt-icon name="pound" /> } @case ('documents_ready') { <vt-icon name="files" /> } @case ('departure_reminder') { <vt-icon name="plane" /> } @case ('balance_reminder') { <vt-icon name="alert" /> } @default { <vt-icon name="check" /> } }</span><div><h3>{{ notification.title }}</h3><p>{{ notification.body }}</p><time>{{ notification.createdAt | europeanDate: 'dateTime' }}</time></div></article> }</div> }
+          @else { <p class="vt-notifications__empty">No notifications yet. Payment, document and departure updates will appear here.</p> }
+        </section>
+      }
     </div>
   </header>
   <main id="main-content" class="vt-wrap vt-main" [class.vt-main--home]="displayedTrip() && activeView() === 'home'" [class.vt-main--itinerary]="displayedTrip() && activeView() === 'itinerary'" [class.vt-main--payments]="displayedTrip() && activeView() === 'payments'" [class.vt-main--documents]="displayedTrip() && activeView() === 'documents'" [class.vt-main--help]="displayedTrip() && activeView() === 'help'" [class.vt-main--account]="displayedTrip() && activeView() === 'account'" [class.vt-main--trips]="showTripLibrary()" [class.vt-main--entry]="!displayedTrip() && !showTripLibrary()" tabindex="-1">
@@ -72,14 +81,6 @@
       }
       @if (blockedPageUrl(); as blockedUrl) {
         <div class="vt-notice vt-notice--warn vt-blocked-page" role="status"><p>Your browser blocked the payment page from opening.</p><a class="vt-btn vt-btn--primary vt-primary-action" [href]="blockedUrl" target="_blank" rel="noopener noreferrer" data-engagement="Open blocked payment page" (click)="openBlockedPage()">Open secure payment page</a></div>
-      }
-      @if (showNotifications()) {
-        <section id="customer-notifications" class="vt-notifications" aria-label="Customer notifications">
-          <header class="vt-notifications__header"><div><h2>Notifications</h2><p>Updates and reminders for this trip</p></div><button type="button" class="vt-notifications__close" aria-label="Close notifications" (click)="toggleNotifications()"><vt-icon name="close" [size]="20" /></button></header>
-          <label class="vt-notifications__device"><input type="checkbox" [checked]="deviceNotificationsEnabled()" (change)="toggleDeviceNotifications($event)"><span class="vt-notifications__switch" aria-hidden="true"><span></span></span><span class="vt-notifications__device-copy"><strong>Device notifications</strong><span>Optional alerts on this phone or browser. You can change this permission in device settings.</span></span></label>
-          @if (notifications().length) { <div class="vt-notifications__list">@for (notification of notifications(); track notification.id) { <article class="vt-notification-row" [class.vt-notification-row--alert]="notification.kind === 'balance_reminder'" [class.vt-notification-row--success]="notification.kind === 'payment_received' || notification.kind === 'documents_ready'"><span class="vt-notification-row__icon">@switch (notification.kind) { @case ('payment_received') { <vt-icon name="pound" /> } @case ('documents_ready') { <vt-icon name="files" /> } @case ('departure_reminder') { <vt-icon name="plane" /> } @case ('balance_reminder') { <vt-icon name="alert" /> } @default { <vt-icon name="check" /> } }</span><div><h3>{{ notification.title }}</h3><p>{{ notification.body }}</p><time>{{ notification.createdAt | europeanDate: 'dateTime' }}</time></div></article> }</div> }
-          @else { <p class="vt-notifications__empty">No notifications yet. Payment, document and departure updates will appear here.</p> }
-        </section>
       }
       @if (activeView() === 'home') {
         <article class="vt-hero" [class.has-image]="currentTrip.summary.heroImageUrl" [class.vt-hero--returned]="isReturned(currentTrip.stage)">

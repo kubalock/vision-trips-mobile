@@ -24,7 +24,7 @@ describe('DeviceTrustService', () => {
   it('rejects expired tokens', () => {
     process.env.VISION_LINK_SECRET = 'test-secret';
     const service = new DeviceTrustService();
-    const token = service.issue('app123', 'rec123', 'recCUSTOMER', Date.now() - 31 * 86_400_000);
+    const token = service.issue('app123', 'rec123', 'recCUSTOMER', undefined, Date.now() - 31 * 86_400_000);
     expect(service.validFor(token, 'app123', 'rec123', 'recCUSTOMER')).toBe(false);
   });
 

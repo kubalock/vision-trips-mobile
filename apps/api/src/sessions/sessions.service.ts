@@ -13,6 +13,13 @@ export interface SessionPrincipal {
   assurance: SessionAssurance;
   /** Internal session id, used to end a session once a step-up verification replaces it. */
   sessionId?: string;
+  /**
+   * The verified Customer's account in this base (`account:<Customer Account ID>` or `customer:<record>`): groups trips
+   * for switching and sign-out. `customerRecordId` stays the Customer who verified, for codes and security decisions.
+   */
+  accountKey?: string | null;
+  /** The Customer linked to this booking, when it is an explicitly grouped duplicate rather than the verified one. */
+  bookingOwnerCustomerRecordId?: string | null;
 }
 
 export interface SessionGrant {
@@ -22,6 +29,8 @@ export interface SessionGrant {
   customerRecordId: string | null;
   assurance: SessionAssurance;
   invitationId?: string | null;
+  accountKey?: string | null;
+  bookingOwnerCustomerRecordId?: string | null;
 }
 
 @Injectable()
@@ -34,7 +43,7 @@ export class SessionsService {
     const refreshExpiresAt = Date.now() + 30 * 86_400_000;
     const accessExpiresAt = Date.now() + 15 * 60_000;
     const accessToken = `${token('vta')}.${id}`;
-    this.store.putSession({ id, baseId: input.baseId, recordId: input.recordId, fellowTraveller: input.fellowTraveller, customerRecordId: input.customerRecordId, assurance: input.assurance, invitationId: input.invitationId ?? null, refreshHash: hash(refreshToken), refreshExpiresAt, accessHash: hash(accessToken), accessExpiresAt, revoked: false });
+    this.store.putSession({ id, baseId: input.baseId, recordId: input.recordId, fellowTraveller: input.fellowTraveller, customerRecordId: input.customerRecordId, assurance: input.assurance, invitationId: input.invitationId ?? null, accountKey: input.accountKey ?? null, bookingOwnerCustomerRecordId: input.bookingOwnerCustomerRecordId ?? null, refreshHash: hash(refreshToken), refreshExpiresAt, accessHash: hash(accessToken), accessExpiresAt, revoked: false });
     return response(accessToken, accessExpiresAt, refreshToken, refreshExpiresAt, identityKey(input));
   }
 
@@ -60,7 +69,7 @@ export class SessionsService {
     if (typeof authorization !== 'string' || !authorization.startsWith('Bearer ')) throw invalidSession();
     const stored = this.store.sessionByAccessHash(hash(authorization.slice(7).trim()));
     if (!stored || stored.revoked || stored.accessExpiresAt < Date.now()) throw new UnauthorizedException('The access session has expired.');
-    return { baseId: stored.baseId, recordId: stored.recordId, fellowTraveller: stored.fellowTraveller, customerRecordId: stored.customerRecordId, assurance: stored.assurance, sessionId: stored.id };
+    return { baseId: stored.baseId, recordId: stored.recordId, fellowTraveller: stored.fellowTraveller, customerRecordId: stored.customerRecordId, assurance: stored.assurance, sessionId: stored.id, accountKey: stored.accountKey, bookingOwnerCustomerRecordId: stored.bookingOwnerCustomerRecordId };
   }
 
   /** Ends a session by its internal id (used when a step-up verification replaces it). */

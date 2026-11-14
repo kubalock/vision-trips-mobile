@@ -6,14 +6,15 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
  * that booking *and* that customer. Version 1 tokens (booking only, which postcode checks could also earn) are no
  * longer honoured, so every device verifies by email once.
  */
-interface TrustPayload { v: 2; b: string; r: string; c: string; e: number }
+interface TrustPayload { v: 2; b: string; r: string; c: string; e: number; k?: string }
 
 export const DEVICE_TRUST_DAYS = 30;
 
 @Injectable()
 export class DeviceTrustService {
-  issue(baseId: string, recordId: string, customerRecordId: string, now = Date.now()): string {
-    const payload = Buffer.from(JSON.stringify({ v: 2, b: baseId, r: recordId, c: customerRecordId, e: now + DEVICE_TRUST_DAYS * 86_400_000 } satisfies TrustPayload)).toString('base64url');
+  /** `identity` is the opaque account identity key, so a browser can forget one account's trust on sign-out. */
+  issue(baseId: string, recordId: string, customerRecordId: string, identity?: string, now = Date.now()): string {
+    const payload = Buffer.from(JSON.stringify({ v: 2, b: baseId, r: recordId, c: customerRecordId, e: now + DEVICE_TRUST_DAYS * 86_400_000, ...(identity ? { k: identity } : {}) } satisfies TrustPayload)).toString('base64url');
     return `${payload}.${this.sign(payload)}`;
   }
 

@@ -8,6 +8,7 @@ import {
 import { createHash, randomBytes } from 'node:crypto';
 import { AirtableService } from '../airtable/airtable.service.js';
 import { DeviceTrustService } from '../security/device-trust.service.js';
+import { accountKeyFor, identityKey } from '../security/identity-key.js';
 import { DurableAuthStore, type InvitationOtp, type InvitationSource, type StoredInvitation } from '../sessions/durable-auth.store.js';
 import { SessionsService, type SessionPrincipal } from '../sessions/sessions.service.js';
 import { InvitationTargetError, TripsService, type InvitationContext } from '../trips/trips.service.js';
@@ -209,10 +210,12 @@ export class CustomerInvitationsService {
   async stepUp(principal: SessionPrincipal): Promise<string> {
     if (principal.fellowTraveller) throw new ForbiddenException('Only the lead customer can do this.');
     this.limitInternal(`step-up-invitation:${principal.baseId}:${principal.recordId}`);
+    // The code goes to the Customer who verified — never to a grouped duplicate's (possibly old) email address.
     const customerRecordId = principal.customerRecordId ?? await this.primaryCustomer(principal.baseId, principal.recordId);
-    const context = await this.customerContext({ baseId: principal.baseId, bookingRecordId: principal.recordId, customerRecordId });
+    const bookingOwnerCustomerRecordId = principal.customerRecordId ? principal.bookingOwnerCustomerRecordId ?? null : null;
+    const context = await this.customerContext({ baseId: principal.baseId, bookingRecordId: principal.recordId, customerRecordId, bookingOwnerCustomerRecordId });
     return this.issue({
-      source: 'step_up', baseId: principal.baseId, bookingRecordId: principal.recordId, customerRecordId, scope: 'primary_customer',
+      source: 'step_up', baseId: principal.baseId, bookingRecordId: principal.recordId, customerRecordId, bookingOwnerCustomerRecordId, scope: 'primary_customer',
       tenantId: context.tenantId, ttlMs: STEP_UP_INVITATION_TTL_MS, replacesSessionId: principal.sessionId ?? null,
       destinationHash: destinationOf(principal.baseId, customerRecordId, context),
     }).token;
@@ -282,6 +285,7 @@ export class CustomerInvitationsService {
       consumingUntil: null,
       destinationHash: options.destinationHash ?? null,
       revokedReason: null,
+      bookingOwnerCustomerRecordId: options.bookingOwnerCustomerRecordId ?? null,
     };
     this.store.insertInvitation(invitation);
     if (options.source !== 'agent') this.log('invitation_created', invitation);
@@ -306,8 +310,9 @@ export class CustomerInvitationsService {
       throw invitationError(409, 'verification_in_progress', 'Your code is already being checked.');
     }
     let snapshot: InvitationAuthorized['snapshot'];
+    let context: InvitationContext;
     try {
-      await this.customerContext(invitation);
+      context = await this.customerContext(invitation);
       snapshot = await this.snapshotFor(invitation);
     } catch (error) {
       this.store.releaseInvitationClaim(invitation.id, claim);
@@ -316,8 +321,11 @@ export class CustomerInvitationsService {
     if (!this.store.consumeInvitation(invitation.id, claim)) throw invitationError(409, 'verification_in_progress', 'Your code is already being checked.');
     if (invitation.replacesSessionId) this.sessions.revokeById(invitation.replacesSessionId);
     const fellowTraveller = invitation.scope === 'fellow_traveller';
-    const session = this.sessions.issue({ baseId: invitation.baseId, recordId: invitation.bookingRecordId, fellowTraveller, customerRecordId: invitation.customerRecordId, assurance, invitationId: invitation.id });
-    const trustedDeviceToken = rememberDevice && invitation.customerRecordId ? this.trust.issue(invitation.baseId, invitation.bookingRecordId, invitation.customerRecordId) : undefined;
+    const accountKey = invitation.customerRecordId ? accountKeyFor(invitation.customerRecordId, context.customer?.accountId) : null;
+    const grant = { baseId: invitation.baseId, recordId: invitation.bookingRecordId, fellowTraveller, customerRecordId: invitation.customerRecordId, assurance, invitationId: invitation.id, accountKey, bookingOwnerCustomerRecordId: invitation.bookingOwnerCustomerRecordId };
+    const session = this.sessions.issue(grant);
+    // The trust token names the verified Customer (for validation) and the account's identity (for sign-out by account).
+    const trustedDeviceToken = rememberDevice && invitation.customerRecordId ? this.trust.issue(invitation.baseId, invitation.bookingRecordId, invitation.customerRecordId, identityKey(grant)) : undefined;
     this.log('invitation_verified', invitation, { assurance, trustedDevice: Boolean(trustedDeviceToken) });
     void this.audit(invitation.baseId, invitation.bookingRecordId, `✅ Customer verified in the Vision Trips app (${assurance === 'otp' ? 'email code' : 'trusted device'}) · ${scopeLabel(invitation.scope)} · ref ${invitation.id}`);
     return { status: 'authorized', snapshot, session, ...(trustedDeviceToken ? { trustedDeviceToken } : {}) };
@@ -339,10 +347,10 @@ export class CustomerInvitationsService {
    * Re-checks the booking, customer link and email each time (an agent may have changed them since the invite). An
    * invitation bound to an email address stops working once the Customer's address differs from it.
    */
-  private async customerContext(invitation: Pick<StoredInvitation, 'baseId' | 'bookingRecordId' | 'customerRecordId'> & Partial<Pick<StoredInvitation, 'destinationHash' | 'id' | 'source' | 'scope'>>): Promise<InvitationContext> {
+  private async customerContext(invitation: Pick<StoredInvitation, 'baseId' | 'bookingRecordId' | 'customerRecordId'> & Partial<Pick<StoredInvitation, 'destinationHash' | 'id' | 'source' | 'scope' | 'bookingOwnerCustomerRecordId'>>): Promise<InvitationContext> {
     let context: InvitationContext;
     try {
-      context = await this.trips.invitationContext(invitation.baseId, invitation.bookingRecordId, invitation.customerRecordId);
+      context = await this.trips.invitationContext(invitation.baseId, invitation.bookingRecordId, invitation.customerRecordId, invitation.bookingOwnerCustomerRecordId ?? null);
     } catch (error) {
       throw customerSafe(error);
     }
@@ -422,6 +430,7 @@ interface IssueOptions {
   reusable?: boolean;
   replacesSessionId?: string | null;
   destinationHash?: string | null;
+  bookingOwnerCustomerRecordId?: string | null;
 }
 
 function destinationOf(baseId: string, customerRecordId: string, context: InvitationContext): string | null {

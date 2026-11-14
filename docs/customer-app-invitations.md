@@ -90,16 +90,35 @@ customer-wide trust token would add reach without adding convenience.
 * **Account discovery** (`GET /v1/trips/current/account`, related quotations): Bookings linked **both ways** to the
   verified Customer (Customer `Trips` lists the Booking *and* the Booking's `Customers` lists the Customer), in the
   session's base only, soft-deleted Bookings excluded. Listing a trip does not save it on the device.
-* **Preferences** are read from and written to the verified Customer only.
 * **Grouping duplicates** is opt-in: Customer records in the same base with the same non-empty `Customer Account ID`
   (text field on Customers; letters, digits and `. _ : -`) form one account for discovery and preferences. Matching
   emails never merge records, and Account IDs never reach across bases.
-* **Opening an account trip** re-checks the link, then issues a session for that Booking, the same base and the
-  verified Customer (or the grouped record the Booking is linked to), keeping the assurance. Unlinking a Booking stops
-  future opening; trips already saved offline are left as they are.
+* **Session subject.** Every verified session records:
+  * `customerRecordId`: the Customer who actually verified (by code or trusted device). Codes, step-up and every
+    security decision use this record and its current email — never a grouped duplicate's, which may be out of date;
+  * `accountKey`: `account:<Customer Account ID>` when grouped, otherwise `customer:<verified record>`. The app's
+    `identityKey` is derived from it, so all of an account's trips — including those linked only to a duplicate — are
+    one account on the device for switching, saved trips, trusted devices and "Sign out of this account";
+  * `bookingOwnerCustomerRecordId`: set only when the booking is linked to a grouped duplicate rather than to the
+    verified Customer. A step-up on such a booking still emails the verified Customer; the API accepts it only while
+    the duplicate is linked to the booking and still shares the verified Customer's `Customer Account ID`.
+* **Opening an account trip** re-checks the link, then issues a session for that Booking in the same base with the
+  same verified Customer, account key and assurance. Unlinking a Booking stops future opening; trips already saved
+  offline are left as they are.
+* **Preferences.** The verified Customer's record is canonical for preferred airports and months. Consent is
+  conservative: a marketing channel shows as on only when every grouped record is opted in and none is unsubscribed,
+  so an opt-out on any duplicate is never hidden. Saving writes the customer's choice to every grouped record, so they
+  converge.
+* **Recommended next step: a per-branch `Customer Accounts` table** in each base, holding the account's canonical
+  email, consent and travel preferences, with Customers linking to it instead of sharing a text ID. It stays entirely
+  inside each base (no global directory or branch selector), makes the canonical record explicit for agents, and lets
+  consent be stored once. When it exists, `accountKey` becomes `account:<Customer Accounts record ID>` and preferences
+  read and write that record; the session model above does not need to change.
 * Sessions without a verified Customer (created before invitations) get `verification_required` from the account.
-* Every session carries an opaque `identityKey` (`idk_…`, an HMAC of base + Customer; share links: base + booking). The
-  app uses it to keep identities apart without seeing Airtable IDs.
+* Every session carries an opaque `identityKey` (`idk_…`, an HMAC of base + account key; share links: base + booking).
+  The app uses it to keep identities apart without seeing Airtable IDs. Ungrouped Customers keep the key they had
+  before account keys existed, so trips already saved on devices still match. Trusted-device tokens carry the same
+  key (`k`), so a browser can forget one account's trusted devices on sign-out.
 
 ### On the device (app)
 

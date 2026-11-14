@@ -136,10 +136,57 @@ describe('CustomerAccountService identity', () => {
     const result = await account.account(principal());
     expect(result.trips.map((trip) => trip.name)).toContain('Twin trip');
     expect(result.trips.map((trip) => trip.name)).not.toContain('Impostor trip');
-    expect(result.preferences.preferredMonths).toEqual(['July']);
+    expect(result.preferences.preferredMonths).toEqual([]); // The verified Customer's record is canonical; July lives on the duplicate.
     const saved = await account.update(principal(), { emailMarketing: true, smsMarketing: false, postalMarketing: false, preferredAirports: [], preferredMonths: [] });
     expect(saved.updatedRecords).toBe(2);
     expect(airtable.updateRecord.mock.calls.map((call) => [call[0], call[2]]).sort((x, y) => x.join().localeCompare(y.join()))).toEqual([[BASE_A, GRACE], [BASE_A, TWIN]]);
+  });
+
+  describe('grouped duplicates (Customer Account ID)', () => {
+    function grouped() {
+      const tables = world();
+      tables[BASE_A].Customers[GRACE]['Customer Account ID'] = 'acct-grace';
+      tables[BASE_A].Customers[TWIN] = { 'Primary Email': 'grace.old@example.com', 'Customer Account ID': 'acct-grace', 'Email Marketing': true, Trips: [TWIN_TRIP] };
+      tables[BASE_A].Bookings[TWIN_TRIP] = booking('Twin trip', [TWIN]);
+      return tables;
+    }
+
+    it('opens a duplicate’s trip as the verified Customer, recording the duplicate only as the booking owner', async () => {
+      const { account, sessions } = setup(grouped());
+      const twin = (await account.account(principal())).trips.find((trip) => trip.name === 'Twin trip')!;
+      const lisbon = await account.open(principal(), (await account.account(principal())).trips.find((trip) => trip.name === 'Lisbon')!.accountTripId);
+      const opened = await account.open(principal({ assurance: 'trusted_device' }), twin.accountTripId);
+      expect(sessions.validateAccess(`Bearer ${opened.session.accessToken}`)).toMatchObject({
+        baseId: BASE_A, recordId: TWIN_TRIP, customerRecordId: GRACE, bookingOwnerCustomerRecordId: TWIN, accountKey: 'account:acct-grace', assurance: 'trusted_device',
+      });
+      // One account on the device: the same identity key for Grace's own trip and the duplicate's trip.
+      expect(opened.session.identityKey).toBe(lisbon.session.identityKey);
+    });
+
+    it('keeps the account across a further hop and token refresh', async () => {
+      const { account, sessions } = setup(grouped());
+      const twin = (await account.account(principal())).trips.find((trip) => trip.name === 'Twin trip')!;
+      const opened = await account.open(principal(), twin.accountTripId);
+      const fromTwin = sessions.validateAccess(`Bearer ${opened.session.accessToken}`);
+      const back = (await account.account(fromTwin)).trips.find((trip) => trip.name === 'Japan')!;
+      const japan = await account.open(fromTwin, back.accountTripId);
+      expect(sessions.validateAccess(`Bearer ${japan.session.accessToken}`)).toMatchObject({ customerRecordId: GRACE, bookingOwnerCustomerRecordId: null, accountKey: 'account:acct-grace' });
+      expect(sessions.refresh(japan.session.refreshToken).identityKey).toBe(opened.session.identityKey);
+    });
+
+    it('never lets an opt-out on any grouped record be hidden by an opt-in on another', async () => {
+      const tables = grouped();
+      tables[BASE_A].Customers[TWIN]['Email Marketing Unsubscribe'] = true; // Grace opted in; her duplicate unsubscribed.
+      const { account } = setup(tables);
+      expect((await account.account(principal())).preferences.emailMarketing).toBe(false);
+      tables[BASE_A].Customers[TWIN]['Email Marketing Unsubscribe'] = false;
+      expect((await account.account(principal())).preferences.emailMarketing).toBe(true); // Both opted in.
+    });
+
+    it('does not treat a booking linked to an ungrouped same-email record as a duplicate’s', async () => {
+      const { account } = setup(grouped());
+      expect((await account.account(principal())).trips.map((trip) => trip.name)).not.toContain('Impostor trip');
+    });
   });
 
   it('opens an account trip as a booking-scoped session for the same verified Customer, base and assurance', async () => {

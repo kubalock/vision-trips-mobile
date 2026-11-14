@@ -6,7 +6,7 @@ import { SessionsService, type SessionPrincipal } from '../sessions/sessions.ser
 import { bookingFields, customerFields, firstAttachmentThumbnail, firstString, pick, strings, truthy } from '../trips/field-map.js';
 import { resolveStage } from '../trips/stage.js';
 import { publicTripId, TripsService } from '../trips/trips.service.js';
-import { accountBookings, customersTable, resolveCustomerIdentity, type AccountBooking } from './customer-identity.js';
+import { accountBookings, accountTripGrant, customersTable, resolveCustomerIdentity, type AccountBooking } from './customer-identity.js';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const AIRPORTS = ['Belfast International Airport', 'Birmingham Airport', 'Bournemouth Airport', 'Bristol Airport', 'Cardiff Airport', 'East Midlands Airport', 'Edinburgh Airport', 'Exeter Airport', 'Glasgow Airport', 'Leeds Bradford Airport', 'Liverpool John Lennon Airport', 'London City Airport', 'London Gatwick Airport', 'London Heathrow Airport', 'London Luton Airport', 'London Stansted Airport', 'Manchester Airport', 'Newcastle International Airport', 'Norwich Airport', 'Southampton Airport'];
@@ -24,7 +24,7 @@ export class CustomerAccountService {
     this.assertLead(principal);
     const identity = await resolveCustomerIdentity(this.airtable, principal);
     const bookings = await accountBookings(this.airtable, principal, identity);
-    const preferences = mergePreferences(identity.members);
+    const preferences = accountPreferences(identity.root, identity.members);
     return {
       emailHint: maskEmail(identity.email), preferences,
       airportOptions: [...new Set([...AIRPORTS, ...preferences.preferredAirports])].sort(), monthOptions: MONTHS,
@@ -36,7 +36,7 @@ export class CustomerAccountService {
     this.assertLead(principal);
     if (typeof input.emailMarketing !== 'boolean' || typeof input.smsMarketing !== 'boolean' || typeof input.postalMarketing !== 'boolean') throw new BadRequestException('Choose each contact preference.');
     const identity = await resolveCustomerIdentity(this.airtable, principal);
-    const currentAirports = mergePreferences(identity.members).preferredAirports;
+    const currentAirports = accountPreferences(identity.root, identity.members).preferredAirports;
     const airports = cleanList(input.preferredAirports, 10, [...AIRPORTS, ...currentAirports], 'departure airports');
     const months = cleanList(input.preferredMonths, 12, MONTHS, 'travel months');
     const preferences: CustomerPreferences = { emailMarketing: input.emailMarketing, smsMarketing: input.smsMarketing, postalMarketing: input.postalMarketing, preferredAirports: airports, preferredMonths: months };
@@ -54,8 +54,8 @@ export class CustomerAccountService {
 
   /**
    * Re-checks the link in Airtable on every call (an unlinked Booking can no longer be opened from the account), then
-   * issues a session for that Booking in the same base, for the account member it is linked to — the verified
-   * Customer itself whenever it is linked — keeping the assurance the customer already earned.
+   * issues a session for that Booking in the same base for the same verified Customer and account, keeping the
+   * assurance the customer already earned (see accountTripGrant).
    */
   async open(principal: SessionPrincipal, accountTripId: string): Promise<OpenCustomerAccountTripResponse> {
     this.assertLead(principal);
@@ -63,7 +63,7 @@ export class CustomerAccountService {
     const target: AccountBooking | undefined = (await accountBookings(this.airtable, principal, identity)).find((booking) => this.id(principal.baseId, booking.record.id) === accountTripId);
     if (!target) throw new NotFoundException('That trip is no longer linked to your account.');
     const snapshot = await this.trips.snapshot(principal.baseId, target.record.id, 'primary_customer');
-    return { snapshot, session: this.sessions.issue({ baseId: principal.baseId, recordId: target.record.id, fellowTraveller: false, customerRecordId: target.ownerCustomerRecordId, assurance: principal.assurance }) };
+    return { snapshot, session: this.sessions.issue(accountTripGrant(principal, identity, target)) };
   }
 
   private assertLead(principal: SessionPrincipal): void { if (principal.fellowTraveller) throw new ForbiddenException('Customer account settings are only available to the lead customer.'); }
@@ -74,10 +74,20 @@ export class CustomerAccountService {
   private id(baseId: string, recordId: string): string { const secret = process.env.VISION_LINK_SECRET?.trim(); if (!secret) throw new ServiceUnavailableException('Customer accounts are not configured.'); return createHmac('sha256', secret).update(`${baseId}:${recordId}:customer-account`).digest('base64url').slice(0, 24); }
 }
 
-function mergePreferences(customers: AirtableRecord[]): CustomerPreferences {
-  const result: CustomerPreferences = { emailMarketing: false, smsMarketing: false, postalMarketing: false, preferredAirports: [], preferredMonths: [] };
-  for (const customer of customers) { result.emailMarketing ||= truthy(pick(customer.fields, customerFields.marketingEmail)) && !truthy(pick(customer.fields, customerFields.marketingEmailUnsubscribe)); result.smsMarketing ||= truthy(pick(customer.fields, customerFields.marketingSms)); result.postalMarketing ||= truthy(pick(customer.fields, customerFields.marketingPost)); result.preferredAirports.push(...strings(pick(customer.fields, customerFields.preferredAirports))); result.preferredMonths.push(...strings(pick(customer.fields, customerFields.preferredMonths))); }
-  result.preferredAirports = [...new Set(result.preferredAirports)]; result.preferredMonths = [...new Set(result.preferredMonths)]; return result;
+/**
+ * The account's preferences. Consent is conservative: a channel is on only when every grouped record is opted in and
+ * none is unsubscribed (an opt-out anywhere wins). Airports and months come from the verified Customer's record.
+ */
+export function accountPreferences(root: AirtableRecord, members: AirtableRecord[]): CustomerPreferences {
+  const all = members.length ? members : [root];
+  const every = (test: (customer: AirtableRecord) => boolean) => all.every(test);
+  return {
+    emailMarketing: every((customer) => truthy(pick(customer.fields, customerFields.marketingEmail)) && !truthy(pick(customer.fields, customerFields.marketingEmailUnsubscribe))),
+    smsMarketing: every((customer) => truthy(pick(customer.fields, customerFields.marketingSms))),
+    postalMarketing: every((customer) => truthy(pick(customer.fields, customerFields.marketingPost))),
+    preferredAirports: [...new Set(strings(pick(root.fields, customerFields.preferredAirports)))],
+    preferredMonths: [...new Set(strings(pick(root.fields, customerFields.preferredMonths)))],
+  };
 }
 function cleanList(value: unknown, maximum: number, allowed: string[], label: string): string[] { if (!Array.isArray(value)) throw new BadRequestException(`Choose valid ${label}.`); const clean = [...new Set(value.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean))]; if (clean.length > maximum || clean.some((item) => !allowed.includes(item))) throw new BadRequestException(`Choose valid ${label}.`); return clean; }
 function date(value: unknown): string | null { const text = firstString(value); return /^\d{4}-\d{2}-\d{2}/.test(text) ? text.slice(0, 10) : null; }

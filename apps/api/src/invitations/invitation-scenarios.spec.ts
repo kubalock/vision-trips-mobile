@@ -1,7 +1,7 @@
 import { HttpException } from '@nestjs/common';
 import { createCustomerInvitationRequestSchema } from '@vision-trips/contracts';
 import { DeviceTrustService } from '../security/device-trust.service.js';
-import { identityKey } from '../security/identity-key.js';
+import { identityKey, trustIdentityKey } from '../security/identity-key.js';
 import { DurableAuthStore } from '../sessions/durable-auth.store.js';
 import { SessionsService } from '../sessions/sessions.service.js';
 import { InvitationTargetError, type InvitationContext, type TripsService } from '../trips/trips.service.js';
@@ -19,7 +19,7 @@ const BOOKING_2 = 'recBOOKING2222222';
 const GRACE = 'recCUSTOMERGRACE1';
 const ALAN = 'recCUSTOMERALAN01';
 
-interface Person { email: string; bookings: string[] }
+interface Person { email: string; bookings: string[]; accountId?: string }
 type Directory = Record<string, Record<string, Person>>;
 
 function directory(): Directory {
@@ -41,11 +41,15 @@ function setup(people = directory()) {
     sendCode: vi.fn(async (context: InvitationContext, code: string) => { codes.push({ to: context.customer!.email, code, brand: context.brand.name }); return 'email'; }),
   };
   const trips = {
-    invitationContext: vi.fn(async (base: string, booking: string, customer: string | null): Promise<InvitationContext> => {
+    invitationContext: vi.fn(async (base: string, booking: string, customer: string | null, owner: string | null = null): Promise<InvitationContext> => {
       const person = customer ? people[base]?.[customer] : null;
-      if (customer && (!person || !person.bookings.includes(booking))) throw new InvitationTargetError('customer_not_linked');
+      // Mirrors TripsService: the verified Customer must be on the booking, or an explicitly grouped duplicate must be.
+      const viaOwner = owner && owner !== customer ? people[base]?.[owner] : null;
+      if (customer && !person) throw new InvitationTargetError('customer_not_linked');
+      if (customer && viaOwner && (!viaOwner.bookings.includes(booking) || !person!.accountId || viaOwner.accountId !== person!.accountId)) throw new InvitationTargetError('customer_not_linked');
+      if (customer && !viaOwner && !person!.bookings.includes(booking)) throw new InvitationTargetError('customer_not_linked');
       return {
-        tenantId: `brand-${base}`, tripName: `Trip ${booking}`, customer: person ? { email: person.email, firstName: null } : null,
+        tenantId: `brand-${base}`, tripName: `Trip ${booking}`, customer: person ? { email: person.email, firstName: null, accountId: person.accountId ?? null } : null,
         brand: { name: base === BASE_A ? 'Branch A Travel' : 'Branch B Travel', logoUrl: null, primaryColor: null, supportEmail: null, supportPhone: null },
       };
     }),
@@ -322,4 +326,49 @@ describe('invitation scenario matrix', () => {
       expect(identityKey({ baseId: BASE_A, recordId: BOOKING_1, customerRecordId: null, fellowTraveller: true })).not.toBe(grace);
     });
   });
+
+  describe('grouped duplicates (Customer Account ID)', () => {
+    const TWIN = 'recCUSTOMERTWIN01';
+    function groupedPeople(): Directory {
+      const people = directory();
+      people[BASE_A][GRACE].accountId = 'acct-grace';
+      people[BASE_A][TWIN] = { email: 'grace.old@example.com', bookings: [BOOKING_2], accountId: 'acct-grace' };
+      people[BASE_A][GRACE].bookings = [BOOKING_1]; // Booking 2 is linked only to the duplicate.
+      return people;
+    }
+
+    it('verified sessions carry the account key, so every trip of the account shares one identity', async () => {
+      const context = setup(groupedPeople());
+      const verified = await verify(context, await invite(context));
+      expect(principalOf(context, verified.session.accessToken)).toMatchObject({ customerRecordId: GRACE, accountKey: 'account:acct-grace' });
+      expect(verified.session.identityKey).toBe(identityKey({ baseId: BASE_A, recordId: BOOKING_2, customerRecordId: GRACE, fellowTraveller: false, accountKey: 'account:acct-grace' }));
+    });
+
+    it('step-up on a duplicate’s booking emails the verified Customer, never the duplicate’s old address', async () => {
+      const context = setup(groupedPeople());
+      const unverified = { baseId: BASE_A, recordId: BOOKING_2, fellowTraveller: false, customerRecordId: GRACE, assurance: 'legacy' as const, accountKey: 'account:acct-grace', bookingOwnerCustomerRecordId: TWIN };
+      const token = await context.service.stepUp(unverified);
+      await context.service.sendCode(token);
+      expect(context.codes.at(-1)!.to).toBe('grace@example.com');
+      const verified = await context.service.verifyCode(token, context.codes.at(-1)!.code, true);
+      expect(principalOf(context, verified.session.accessToken)).toMatchObject({ recordId: BOOKING_2, customerRecordId: GRACE, bookingOwnerCustomerRecordId: TWIN, accountKey: 'account:acct-grace', assurance: 'otp' });
+    });
+
+    it('refuses step-up through a "duplicate" that is not explicitly grouped with the verified Customer', async () => {
+      const people = groupedPeople();
+      people[BASE_A][TWIN].accountId = 'someone-else';
+      const context = setup(people);
+      const principal = { baseId: BASE_A, recordId: BOOKING_2, fellowTraveller: false, customerRecordId: GRACE, assurance: 'legacy' as const, bookingOwnerCustomerRecordId: TWIN };
+      expect(await rejection(context.service.stepUp(principal))).toMatchObject({ code: 'customer_unavailable' });
+    });
+
+    it('trust tokens name the account identity, so signing out of the account can find them', async () => {
+      const context = setup(groupedPeople());
+      const verified = await verify(context, await invite(context), true);
+      const payload = JSON.parse(Buffer.from(verified.trustedDeviceToken!.split('.')[0], 'base64url').toString()) as { b: string; r: string; c: string; k?: string };
+      expect(payload.c).toBe(GRACE); // Validation stays tied to the verified Customer.
+      expect(trustIdentityKey(payload)).toBe(verified.session.identityKey);
+    });
+  });
 });
+
