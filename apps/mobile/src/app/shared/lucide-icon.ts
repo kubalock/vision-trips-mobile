@@ -41,6 +41,7 @@ const ICONS = {
   send: Icons.Send,
   share: Icons.Share2,
   shield: Icons.ShieldCheck,
+  lock: Icons.Lock,
   snow: Icons.Snowflake,
   star: Icons.Star,
   sun: Icons.Sun,

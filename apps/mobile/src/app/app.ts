@@ -4,7 +4,7 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import { Network } from '@capacitor/network';
 import type { CustomerAccount, CustomerEngagementEvent, CustomerMessageTopic, CustomerPreferences, ExternalTripContent, InvitationAuthorized, LinkExchangeResponse, MobileSession, PaymentStatusResponse, RelatedQuotationSummary, TripDocument, TripSnapshot, TripStage } from '@vision-trips/contracts';
-import { DocumentTooLargeError, VisionApiService } from './core/api/vision-api.service';
+import { DocumentTooLargeError, isResponseFormatError, VisionApiService } from './core/api/vision-api.service';
 import { SavedTripsStore, type SavedTrip } from './core/storage/saved-trips.store';
 import { BrandAssetsStore } from './core/storage/brand-assets.store';
 import { groupSavedTrips } from './core/storage/trip-library';
@@ -31,6 +31,7 @@ import { BrandSupportSection } from './features/trip/brand-support-section';
 import { InvitationFlow } from './features/invitation/invitation-flow';
 import { VtIcon, type VtIconName } from './shared/lucide-icon';
 import { VtLogoMark } from './shared/logo-mark';
+import { VtSignInAgain } from './shared/sign-in-again';
 import { incompleteSectionsText, withLastKnownGood } from './core/api/partial-snapshot';
 import { brandPalette } from './shared/brand-palette';
 import { EuropeanDatePipe, formatEuropeanDate } from './shared/european-date.pipe';
@@ -45,7 +46,7 @@ type AppearancePreference = Appearance | 'system';
 
 @Component({
   selector: 'app-root',
-  imports: [BookingJourneySection, BrandSupportSection, CommunicationsSection, CustomerAccountSection, DestinationsSection, DocumentsSection, EuropeanDatePipe, ExtrasSection, ExternalContentSection, InvitationFlow, ItinerarySection, PaymentsSection, StageExperienceSection, VtIcon, VtLogoMark],
+  imports: [BookingJourneySection, BrandSupportSection, CommunicationsSection, CustomerAccountSection, DestinationsSection, DocumentsSection, EuropeanDatePipe, ExtrasSection, ExternalContentSection, InvitationFlow, ItinerarySection, PaymentsSection, StageExperienceSection, VtIcon, VtLogoMark, VtSignInAgain],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -1283,6 +1284,11 @@ export class App implements OnInit, OnDestroy {
     this.markFreshness('offline');
   }
 
+  /** Payments that could be paid now (so the "sign in again to pay" note isn't shown for a fully paid trip). */
+  protected hasPayableItems(payments: NonNullable<TripSnapshot['payments']>): boolean {
+    return payments.items.some((item) => item.canPay) || payments.customPayments.enabled;
+  }
+
   protected getNewTripLink(): void {
     this.dismissError();
     this.selectView('help');
@@ -1331,16 +1337,18 @@ export class App implements OnInit, OnDestroy {
   protected async downloadDocument(value: TripDocument | string): Promise<void> {
     const session = this.session();
     const trip = this.trip();
-    if (!session || !trip) return;
+    if (!trip) return;
     const document = typeof value === 'string' ? trip.documents.find((item) => item.downloadAction === value) : value;
     if (!document?.downloadAction) return;
     this.documentFailure.set(null);
     this.downloadingDocumentId.set(document.id);
     try {
+      // Documents saved for offline use open without a session, so they keep working after signing out.
       if (this.documentStatuses()[document.id] === 'saved') {
         const uri = await this.documentWallet.uri(trip.tripId, document.id);
         if (uri) { await this.shareSheet.share({ title: document.title, files: [uri], dialogTitle: 'Open or share document' }); return; }
       }
+      if (!session) { this.documentFailure.set({ id: document.id, message: 'Sign in again to download it: open your newest invitation link on this device. Documents you’ve already saved still open offline.' }); return; }
       if (!this.online()) throw new Error('offline');
       const action = document.downloadAction;
       const blob = await this.withSession(session, (accessToken) => this.api.downloadDocument(action, accessToken));
@@ -1424,6 +1432,8 @@ export function isVerificationRequired(error: unknown): boolean {
 
 export function customerErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof DocumentTooLargeError) return 'This document is too large to download in the app. Ask your travel agent to email it to you.';
+  // A response that failed its schema: say it's temporary rather than showing half-read data or a generic failure.
+  if (isResponseFormatError(error)) return 'This information is temporarily unavailable. Please try again in a moment.';
   if (isTripDataError(error)) return error.reason === 'unsupported_version'
     ? 'This trip needs a newer version of the app. Please update the app and try again.'
     : 'We couldn’t read this trip’s details. Please try again in a moment, or contact your travel agent.';
@@ -1431,6 +1441,8 @@ export function customerErrorMessage(error: unknown, fallback: string): string {
   if (!(error instanceof HttpErrorResponse)) return fallback;
   if (error.status === 0) return 'We can’t reach Vision Trips right now. Check your connection and try again.';
   if (error.status === 401) return 'For your security, please open your trip link again to continue.';
+  // A partial save is a 503 too, but the traveller needs to know some changes did save and to save again.
+  if (error.error?.code === 'preferences_partially_saved') return 'Some of your changes were saved, but not all of them. Please save again to finish.';
   if (error.status >= 500) return 'Our booking system is busy right now. Please try again in a minute.';
   const raw = error.error?.message;
   const message = typeof raw === 'string' ? raw.trim() : Array.isArray(raw) ? raw.filter((item): item is string => typeof item === 'string').join(' ') : '';

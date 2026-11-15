@@ -2014,3 +2014,8 @@ body.vt .vt-app .vt-account-danger__icon { width: 40px; height: 40px; }
 @container vt-top (max-width: 400px) {
   .vt-app .vt-top__brand:has(.vt-top__mark, .vt-top__logo) .vt-top__name { display: none; }
 }
+
+/* "Sign in again to continue" — replaces live actions on a signed-out saved trip. */
+.vt-app .vt-sign-in-again { display: block; margin: 14px 0 0; }
+.vt-app .vt-sign-in-again + app-payments-section { display: block; margin-top: 14px; }
+.vt-app .vt-sign-in-again .vt-status-card { margin: 0; }

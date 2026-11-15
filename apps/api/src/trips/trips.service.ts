@@ -153,12 +153,29 @@ export class TripsService {
     return (matching ?? withEmail[0])?.id ?? null;
   }
 
+  /**
+   * `version` changes whenever anything the customer can see changes — a flight, payment, cruise port or document,
+   * not only the Booking record — because it hashes the customer-facing snapshot (see contentVersion).
+   * `freshness.sourceUpdatedAt` is the newest modification time across the Booking and its linked trip records.
+   */
   mapSnapshot(
     baseId: string,
     booking: AirtableRecord,
     brand: AirtableRecord,
     accessScope: AccessScope,
     related: Partial<RelatedRecords> = {},
+  ): TripSnapshot {
+    const snapshot = this.buildSnapshot(baseId, booking, brand, accessScope, related);
+    const { serverTime: _serverTime, freshness, version: _version, ...content } = snapshot;
+    return { ...snapshot, version: contentVersion(freshness.sourceUpdatedAt, content) };
+  }
+
+  private buildSnapshot(
+    baseId: string,
+    booking: AirtableRecord,
+    brand: AirtableRecord,
+    accessScope: AccessScope,
+    related: Partial<RelatedRecords>,
   ): TripSnapshot {
     const allRelated = { ...emptyRelated(), ...related };
     const bookingValue = (key: keyof typeof bookingFields) => pick(booking.fields, bookingFields[key]);
@@ -170,7 +187,7 @@ export class TripsService {
     const quotationAccepted = truthy(bookingValue('quotationAccepted')) || truthy(booking.fields[process.env.AIRTABLE_ACCEPTED_FIELD?.trim() || 'Quotation Accepted']);
     const tags = strings(bookingValue('tags'));
     const now = new Date();
-    const version = dateTimeString(booking.fields['Last modified time']) ?? booking.createdTime ?? now.toISOString();
+    const sourceUpdatedAt = newestUpdate([booking, ...allRelated.elements, ...allRelated.payments, ...allRelated.people, ...allRelated.customers, ...allRelated.upsells, ...allRelated.communications, ...allRelated.rooms, ...allRelated.cabins, ...allRelated.passengers, ...allRelated.cruisePorts]) ?? now.toISOString();
     const tripId = publicTripId(baseId, booking.id);
     const stage = resolveStage(status, departure, returns, quoteExpiry);
     const surpriseEnabled = process.env.SURPRISE_MODE !== 'false' && truthy(bookingValue('surprise'));
@@ -179,10 +196,6 @@ export class TripsService {
     const graph = recordGraph(allRelated);
     const itinerary = allRelated.elements.map((record, index) => mapElement(record, tripId, index, graph, hideSupplierInfo)).filter((item) => item.status.toLowerCase() !== 'cancelled');
     const travellers = mapTravellers(allRelated.customers, allRelated.people, accessScope);
-    const documents = mapDocuments(allRelated.elements, itinerary, tripId, stage, accessScope, version);
-    if (quotationAccepted && accessScope === 'primary_customer') {
-      documents.push(document(`${tripId}:acceptance`, 'Quotation acceptance receipt', 'Evidence of your online acceptance', 'confirmation', 'acceptance', version));
-    }
     const mintReady = Boolean(firstString(brandValue('mintApiKey')) && firstString(brandValue('mintBusinessUnit')) && firstString(bookingValue('mintBookingId')).startsWith('BK.'));
     const payments = accessScope === 'primary_customer'
       ? mapPayments(booking, allRelated.payments, stage, tripId, mintReady, truthy(brandValue('mintAllowCustom')))
@@ -192,17 +205,6 @@ export class TripsService {
     const communications = mapCommunications(allRelated.communications, tripId, accessScope);
     const brandName = firstString(brandValue('name')) || 'Your travel company';
     const protection = mapProtection(bookingValue, itinerary, brand, allRelated.members[0], graph.suppliers);
-    if (accessScope === 'primary_customer') {
-      if (!['quote', 'quote_expired'].includes(stage)) documents.push(document(`${tripId}:front-file`, 'Booking front file', 'Printable booking overview, travellers, itinerary and payments', 'front_file', 'front-file', version));
-      if (protection.guaranteeAvailable) documents.push(document(`${tripId}:guarantee`, 'Safe Seat Plan guarantee', 'Travel Trust Association financial guarantee certificate', 'guarantee', 'guarantee', version));
-      for (const template of mapLetterTemplates(allRelated.brandTemplates, tripId)) documents.push(document(`${tripId}:letter:${template.id}`, template.name, template.subject || 'Personal letter from your travel expert', 'letter', `letter:${template.id}`, `${version}:${template.id}:${template.body}`));
-      for (const payment of payments?.items.filter((item) => item.status === 'paid') ?? []) {
-        documents.push(document(`${tripId}:receipt:${payment.id}`, `Payment receipt · ${payment.label}`, `${payment.completedDate ?? 'Payment received'} · ${formatMoney(payment.amount, payment.currency)}`, 'receipt', `receipt:${payment.id}`, `${version}:${payment.completedDate ?? payment.id}`));
-      }
-      if (protection.scheme === 'atol' && ((payments?.paid ?? 0) > 0 || !['quote', 'quote_expired'].includes(stage))) {
-        documents.push(document(`${tripId}:atol`, 'ATOL Certificate', `Financial protection · ATOL ${protection.atolNumber ?? ''}`.trim(), 'atol', 'atol', version));
-      }
-    }
     const summary = {
       reference: firstString(bookingValue('reference')) || 'Your trip', name: firstString(bookingValue('name')) || 'Your trip',
       departureDate: departure, returnDate: returns, heroImageUrl: firstAttachmentUrl(bookingValue('hero')), heroImage: heroImage(firstAttachmentImage(bookingValue('hero'))), gallery: attachmentImages(bookingValue('gallery')),
@@ -211,6 +213,29 @@ export class TripsService {
       sector: safeText(bookingValue('sector')) || null, totalTravellers: Math.max(numberValue(bookingValue('totalTravellers')), travellers.length),
       groupBooking: truthy(bookingValue('group')), giftVoucher: truthy(bookingValue('giftVoucher')),
     };
+    // Each document is versioned on what it shows, so the wallet flags (and notifies about) only documents that changed.
+    const versions = {
+      confirmation: contentVersion(stage, summary, itinerary, travellers, protection),
+      invoice: contentVersion(summary.reference, summary.name, payments ?? null),
+      frontFile: contentVersion(stage, summary, itinerary, travellers, payments ?? null, protection),
+      protection: contentVersion(summary, travellers, itinerary, protection),
+      acceptance: contentVersion(summary, payments?.total ?? null, quotationAccepted),
+    };
+    const documents = mapDocuments(allRelated.elements, itinerary, tripId, stage, accessScope, versions, sourceUpdatedAt);
+    if (quotationAccepted && accessScope === 'primary_customer') {
+      documents.push(document(`${tripId}:acceptance`, 'Quotation acceptance receipt', 'Evidence of your online acceptance', 'confirmation', 'acceptance', versions.acceptance, sourceUpdatedAt));
+    }
+    if (accessScope === 'primary_customer') {
+      if (!['quote', 'quote_expired'].includes(stage)) documents.push(document(`${tripId}:front-file`, 'Booking front file', 'Printable booking overview, travellers, itinerary and payments', 'front_file', 'front-file', versions.frontFile, sourceUpdatedAt));
+      if (protection.guaranteeAvailable) documents.push(document(`${tripId}:guarantee`, 'Safe Seat Plan guarantee', 'Travel Trust Association financial guarantee certificate', 'guarantee', 'guarantee', versions.protection, sourceUpdatedAt));
+      for (const template of mapLetterTemplates(allRelated.brandTemplates, tripId)) documents.push(document(`${tripId}:letter:${template.id}`, template.name, template.subject || 'Personal letter from your travel expert', 'letter', `letter:${template.id}`, contentVersion(template, summary, travellers), sourceUpdatedAt));
+      for (const payment of payments?.items.filter((item) => item.status === 'paid') ?? []) {
+        documents.push(document(`${tripId}:receipt:${payment.id}`, `Payment receipt · ${payment.label}`, `${payment.completedDate ?? 'Payment received'} · ${formatMoney(payment.amount, payment.currency)}`, 'receipt', `receipt:${payment.id}`, contentVersion(payment), payment.completedDate ?? sourceUpdatedAt));
+      }
+      if (protection.scheme === 'atol' && ((payments?.paid ?? 0) > 0 || !['quote', 'quote_expired'].includes(stage))) {
+        documents.push(document(`${tripId}:atol`, 'ATOL Certificate', `Financial protection · ATOL ${protection.atolNumber ?? ''}`.trim(), 'atol', 'atol', versions.protection, sourceUpdatedAt));
+      }
+    }
     const visibleSummary = surpriseConcealed ? {
       ...summary, name: 'Your surprise trip', heroImageUrl: null, heroImage: null, gallery: [], countries: [], holidayTypes: [], travellerType: null, sector: null,
     } : summary;
@@ -222,13 +247,13 @@ export class TripsService {
     return {
       schemaVersion: 3,
       tripId,
-      version,
+      version: sourceUpdatedAt, // Replaced by the content version in mapSnapshot.
       serverTime: now.toISOString(),
       stage,
       accessScope,
       freshness: {
         status: 'fresh',
-        sourceUpdatedAt: version,
+        sourceUpdatedAt,
         nextRefreshAfter: new Date(now.getTime() + 5 * 60_000).toISOString(),
       },
       brand: {
@@ -839,27 +864,47 @@ function mapQuotationReview(
   ];
 }
 
-function mapDocuments(records: AirtableRecord[], itinerary: ItineraryItem[], tripId: string, stage: string, accessScope: AccessScope, version: string): TripDocument[] {
+function mapDocuments(records: AirtableRecord[], itinerary: ItineraryItem[], tripId: string, stage: string, accessScope: AccessScope, versions: { confirmation: string; invoice: string }, updatedAt: string): TripDocument[] {
   const isQuote = stage === 'quote' || stage === 'quote_expired';
-  const documents: TripDocument[] = [document(`${tripId}:confirmation`, isQuote ? 'Trip quotation' : 'Booking confirmation', 'Full itinerary and important information', 'confirmation', 'confirmation', version)];
+  const documents: TripDocument[] = [document(`${tripId}:confirmation`, isQuote ? 'Trip quotation' : 'Booking confirmation', 'Full itinerary and important information', 'confirmation', 'confirmation', versions.confirmation, updatedAt)];
   if (accessScope === 'primary_customer' && !isQuote) {
-    documents.push(document(`${tripId}:invoice`, 'Booking invoice', 'Your booking costs and payment history', 'invoice', 'invoice', version));
+    documents.push(document(`${tripId}:invoice`, 'Booking invoice', 'Your booking costs and payment history', 'invoice', 'invoice', versions.invoice, updatedAt));
   }
   records.forEach((record, index) => {
     const attachments = pick(record.fields, elementFields.docs);
     if (!Array.isArray(attachments)) return;
     attachments.forEach((attachment, attachmentIndex) => {
-      const file = attachment as { url?: unknown; filename?: unknown };
+      const file = attachment as { id?: unknown; url?: unknown; filename?: unknown; size?: unknown };
       if (typeof file.url !== 'string' || !file.url.startsWith('https://')) return;
       const id = publicChildId(tripId, `${record.id}:${attachmentIndex}`, 'doc');
-      documents.push({ ...document(id, safeText(file.filename) || 'Travel document', itinerary[index]?.title ?? 'Trip document', 'supplier', `supplier:${id}`, `${version}:${file.url}`), url: file.url, mimeType: safeText((attachment as { type?: unknown }).type) || 'application/octet-stream' });
+      documents.push({ ...document(id, safeText(file.filename) || 'Travel document', itinerary[index]?.title ?? 'Trip document', 'supplier', `supplier:${id}`, supplierFileVersion(file), newestUpdate([record]) ?? updatedAt), url: file.url, mimeType: safeText((attachment as { type?: unknown }).type) || 'application/octet-stream' });
     });
   });
   return documents;
 }
 
-function document(id: string, title: string, description: string, kind: TripDocument['kind'], action: string, version: string): TripDocument {
-  return { id, title, description, kind, url: null, offlineAvailable: true, status: 'ready', downloadAction: action, version: createHash('sha256').update(version).digest('base64url').slice(0, 16), updatedAt: /^\d{4}-/.test(version) ? version.slice(0, 24) : new Date().toISOString(), mimeType: 'application/pdf' };
+function document(id: string, title: string, description: string, kind: TripDocument['kind'], action: string, version: string, updatedAt: string): TripDocument {
+  return { id, title, description, kind, url: null, offlineAvailable: true, status: 'ready', downloadAction: action, version, updatedAt: /^\d{4}-/.test(updatedAt) ? updatedAt.slice(0, 24) : new Date().toISOString(), mimeType: 'application/pdf' };
+}
+
+/**
+ * A short, stable hash of customer-facing content. URLs are left out: Airtable attachment links are signed and change
+ * on every read, so including them would make every refresh look like a change.
+ */
+export function contentVersion(...parts: unknown[]): string {
+  const json = JSON.stringify(parts, (_key, value: unknown) => typeof value === 'string' && /^https?:\/\//i.test(value) ? undefined : value);
+  return createHash('sha256').update(json ?? '').digest('base64url').slice(0, 16);
+}
+
+/** A supplier file changes when Airtable gives it a new attachment (new id) — not when its signed URL rotates. */
+function supplierFileVersion(file: { id?: unknown; filename?: unknown; size?: unknown }): string {
+  return contentVersion(typeof file.id === 'string' ? file.id : null, file.filename ?? null, file.size ?? null);
+}
+
+/** The newest modification time among records: their `Last modified time` field when the table has one, else creation. */
+function newestUpdate(records: AirtableRecord[]): string | null {
+  const times = records.map((record) => dateTimeString(record.fields['Last modified time'] ?? record.fields['Last Modified']) ?? (record.createdTime ? dateTimeString(record.createdTime) : null)).filter((time): time is string => Boolean(time));
+  return times.length ? times.reduce((newest, time) => time > newest ? time : newest) : null;
 }
 
 

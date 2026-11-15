@@ -59,6 +59,7 @@ Customers open a trip from an invitation link (`https://<host>/trip/vt_<token>`)
 
 - **Installed app:** the trip snapshot, its refresh token and the trusted-device tokens are kept in the device's secure storage (Keychain / Keystore).
 - **Browser:** the app sends `X-Vision-Client: web`, and the API puts the refresh token and trusted-device tokens in `HttpOnly; SameSite=Strict` cookies (`Secure` in production), scoped to `/v1/sessions` and `/v1/link-exchanges` (which includes the invitation endpoints). The app only sees a `web:` handle that names the cookie. Access tokens stay in memory, and only the trip snapshot is saved, in IndexedDB, labelled "Saved in this browser".
+- The browser keeps at most 30 session cookies (the least recently renewed are cleared first; that saved trip is then signed out in this browser but stays readable) and 20 trusted-device cookies (oldest first, as in the installed app), so the `Cookie` header can't keep growing.
 - Because the cookies are `SameSite=Strict`, the web app and the API must be served from the same site in production (for example `trips.example.com` and `api.example.com`).
 
 ## Mint payments

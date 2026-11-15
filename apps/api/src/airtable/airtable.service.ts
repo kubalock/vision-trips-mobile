@@ -114,21 +114,29 @@ export class AirtableService {
    * One Airtable GET, spaced per base and retried on network errors, 429 and 5xx (honouring Retry-After).
    * Returns the final response, successful or not; callers map failures to their own messages.
    */
-  private async fetchWithRetry(baseId: string, url: string, token: string, label: string): Promise<Response> {
+  private async fetchWithRetry(baseId: string, url: string, token: string, label: string, write?: { method: 'PATCH' | 'POST'; body: unknown; retry: WriteRetry }): Promise<Response> {
     const timeoutMs = Number(process.env.AIRTABLE_REQUEST_TIMEOUT_MS ?? 10_000);
     const maxAttempts = positiveInteger(process.env.AIRTABLE_MAX_ATTEMPTS, 3);
+    // Reads and idempotent writes retry on network errors, 429 and 5xx. A non-idempotent write retries only on 429,
+    // which Airtable returns before applying anything; after a network error or 5xx it may already have been applied.
+    const retryable = (status: number | 'network') => !write || write.retry === 'idempotent' ? status === 'network' || isRetryable(status) : status === 429;
+    const init: RequestInit = write
+      ? { method: write.method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(write.body) }
+      : { headers: { Authorization: `Bearer ${token}` } };
     for (let attempt = 1; ; attempt += 1) {
       await this.throttle(baseId);
       let response: Response;
       try {
-        response = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(timeoutMs) });
+        response = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
       } catch (error) {
-        if (attempt < maxAttempts) { await sleep(backoffMs(attempt)); continue; }
+        if (retryable('network') && attempt < maxAttempts) { await sleep(backoffMs(attempt)); continue; }
         this.logger.warn(`Airtable request ${label} failed after ${attempt} attempts: ${errorName(error)}`);
-        throw new BadGatewayException('Airtable could not be reached.');
+        const failure = new BadGatewayException('Airtable could not be reached.');
+        if (write) ambiguousWrites.add(failure);
+        throw failure;
       }
       if (response.ok) return response;
-      if (isRetryable(response.status) && attempt < maxAttempts) {
+      if (retryable(response.status) && attempt < maxAttempts) {
         this.logger.warn(`Airtable ${response.status} ${label}; retrying.`);
         await responseText(response);
         await sleep(retryDelayMs(response, attempt));
@@ -143,17 +151,12 @@ export class AirtableService {
     return this.write(baseId, table, recordId, 'PATCH', { fields, typecast: true });
   }
 
+  /** Not idempotent: retried only when Airtable rate-limits it (429), which means it wasn't created. */
   async createRecord(baseId: string, table: string, fields: Record<string, unknown>): Promise<AirtableRecord> {
     const token = process.env.AIRTABLE_TOKEN;
     if (!token) throw new ServiceUnavailableException('Airtable is not configured.');
     const url = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(table)}`;
-    await this.throttle(baseId);
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields, typecast: true }),
-      signal: AbortSignal.timeout(Number(process.env.AIRTABLE_REQUEST_TIMEOUT_MS ?? 10_000)),
-    });
+    const response = await this.fetchWithRetry(baseId, url, token, `creating ${table}`, { method: 'POST', body: { fields, typecast: true }, retry: 'rate-limit-only' });
     if (!response.ok) {
       const detail = await responseText(response);
       this.logger.warn(`Airtable ${response.status} creating ${table}: ${detail}`);
@@ -162,8 +165,29 @@ export class AirtableService {
     return this.parseRecord(response);
   }
 
+  /**
+   * Comments aren't idempotent, so a failure that may have been applied (network error or 5xx) is checked first: if
+   * the record already has this exact comment from the last few minutes, it isn't posted again.
+   */
   async addComment(baseId: string, table: string, recordId: string, text: string): Promise<void> {
-    await this.write(baseId, table, recordId, 'POST', { text: text.slice(0, 1_000) }, 'comments');
+    const body = { text: text.slice(0, 1_000) };
+    try {
+      await this.write(baseId, table, recordId, 'POST', body, 'comments');
+    } catch (error) {
+      if (!ambiguousWrites.has(error as object)) throw error;
+      if (await this.hasRecentComment(baseId, table, recordId, body.text).catch(() => false)) return;
+      await this.write(baseId, table, recordId, 'POST', body, 'comments');
+    }
+  }
+
+  private async hasRecentComment(baseId: string, table: string, recordId: string, text: string): Promise<boolean> {
+    const token = process.env.AIRTABLE_TOKEN;
+    if (!token) return false;
+    const response = await this.fetchWithRetry(baseId, `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(table)}/${recordId}/comments?pageSize=20`, token, `listing comments on ${table}/${recordId}`);
+    if (!response.ok) { await responseText(response); return false; }
+    const value = await response.json() as { comments?: Array<{ text?: unknown; createdTime?: unknown }> };
+    const since = Date.now() - RECENT_COMMENT_MS;
+    return (value.comments ?? []).some((comment) => comment.text === text && typeof comment.createdTime === 'string' && Date.parse(comment.createdTime) >= since);
   }
 
   private async write(
@@ -177,20 +201,16 @@ export class AirtableService {
     const token = process.env.AIRTABLE_TOKEN;
     if (!token) throw new ServiceUnavailableException('Airtable is not configured.');
     const url = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(table)}/${recordId}${suffix ? `/${suffix}` : ''}`;
-    await this.throttle(baseId);
-    const response = await fetch(url, {
-      method,
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(Number(process.env.AIRTABLE_REQUEST_TIMEOUT_MS ?? 10_000)),
-    });
+    // PATCH sets the same fields to the same values, so repeating it is safe; a comment POST is not (see addComment).
+    const response = await this.fetchWithRetry(baseId, url, token, `writing ${table}/${recordId}`, { method, body, retry: method === 'PATCH' ? 'idempotent' : 'rate-limit-only' });
     if (!response.ok) {
       const detail = await responseText(response);
       this.logger.warn(`Airtable ${response.status} writing ${table}/${recordId}: ${detail}`);
       if (response.status === 401 || response.status === 403) throw new ServiceUnavailableException('The Airtable token does not have write access to this base or table.');
       if (response.status === 404) throw new NotFoundException(`Airtable could not find the ${table} record.`);
       if (response.status === 422) throw new BadGatewayException(`Airtable rejected the ${table} update. Check the quotation acceptance fields.`);
-      if (response.status === 429 || response.status >= 500) throw new ServiceUnavailableException('Airtable is temporarily unavailable. Try again shortly.');
+      if (response.status >= 500) { const failure = new ServiceUnavailableException('Airtable is temporarily unavailable. Try again shortly.'); ambiguousWrites.add(failure); throw failure; }
+      if (response.status === 429) throw new ServiceUnavailableException('Airtable is temporarily unavailable. Try again shortly.');
       throw new BadGatewayException(`Airtable rejected the ${table} update (status ${response.status}).`);
     }
     if (suffix === 'comments') return { id: recordId, fields: {} };
@@ -228,6 +248,12 @@ export class AirtableService {
 function isRecordId(value: string): boolean {
   return /^rec[A-Za-z0-9]{14}$/.test(value);
 }
+
+type WriteRetry = 'idempotent' | 'rate-limit-only';
+/** Write failures after which the change may or may not have been applied (network error or 5xx). */
+const ambiguousWrites = new WeakSet<object>();
+/** How far back addComment looks for a comment that may already have been posted. */
+const RECENT_COMMENT_MS = 10 * 60_000;
 
 /** Same chunk size as the PHP client; keeps the OR(RECORD_ID()=...) formula URL well under Airtable's length limit. */
 const RECORDS_PER_REQUEST = 30;

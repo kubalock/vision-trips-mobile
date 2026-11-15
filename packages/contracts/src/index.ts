@@ -1,18 +1,6 @@
-export const tripStages = [
-  'quote',
-  'quote_expired',
-  'closed',
-  'cancelled',
-  'confirmed',
-  'countdown',
-  'prep',
-  'departure',
-  'travelling',
-  'returning',
-  'home',
-  'past',
-] as const;
+import { tripStages } from './stages.js';
 
+export { tripStages } from './stages.js';
 export type TripStage = (typeof tripStages)[number];
 export type AccessScope = 'primary_customer' | 'fellow_traveller';
 /** `partial`: the trip itself refreshed, but some optional details couldn't be (see `incompleteSections`). */
@@ -593,3 +581,4 @@ export interface RefreshSessionRequest {
 
 
 export * from './invitations.js';
+export * from './responses.js';

@@ -163,6 +163,26 @@ describe('CustomerAccountService identity', () => {
       expect(opened.session.identityKey).toBe(lisbon.session.identityKey);
     });
 
+    it('writes the verified Customer first and says so when only some grouped records saved', async () => {
+      const { account, airtable } = setup(grouped());
+      airtable.updateRecord.mockResolvedValueOnce({}).mockRejectedValueOnce(new Error('Airtable is temporarily unavailable.'));
+      const saving = account.update(principal(), { emailMarketing: false, smsMarketing: false, postalMarketing: false, preferredAirports: [], preferredMonths: [] });
+      await expect(saving).rejects.toMatchObject({ response: { code: 'preferences_partially_saved', savedRecords: 1, totalRecords: 2 } });
+      expect(airtable.updateRecord.mock.calls.map((call) => call[2])).toEqual([GRACE, TWIN]);
+      // Only the record that changed gets an audit comment, which says the save was partial.
+      expect(airtable.addComment.mock.calls.map((call) => call[2])).toEqual([GRACE]);
+      expect(airtable.addComment.mock.calls[0][3]).toContain('saved on 1 of 2 grouped records');
+    });
+
+    it('reports the original error, with no comments, when nothing saved', async () => {
+      const { account, airtable } = setup(grouped());
+      const failure = new Error('Airtable is temporarily unavailable.');
+      airtable.updateRecord.mockRejectedValueOnce(failure);
+      await expect(account.update(principal(), { emailMarketing: true, smsMarketing: false, postalMarketing: false, preferredAirports: [], preferredMonths: [] })).rejects.toBe(failure);
+      expect(airtable.updateRecord).toHaveBeenCalledOnce();
+      expect(airtable.addComment).not.toHaveBeenCalled();
+    });
+
     it('keeps the account across a further hop and token refresh', async () => {
       const { account, sessions } = setup(grouped());
       const twin = (await account.account(principal())).trips.find((trip) => trip.name === 'Twin trip')!;

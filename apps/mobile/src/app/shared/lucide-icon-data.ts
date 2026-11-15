@@ -47,3 +47,4 @@ export const Trash2: LucideIconData = {"name":"trash","size":24,"node":[["path",
 export const UserRound: LucideIconData = {"name":"user-round","size":24,"node":[["circle",{"cx":"12","cy":"8","r":"5","key":"1hypcn"}],["path",{"d":"M20 21a8 8 0 0 0-16 0","key":"rfgkzh"}]],"aliases":["user-2"]};
 export const WalletCards: LucideIconData = {"name":"wallet-cards","size":24,"node":[["path",{"d":"M3 11h3.75a2 2 0 0 1 1.6.8l.45.6a4 4 0 0 0 6.4 0l.45-.6a2 2 0 0 1 1.6-.8H21","key":"1vwh6y"}],["path",{"d":"M3 7h18","key":"1uiuf2"}],["rect",{"x":"3","y":"3","width":"18","height":"18","rx":"2","key":"h1oib"}]]};
 export const X: LucideIconData = {"name":"x","size":24,"node":[["path",{"d":"M18 6 6 18","key":"1bl5f8"}],["path",{"d":"m6 6 12 12","key":"d8bk6v"}]]};
+export const Lock: LucideIconData = {"name":"lock","size":24,"node":[["rect",{"width":"18","height":"11","x":"3","y":"11","rx":"2","ry":"2","key":"1w4ew1"}],["path",{"d":"M7 11V7a5 5 0 0 1 10 0v4","key":"fwvmzm"}]]};

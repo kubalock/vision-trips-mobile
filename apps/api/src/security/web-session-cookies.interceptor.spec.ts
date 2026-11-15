@@ -4,7 +4,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { identityKey } from './identity-key.js';
-import { WebSessionCookiesInterceptor } from './web-session-cookies.interceptor.js';
+import { MAX_SESSION_COOKIES, MAX_TRUST_COOKIES, WebSessionCookiesInterceptor } from './web-session-cookies.interceptor.js';
 
 const session = (refreshToken: string) => ({ accessToken: 'vta_access', accessExpiresAt: '2030-01-01T00:00:00.000Z', refreshToken, refreshExpiresAt: '2030-01-30T00:00:00.000Z' });
 const trust = `${Buffer.from(JSON.stringify({ b: 'app1', r: 'recA', e: Date.parse('2030-01-30T00:00:00Z') })).toString('base64url')}.signature`;
@@ -106,5 +106,37 @@ describe('web session cookies', () => {
       .set('Cookie', `vt_dt_a=${graceA}; vt_dt_b=${graceB}`).send({ identityKey: target });
     const cleared = (response.headers['set-cookie'] as unknown as string[]).map((cookie) => cookie.split('=')[0]);
     expect(cleared).toEqual(['vt_dt_a']); // Branch B's trust for the same record IDs and email survives.
+  });
+
+  describe('cookie cap', () => {
+    const cleared = (response: request.Response) => ((response.headers['set-cookie'] as unknown as string[] | undefined) ?? []).filter((cookie) => /Expires=Thu, 01 Jan 1970/.test(cookie)).map((cookie) => cookie.split('=')[0]).sort();
+
+    it('clears the least recently renewed session cookies beyond the cap, never the one in use', async () => {
+      // 32 session cookies: two old ones set before last-use was recorded (plain token), the rest stamped.
+      const cookies = [`vt_rt_legacyAAAAAAAAAAAAAAAA=vrt_old1`, `vt_rt_legacyBBBBBBBBBBBBBBBB=vrt_old2`,
+        ...Array.from({ length: 30 }, (_, index) => `vt_rt_stamped${String(index).padStart(11, '0')}=${(1_700_000_000_000 + index).toString(36)}.vrt_s${index}`)];
+      const inUse = 'legacyAAAAAAAAAAAAAAAA'; // The tab refreshing is the oldest; it must survive.
+      const response = await request(app.getHttpServer()).post('/v1/sessions/refresh').set('X-Vision-Client', 'web')
+        .set('Cookie', [...cookies.slice(0, 1).map((cookie) => cookie.replace('vrt_old1', 'vrt_first')), ...cookies.slice(1)].join('; ')).send({ refreshToken: `web:${inUse}` });
+      expect(response.status).toBe(201);
+      // 31 others + the one in use = 32 → keep 30: the legacy one not in use and the oldest stamped one go.
+      expect(cleared(response)).toEqual(['vt_rt_legacyBBBBBBBBBBBBBBBB', 'vt_rt_stamped00000000000']);
+      expect(MAX_SESSION_COOKIES).toBe(30);
+    });
+
+    it('clears the oldest trusted-device cookies when a new one would exceed the cap', async () => {
+      const tokenExpiring = (offsetDays: number) => `${Buffer.from(JSON.stringify({ b: 'app1', r: `rec${offsetDays}`, e: Date.parse('2029-01-01T00:00:00Z') + offsetDays * 86_400_000 })).toString('base64url')}.sig`;
+      const existing = Array.from({ length: MAX_TRUST_COOKIES }, (_, index) => `vt_dt_cookie${String(index).padStart(2, '0')}=${tokenExpiring(index)}`);
+      // The exchange issues one more (expiring 2030), so the one expiring soonest is cleared.
+      const response = await request(app.getHttpServer()).post('/v1/link-exchanges').set('X-Vision-Client', 'web').set('Cookie', existing.join('; ')).send({ linkOrCode: 'x', deviceTrustTokens: [] });
+      expect(cleared(response)).toEqual(['vt_dt_cookie00']);
+    });
+
+    it('sends the newest trusted-device tokens first', async () => {
+      seen.length = 0;
+      const old = `${Buffer.from(JSON.stringify({ b: 'app1', r: 'recOld', e: Date.parse('2029-01-01T00:00:00Z') })).toString('base64url')}.sig`;
+      await request(app.getHttpServer()).post('/v1/link-exchanges').set('X-Vision-Client', 'web').set('Cookie', `vt_dt_old=${old}; vt_dt_new=${trust}`).send({ linkOrCode: 'x', deviceTrustTokens: [] });
+      expect(seen[0].deviceTrustTokens).toEqual([trust, old]);
+    });
   });
 });

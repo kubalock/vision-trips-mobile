@@ -1,14 +1,36 @@
 import { Component, computed, effect, input, linkedSignal, output, untracked } from '@angular/core';
 import type { CustomerAccount, CustomerAccountTrip, CustomerPreferences } from '@vision-trips/contracts';
 import { stageLabel, tripDateRange } from '../../shared/trip-format';
+import { NgTemplateOutlet } from '@angular/common';
 import { VtIcon } from '../../shared/lucide-icon';
+import { VtSignInAgain } from '../../shared/sign-in-again';
 
 @Component({
   selector: 'app-customer-account-section',
-  imports: [VtIcon],
+  imports: [NgTemplateOutlet, VtIcon, VtSignInAgain],
   template: `
+    <ng-template #signOutControls>
+        <section class="vt-account-danger" aria-labelledby="account-signout-title">
+          <span class="vt-account-danger__icon"><vt-icon name="alert" [size]="21" /></span>
+          <div><h2 id="account-signout-title">Sign out of this account</h2><p>Signs out of your {{ brandName() || 'travel company' }} account on this device and removes its saved trips and documents. Trips from other travel companies or other customers stay saved.</p></div>
+          <button type="button" (click)="signOut.emit()">Sign out of this account</button>
+        </section>
+        <section class="vt-account-danger" aria-labelledby="account-remove-title">
+          <span class="vt-account-danger__icon"><vt-icon name="trash" [size]="21" /></span>
+          <div><h2 id="account-remove-title">Remove all data from this device</h2><p>Signs out of every account and removes every saved trip, document and trusted-device setting on this device.</p></div>
+          <button type="button" (click)="removeAll.emit()">Remove all data</button>
+        </section>
+    </ng-template>
+    <!-- Signed out: account details need a session, but signing out and removing data from this device still work. -->
+    @if (signedOut()) {
+      <section class="vt-section vt-account-page">
+        <header class="vt-account-heading"><p class="vt-account-kicker">Your details</p><h1>Account and preferences</h1></header>
+        <vt-sign-in-again action="see your trips and preferences" [brandName]="brandName()" [showHelp]="true" (help)="help.emit()" />
+        <ng-container [ngTemplateOutlet]="signOutControls" />
+      </section>
+    }
     <!-- A reload of an account already on screen keeps it (and any unsaved edits) visible. -->
-    @if (loading() && !account()) {
+    @else if (loading() && !account()) {
       <section class="vt-section vt-account-page">
         <header class="vt-account-heading">
           <p class="vt-account-kicker">Your details</p>
@@ -159,16 +181,7 @@ import { VtIcon } from '../../shared/lucide-icon';
           </section>
         </form>
 
-        <section class="vt-account-danger" aria-labelledby="account-signout-title">
-          <span class="vt-account-danger__icon"><vt-icon name="alert" [size]="21" /></span>
-          <div><h2 id="account-signout-title">Sign out of this account</h2><p>Signs out of your {{ brandName() || 'travel company' }} account on this device and removes its saved trips and documents. Trips from other travel companies or other customers stay saved.</p></div>
-          <button type="button" (click)="signOut.emit()">Sign out of this account</button>
-        </section>
-        <section class="vt-account-danger" aria-labelledby="account-remove-title">
-          <span class="vt-account-danger__icon"><vt-icon name="trash" [size]="21" /></span>
-          <div><h2 id="account-remove-title">Remove all data from this device</h2><p>Signs out of every account and removes every saved trip, document and trusted-device setting on this device.</p></div>
-          <button type="button" (click)="removeAll.emit()">Remove all data</button>
-        </section>
+        <ng-container [ngTemplateOutlet]="signOutControls" />
       </section>
     } @else {
       <section class="vt-section vt-account-page">
@@ -179,6 +192,9 @@ import { VtIcon } from '../../shared/lucide-icon';
   `,
 })
 export class CustomerAccountSection {
+  /** The saved trip's session has ended: show how to sign in again instead of account details. */
+  readonly signedOut = input(false);
+  readonly help = output<void>();
   readonly account = input<CustomerAccount | null>(null); readonly loading = input(false); readonly saving = input(false); readonly savedNotice = input(''); readonly openingTripId = input<string | null>(null); readonly error = input('');
   readonly save = output<CustomerPreferences>(); readonly openTrip = output<string>(); readonly signOut = output<void>(); readonly removeAll = output<void>(); readonly retry = output<void>();
   /** Public trip IDs saved in My Trips, so the list can tell "saved on this device" from "available in your account". */

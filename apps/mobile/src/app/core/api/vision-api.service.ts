@@ -1,13 +1,21 @@
 import { HttpClient, HttpEventType, type HttpResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import type { CustomerAccount, CustomerEngagementRequest, CustomerEngagementResponse, CustomerMessageRequest, CustomerMessageResponse, CustomerPreferences, DevInvitationStatus, ExternalTripContent, FellowTravellerLinkResponse, InvitationAuthorized, InvitationOtpState, InvitationState, LinkExchangeResponse, MobileSession, OpenCustomerAccountTripResponse, OpenRelatedQuotationResponse, PaymentLinkResponse, PaymentStatusResponse, QuotationAcceptanceRequest, QuotationAcceptanceResponse, RelatedQuotationsResponse, TripSnapshot, UpdateCustomerPreferencesResponse } from '@vision-trips/contracts';
-import { devInvitationResponseSchema, devInvitationStatusSchema, invitationAuthorizedResponseSchema, invitationOtpStateSchema, invitationRequiredLinkExchangeSchema, invitationStateSchema, stepUpResponseSchema } from '@vision-trips/contracts';
+import { authorizedLinkExchangeSchema, customerAccountSchema, customerEngagementResponseSchema, customerMessageResponseSchema, devInvitationResponseSchema, devInvitationStatusSchema, fellowTravellerLinkResponseSchema, invitationAuthorizedResponseSchema, invitationOtpStateSchema, invitationRequiredLinkExchangeSchema, invitationStateSchema, mobileSessionSchema, paymentLinkResponseSchema, paymentStatusResponseSchema, quotationAcceptanceResponseSchema, relatedQuotationsResponseSchema, stepUpResponseSchema, tripSessionResponseSchema, updateCustomerPreferencesResponseSchema } from '@vision-trips/contracts';
 import { filter, firstValueFrom, map } from 'rxjs';
 import { API_BASE_URL } from '../config/api-base-url';
-import { parseExternalContent, parseTripSnapshot } from './trip-schema';
+import { isTripDataError, parseExternalContent, parseTripSnapshot } from './trip-schema';
 
 /** Largest document the app downloads and keeps (the API applies the same limit to supplier documents). */
 export const MAX_DOCUMENT_BYTES = 20_000_000;
+
+/** An API response that doesn't match its schema: rejected before it reaches application state. */
+export class ResponseFormatError extends Error {
+  override readonly name = 'ResponseFormatError';
+  constructor(readonly endpoint: string, cause?: unknown) { super(`Unexpected response from ${endpoint}.`, { cause }); }
+}
+
+export function isResponseFormatError(error: unknown): error is ResponseFormatError { return error instanceof ResponseFormatError; }
 
 export class DocumentTooLargeError extends Error {
   override readonly name = 'DocumentTooLargeError';
@@ -21,9 +29,7 @@ export class VisionApiService {
 
   /** Any trip link: invitations come back as `invitation_required`; legacy signed customer links too (they now need an email code). */
   exchangeLink(linkOrCode: string): Promise<LinkExchangeResponse> {
-    return this.exchange(firstValueFrom(
-      this.http.post<LinkExchangeResponse>(`${this.baseUrl}/link-exchanges`, { linkOrCode }, this.writeOptions()),
-    ));
+    return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/link-exchanges`, { linkOrCode }, this.writeOptions())), parseLinkExchange, 'link exchange');
   }
 
   // --- Invitations: the token travels in the body, never in a URL. Every response is checked at runtime. ---------
@@ -89,15 +95,11 @@ export class VisionApiService {
   }
 
   acceptQuotation(input: QuotationAcceptanceRequest, accessToken: string): Promise<QuotationAcceptanceResponse> {
-    return firstValueFrom(this.http.post<QuotationAcceptanceResponse>(`${this.baseUrl}/trips/current/quotation-acceptance`, input, {
-      ...this.writeOptions(accessToken),
-    }));
+    return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/trips/current/quotation-acceptance`, input, this.writeOptions(accessToken))), (value) => quotationAcceptanceResponseSchema.parse(value), 'quotation acceptance');
   }
 
   sendMessage(input: CustomerMessageRequest, accessToken: string): Promise<CustomerMessageResponse> {
-    return firstValueFrom(this.http.post<CustomerMessageResponse>(`${this.baseUrl}/trips/current/messages`, input, {
-      ...this.writeOptions(accessToken),
-    }));
+    return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/trips/current/messages`, input, this.writeOptions(accessToken))), (value) => customerMessageResponseSchema.parse(value), 'messages');
   }
 
   refreshTrip(accessToken: string): Promise<TripSnapshot> {
@@ -107,7 +109,7 @@ export class VisionApiService {
   }
 
   paymentStatus(accessToken: string): Promise<PaymentStatusResponse> {
-    return firstValueFrom(this.http.get<PaymentStatusResponse>(`${this.baseUrl}/trips/current/payment-status`, { headers: { Authorization: `Bearer ${accessToken}` } }));
+    return parsed(firstValueFrom(this.http.get<unknown>(`${this.baseUrl}/trips/current/payment-status`, this.readOptions(accessToken))), (value) => paymentStatusResponseSchema.parse(value), 'payment status');
   }
 
   externalContent(accessToken: string): Promise<ExternalTripContent> {
@@ -115,20 +117,20 @@ export class VisionApiService {
   }
 
   engagement(input: CustomerEngagementRequest, accessToken: string): Promise<CustomerEngagementResponse> {
-    return firstValueFrom(this.http.post<CustomerEngagementResponse>(`${this.baseUrl}/trips/current/engagement`, input, this.writeOptions(accessToken)));
+    return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/trips/current/engagement`, input, this.writeOptions(accessToken))), (value) => customerEngagementResponseSchema.parse(value), 'engagement');
   }
 
   relatedQuotations(accessToken: string): Promise<RelatedQuotationsResponse> {
-    return firstValueFrom(this.http.get<RelatedQuotationsResponse>(`${this.baseUrl}/trips/current/related-quotations`, { headers: { Authorization: `Bearer ${accessToken}` } }));
+    return parsed(firstValueFrom(this.http.get<unknown>(`${this.baseUrl}/trips/current/related-quotations`, this.readOptions(accessToken))), (value) => relatedQuotationsResponseSchema.parse(value), 'related quotations');
   }
 
   openRelatedQuotation(comparisonId: string, accessToken: string): Promise<OpenRelatedQuotationResponse> {
-    return withParsedSnapshot(firstValueFrom(this.http.post<OpenRelatedQuotationResponse>(`${this.baseUrl}/trips/current/related-quotations/${encodeURIComponent(comparisonId)}/open`, {}, this.writeOptions(accessToken))));
+    return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/trips/current/related-quotations/${encodeURIComponent(comparisonId)}/open`, {}, this.writeOptions(accessToken))), parseTripSession, 'related quotation');
   }
 
-  customerAccount(accessToken: string): Promise<CustomerAccount> { return firstValueFrom(this.http.get<CustomerAccount>(`${this.baseUrl}/trips/current/account`, { headers: { Authorization: `Bearer ${accessToken}` } })); }
-  updateCustomerPreferences(preferences: CustomerPreferences, accessToken: string): Promise<UpdateCustomerPreferencesResponse> { return firstValueFrom(this.http.post<UpdateCustomerPreferencesResponse>(`${this.baseUrl}/trips/current/account/preferences`, preferences, this.writeOptions(accessToken))); }
-  openCustomerAccountTrip(accountTripId: string, accessToken: string): Promise<OpenCustomerAccountTripResponse> { return withParsedSnapshot(firstValueFrom(this.http.post<OpenCustomerAccountTripResponse>(`${this.baseUrl}/trips/current/account/trips/${encodeURIComponent(accountTripId)}/open`, {}, this.writeOptions(accessToken)))); }
+  customerAccount(accessToken: string): Promise<CustomerAccount> { return parsed(firstValueFrom(this.http.get<unknown>(`${this.baseUrl}/trips/current/account`, this.readOptions(accessToken))), (value) => customerAccountSchema.parse(value), 'account'); }
+  updateCustomerPreferences(preferences: CustomerPreferences, accessToken: string): Promise<UpdateCustomerPreferencesResponse> { return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/trips/current/account/preferences`, preferences, this.writeOptions(accessToken))), (value) => updateCustomerPreferencesResponseSchema.parse(value), 'account preferences'); }
+  openCustomerAccountTrip(accountTripId: string, accessToken: string): Promise<OpenCustomerAccountTripResponse> { return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/trips/current/account/trips/${encodeURIComponent(accountTripId)}/open`, {}, this.writeOptions(accessToken))), parseTripSession, 'account trip'); }
   /**
    * Browsers: clears the HttpOnly trusted-device cookies — only that identity's when `identityKey` is given, otherwise
    * all of them (the installed app clears its secure storage instead).
@@ -137,30 +139,23 @@ export class VisionApiService {
   revokeSession(refreshToken: string): Promise<void> { return firstValueFrom(this.http.delete<void>(`${this.baseUrl}/sessions/current`, { body: { refreshToken }, ...this.writeOptions() })); }
 
   paymentLink(paymentId: string, accessToken: string): Promise<PaymentLinkResponse> {
-    return firstValueFrom(this.http.post<PaymentLinkResponse>(`${this.baseUrl}/trips/current/payments/${encodeURIComponent(paymentId)}/link`, {}, {
-      ...this.writeOptions(accessToken),
-    }));
+    return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/trips/current/payments/${encodeURIComponent(paymentId)}/link`, {}, this.writeOptions(accessToken))), (value) => paymentLinkResponseSchema.parse(value), 'payment link');
   }
 
   customPaymentLink(amount: number, accessToken: string): Promise<PaymentLinkResponse> {
-    return firstValueFrom(this.http.post<PaymentLinkResponse>(`${this.baseUrl}/trips/current/payments/custom/link`, { amount }, this.writeOptions(accessToken)));
+    return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/trips/current/payments/custom/link`, { amount }, this.writeOptions(accessToken))), (value) => paymentLinkResponseSchema.parse(value), 'payment link');
   }
 
   refreshSession(refreshToken: string): Promise<MobileSession> {
-    return firstValueFrom(this.http.post<MobileSession>(`${this.baseUrl}/sessions/refresh`, { refreshToken }, this.writeOptions()));
+    return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/sessions/refresh`, { refreshToken }, this.writeOptions())), (value) => mobileSessionSchema.parse(value), 'session refresh');
   }
 
   fellowTravellerLink(accessToken: string): Promise<FellowTravellerLinkResponse> {
-    return firstValueFrom(this.http.post<FellowTravellerLinkResponse>(`${this.baseUrl}/trips/current/fellow-traveller-link`, {}, {
-      ...this.writeOptions(accessToken),
-    }));
+    return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/trips/current/fellow-traveller-link`, {}, this.writeOptions(accessToken))), (value) => fellowTravellerLinkResponseSchema.parse(value), 'share link');
   }
 
-  /** Checks the trip in an authorised link exchange (or the invitation it asks for) before the app uses it. */
-  private async exchange(response: Promise<LinkExchangeResponse>): Promise<LinkExchangeResponse> {
-    const result = await response;
-    if (result.status === 'invitation_required') return invitationRequiredLinkExchangeSchema.parse(result);
-    return { ...result, snapshot: parseTripSnapshot(result.snapshot) };
+  private readOptions(accessToken: string): { headers: Record<string, string> } {
+    return { headers: { Authorization: `Bearer ${accessToken}` } };
   }
 
   private writeOptions(accessToken?: string): { headers: Record<string, string> } {
@@ -168,9 +163,30 @@ export class VisionApiService {
   }
 }
 
-/** Runs a response through its runtime schema: the generic on HttpClient is only a compile-time cast. */
-async function parsed<T>(response: Promise<unknown>, parse: (value: unknown) => T): Promise<T> {
-  return parse(await response);
+/**
+ * Runs a response through its runtime schema: the generic on HttpClient is only a compile-time cast. A body that
+ * doesn't match becomes a ResponseFormatError (trip data keeps its own TripDataError, which says what went wrong).
+ */
+async function parsed<T>(response: Promise<unknown>, parse: (value: unknown) => T, endpoint = 'the API'): Promise<T> {
+  const value = await response;
+  try {
+    return parse(value);
+  } catch (error) {
+    if (isTripDataError(error)) throw error;
+    throw new ResponseFormatError(endpoint, error);
+  }
+}
+
+/** An authorised link exchange (its trip checked too), or the invitation it asks for. */
+function parseLinkExchange(value: unknown): LinkExchangeResponse {
+  if (value && typeof value === 'object' && (value as { status?: unknown }).status === 'invitation_required') return invitationRequiredLinkExchangeSchema.parse(value);
+  const result = authorizedLinkExchangeSchema.parse(value);
+  return { ...result, snapshot: parseTripSnapshot(result.snapshot) };
+}
+
+function parseTripSession(value: unknown): { snapshot: TripSnapshot; session: MobileSession } {
+  const result = tripSessionResponseSchema.parse(value);
+  return { snapshot: parseTripSnapshot(result.snapshot), session: result.session };
 }
 
 function parseAuthorized(value: unknown): InvitationAuthorized {
@@ -178,7 +194,3 @@ function parseAuthorized(value: unknown): InvitationAuthorized {
   return { ...result, snapshot: parseTripSnapshot(result.snapshot) };
 }
 
-async function withParsedSnapshot<T extends { snapshot: TripSnapshot }>(response: Promise<T>): Promise<T> {
-  const result = await response;
-  return { ...result, snapshot: parseTripSnapshot(result.snapshot) };
-}

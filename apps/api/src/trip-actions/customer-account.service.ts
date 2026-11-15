@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import type { CustomerAccount, CustomerAccountTrip, CustomerPreferences, OpenCustomerAccountTripResponse, UpdateCustomerPreferencesResponse } from '@vision-trips/contracts';
 import { createHmac } from 'node:crypto';
 import { AirtableService, type AirtableRecord } from '../airtable/airtable.service.js';
@@ -18,6 +18,7 @@ const AIRPORTS = ['Belfast International Airport', 'Birmingham Airport', 'Bourne
  */
 @Injectable()
 export class CustomerAccountService {
+  private readonly logger = new Logger(CustomerAccountService.name);
   constructor(private readonly airtable: AirtableService, private readonly trips: TripsService, private readonly sessions: SessionsService) {}
 
   async account(principal: SessionPrincipal): Promise<CustomerAccount> {
@@ -41,13 +42,28 @@ export class CustomerAccountService {
     const months = cleanList(input.preferredMonths, 12, MONTHS, 'travel months');
     const preferences: CustomerPreferences = { emailMarketing: input.emailMarketing, smsMarketing: input.smsMarketing, postalMarketing: input.postalMarketing, preferredAirports: airports, preferredMonths: months };
     // Only the verified Customer and records explicitly grouped with it; never records that merely share an email.
+    // The verified Customer is written first (it's canonical for airports and months). Each PATCH is retried on
+    // transient Airtable errors and is safe to repeat, so saving again after a partial failure converges.
+    const fields = {
+      'Email Marketing': preferences.emailMarketing, 'Email Marketing Unsubscribe': !preferences.emailMarketing,
+      'SMS Marketing': preferences.smsMarketing, 'Postal Marketing': preferences.postalMarketing,
+      'Preferred Departure Airport(s)': airports, 'Preferred Travel Month(s)': months,
+    };
+    const saved: string[] = [];
+    let failure: unknown = null;
     for (const customer of identity.members) {
-      await this.airtable.updateRecord(principal.baseId, customersTable(), customer.id, {
-        'Email Marketing': preferences.emailMarketing, 'Email Marketing Unsubscribe': !preferences.emailMarketing,
-        'SMS Marketing': preferences.smsMarketing, 'Postal Marketing': preferences.postalMarketing,
-        'Preferred Departure Airport(s)': airports, 'Preferred Travel Month(s)': months,
-      });
-      await this.airtable.addComment(principal.baseId, customersTable(), customer.id, `Marketing preferences updated by the customer in Vision Trips · ${new Date().toISOString()} · email ${preferences.emailMarketing ? 'yes' : 'no'} · SMS ${preferences.smsMarketing ? 'yes' : 'no'} · post ${preferences.postalMarketing ? 'yes' : 'no'} · airports: ${airports.join(', ') || '—'} · months: ${months.join(', ') || '—'}`).catch(() => undefined);
+      try { await this.airtable.updateRecord(principal.baseId, customersTable(), customer.id, fields); saved.push(customer.id); }
+      catch (error) { failure = error; break; }
+    }
+    for (const id of saved) {
+      await this.airtable.addComment(principal.baseId, customersTable(), id, `Marketing preferences updated by the customer in Vision Trips · ${new Date().toISOString()} · email ${preferences.emailMarketing ? 'yes' : 'no'} · SMS ${preferences.smsMarketing ? 'yes' : 'no'} · post ${preferences.postalMarketing ? 'yes' : 'no'} · airports: ${airports.join(', ') || '—'} · months: ${months.join(', ') || '—'}${saved.length < identity.members.length ? ` · saved on ${saved.length} of ${identity.members.length} grouped records` : ''}`).catch(() => undefined);
+    }
+    if (failure) {
+      if (!saved.length) throw failure; // Nothing changed.
+      // Some grouped records changed and some didn't. Reading the account stays safe meanwhile: a channel shows as on
+      // only when every grouped record agrees, so a half-applied opt-out still reads as opted out.
+      this.logger.warn(`Preferences saved on ${saved.length} of ${identity.members.length} grouped Customer records: ${failure instanceof Error ? failure.message : 'unknown error'}`);
+      throw new ServiceUnavailableException({ statusCode: 503, code: 'preferences_partially_saved', message: 'Some of your changes were saved, but not all of them. Please save again to finish.', savedRecords: saved.length, totalRecords: identity.members.length });
     }
     return { saved: true, updatedRecords: identity.members.length, preferences };
   }

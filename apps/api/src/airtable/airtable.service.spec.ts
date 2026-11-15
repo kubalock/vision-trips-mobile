@@ -81,6 +81,46 @@ describe('AirtableService', () => {
     expect(url).not.toContain('alex@example.com');
   });
 
+  describe('writes', () => {
+    const base = 'appABCDEFGHIJKLMN'; const rec = 'recABCDEFGHIJKLMN';
+    const ok = (body: unknown = { id: rec, fields: {} }) => new Response(JSON.stringify(body), { status: 200 });
+    const status = (code: number) => new Response('{"error":"x"}', { status: code });
+    const methods = (mock: { mock: { calls: unknown[][] } }) => mock.mock.calls.map(([, init]) => (init as RequestInit | undefined)?.method ?? 'GET');
+
+    it('retries an update (PATCH is safe to repeat) on 5xx and 429', async () => {
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(status(503)).mockResolvedValueOnce(status(429)).mockResolvedValueOnce(ok());
+      await expect(new AirtableService().updateRecord(base, 'Customers', rec, { 'SMS Marketing': true })).resolves.toMatchObject({ id: rec });
+      expect(methods(fetchMock)).toEqual(['PATCH', 'PATCH', 'PATCH']);
+    });
+
+    it('retries a create only when rate-limited, never after a 5xx that may have created it', async () => {
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(status(429)).mockResolvedValueOnce(ok());
+      await new AirtableService().createRecord(base, 'Engagement', { Name: 'x' });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      fetchMock.mockReset().mockResolvedValue(status(500));
+      await expect(new AirtableService().createRecord(base, 'Engagement', { Name: 'x' })).rejects.toBeInstanceOf(ServiceUnavailableException);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not post a comment twice when a 5xx hid that the first one landed', async () => {
+      const text = 'Quotation accepted online';
+      const fetchMock = vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(status(502))
+        .mockResolvedValueOnce(ok({ comments: [{ id: 'com1', text, createdTime: new Date().toISOString() }] }));
+      await new AirtableService().addComment(base, 'Bookings', rec, text);
+      expect(methods(fetchMock)).toEqual(['POST', 'GET']);
+    });
+
+    it('posts the comment again when it did not land', async () => {
+      const fetchMock = vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(status(502))
+        .mockResolvedValueOnce(ok({ comments: [{ id: 'old', text: 'Quotation accepted online', createdTime: '2020-01-01T00:00:00Z' }] }))
+        .mockResolvedValueOnce(ok({ id: 'com2' }));
+      await new AirtableService().addComment(base, 'Bookings', rec, 'Quotation accepted online');
+      expect(methods(fetchMock)).toEqual(['POST', 'GET', 'POST']);
+    });
+  });
+
   describe('records()', () => {
     const id = (n: number) => `rec${String(n).padStart(14, '0')}`;
     const listResponse = (ids: string[]) => new Response(JSON.stringify({ records: ids.map((recordId) => ({ id: recordId, fields: { Name: recordId } })) }), { status: 200 });

@@ -60,11 +60,11 @@
         </section>
       } @else {
         @if (isReturned(currentTrip.stage) && currentTrip.freshness.status === 'fresh') {
-          <p class="vt-freshness vt-freshness--quiet"><span>Updated {{ currentTrip.freshness.sourceUpdatedAt | europeanDate: 'dateTime' }}</span><button type="button" class="vt-freshness__refresh" [disabled]="refreshing() || !online()" (click)="refreshCurrentTrip()">{{ refreshing() ? 'Refreshing…' : 'Refresh' }}</button></p>
+          <p class="vt-freshness vt-freshness--quiet"><span>Updated {{ currentTrip.freshness.sourceUpdatedAt | europeanDate: 'dateTime' }}</span><button type="button" class="vt-freshness__refresh" [disabled]="refreshing() || !online() || signedOut()" (click)="refreshCurrentTrip()">{{ refreshing() ? 'Refreshing…' : 'Refresh' }}</button></p>
         } @else {
         <aside class="vt-freshness vt-trip-status-card" [class.vt-freshness--fresh]="currentTrip.freshness.status === 'fresh'" [class.vt-freshness--stale]="currentTrip.freshness.status === 'stale'" [class.vt-freshness--offline]="currentTrip.freshness.status === 'offline'" [class.vt-freshness--partial]="currentTrip.freshness.status === 'partial'">
           <div class="vt-trip-status-card__copy"><span class="vt-trip-status-card__indicator" aria-hidden="true"></span><div><strong>{{ currentTrip.freshness.status === 'fresh' ? 'Trip up to date' : currentTrip.freshness.status === 'offline' ? 'Offline — showing saved trip' : currentTrip.freshness.status === 'partial' ? 'Trip updated, with gaps' : 'Trip may be out of date' }}</strong><div>{{ incompleteSectionsText(currentTrip) ?? 'Last updated ' + (currentTrip.freshness.sourceUpdatedAt | europeanDate: 'dateTime') }}</div></div></div>
-          <button type="button" class="vt-trip-status-card__refresh" [disabled]="refreshing() || !online()" (click)="refreshCurrentTrip()">{{ refreshing() ? 'Refreshing…' : 'Refresh' }}</button>
+          <button type="button" class="vt-trip-status-card__refresh" [disabled]="refreshing() || !online() || signedOut()" (click)="refreshCurrentTrip()">{{ refreshing() ? 'Refreshing…' : 'Refresh' }}</button>
         </aside>
         }
       }
@@ -89,7 +89,7 @@
             <ul class="vt-hero__facts" role="list">@for (type of currentTrip.summary.holidayTypes; track type) { <li>{{ type }}</li> }@if (nightsLabel(currentTrip.summary.durationDays); as nights) { <li>{{ nights }}</li> }</ul>
             @if (!isReturned(currentTrip.stage)) {
               <p class="vt-small">{{ storedSecurely() ? (savedInBrowser ? 'Saved in this browser for offline viewing.' : 'Saved securely on this device.') : 'This trip has not been saved for offline viewing.' }}</p>
-              @if (currentTrip.stage !== 'cancelled') { <div class="vt-hero__actions"><button type="button" class="vt-hero__calendar" [disabled]="creatingCalendar()" (click)="downloadCalendar()"><vt-icon name="calendar" [size]="18" /> {{ creatingCalendar() ? 'Preparing…' : 'Add to calendar' }}</button></div> }
+              @if (currentTrip.stage !== 'cancelled' && !signedOut()) { <div class="vt-hero__actions"><button type="button" class="vt-hero__calendar" [disabled]="creatingCalendar()" (click)="downloadCalendar()"><vt-icon name="calendar" [size]="18" /> {{ creatingCalendar() ? 'Preparing…' : 'Add to calendar' }}</button></div> }
             }
             @if (calendarError()) { <section class="vt-status-card vt-retry" data-tone="warn" role="alert"><span class="vt-status-card__icon" aria-hidden="true"><vt-icon name="alert" [size]="20" /></span><div class="vt-status-card__copy"><strong>Calendar file not created</strong><p>{{ calendarError() }}</p><button type="button" class="vt-status-card__action" [disabled]="creatingCalendar()" (click)="downloadCalendar()">Try again</button></div></section> }
           </div>
@@ -116,6 +116,9 @@
               <span class="vt-accept-progress__label">{{ acceptanceConfirmations().length }} of {{ currentTrip.quotation.reviewSections.length }} sections confirmed</span>
               <span class="vt-accept-progress__bar" aria-hidden="true"><span [style.width.%]="currentTrip.quotation.reviewSections.length ? acceptanceConfirmations().length / currentTrip.quotation.reviewSections.length * 100 : 0"></span></span>
             </div>
+            @if (signedOut()) {
+              <vt-sign-in-again action="review and accept this quotation" [brandName]="currentTrip.brand.name" [showHelp]="true" (help)="getNewTripLink()" />
+            } @else {
             <form class="vt-accept-form" (submit)="acceptQuotation($event)">
               <div class="vt-accept-list">
                 @for (section of currentTrip.quotation.reviewSections; track section.id; let index = $index) {
@@ -146,6 +149,7 @@
               <p class="vt-accept-card__legal">By selecting Accept quotation, you confirm that the information is correct and agree to the applicable booking conditions and cancellation terms.</p>
               <button type="submit" class="vt-accept-card__submit" [disabled]="submitting() || !online() || !acceptanceName().trim() || !acceptanceEmail().trim() || acceptanceConfirmations().length !== currentTrip.quotation.requiredConfirmations.length">{{ submitting() ? 'Recording your acceptance…' : online() ? 'Accept quotation and continue to deposit' : 'Connect to accept' }}</button>
             </form>
+            }
           </section>
         }
         @if (!isReturned(currentTrip.stage) && (currentTrip.timeline.nextItemTitle || currentTrip.timeline.daysUntilDeparture !== null)) {
@@ -178,7 +182,7 @@
             @if (status.tone !== 'info') { <button type="button" class="vt-status-card__close" aria-label="Dismiss" data-engagement="Dismiss payment status" (click)="dismissPaymentStatus()"><vt-icon name="close" [size]="18" /></button> }
           </section>
         }
-        @if (currentTrip.payments; as payments) { <app-payments-section [payments]="payments" [openingPaymentId]="openingPaymentId()" [actionsDisabled]="!online()" (pay)="openPayment($event)" (payCustom)="openCustomPayment($event)" /> } @else { <p class="mt-5 rounded-2xl bg-white p-5 text-slate-600 ring-1 ring-slate-200">Payment information is only available to the lead customer.</p> }
+        @if (currentTrip.payments; as payments) { @if (signedOut() && hasPayableItems(payments)) { <vt-sign-in-again action="make a payment" [brandName]="currentTrip.brand.name" [showHelp]="true" (help)="getNewTripLink()" /> }<app-payments-section [payments]="payments" [openingPaymentId]="openingPaymentId()" [actionsDisabled]="signedOut() || !online()" (pay)="openPayment($event)" (payCustom)="openCustomPayment($event)" /> } @else { <p class="mt-5 rounded-2xl bg-white p-5 text-slate-600 ring-1 ring-slate-200">Payment information is only available to the lead customer.</p> }
       } @else if (activeView() === 'documents') {
         <app-documents-section [documents]="currentTrip.documents" [statuses]="documentStatuses()" [downloadingId]="downloadingDocumentId()" [failure]="documentFailure()" (download)="downloadDocument($event)" />
       } @else if (activeView() === 'help') {
@@ -215,15 +219,16 @@
         @if (currentTrip.capabilities.sendMessage) {
           <section class="vt-section vt-help-card vt-help-message"><h2>Ask your travel agent</h2><p class="vt-help-intro">Send a message about your booking and the team will get back to you.</p>
             @if (messageSent()) { <div class="mt-4 rounded-xl bg-emerald-50 p-4 text-emerald-950"><p class="font-semibold">Message sent</p><p class="mt-1 text-sm">Your question has been added to the booking for your travel agent.</p></div><button type="button" class="mt-4 text-sm font-semibold text-teal-700" (click)="writeAnotherMessage()">Send another message</button> }
+            @else if (signedOut()) { <vt-sign-in-again action="send a message" [brandName]="currentTrip.brand.name" /> }
             @else { <form class="vt-help-form" (submit)="sendCustomerMessage($event)"><label class="vt-help-field" for="message-topic"><span>What is this about?</span><span class="vt-help-select"><select id="message-topic" [value]="messageTopic()" (change)="updateMessageTopic($event)"><option value="itinerary">Itinerary</option><option value="payment">Payment</option><option value="documents">Documents</option><option value="accessibility">Accessibility or assistance</option><option value="other">Something else</option></select><vt-icon name="chevron-down" /></span></label><label class="vt-help-field" for="customer-message"><span>Your message</span><textarea id="customer-message" rows="7" maxlength="800" placeholder="Tell us how we can help" [value]="customerMessage()" (input)="updateCustomerMessage($event)" aria-describedby="message-help"></textarea></label><div id="message-help" class="vt-help-form__meta"><span>Tell us how we can help — at least 10 characters</span><span>{{ customerMessage().length }}/800</span></div><button type="submit" [disabled]="submitting() || !online() || customerMessage().trim().length < 10" class="vt-primary-action vt-btn vt-btn--primary vt-btn--wide vt-help-send"><vt-icon class="vt-help-send__icon" name="send" /><span>{{ submitting() ? 'Sending…' : online() ? 'Send message' : 'Connect to send' }}</span></button></form> }
           </section>
         }
         @if (currentTrip.capabilities.shareWithTraveller) {
-          <section class="vt-section vt-help-card vt-help-share"><h2>Share this trip</h2><p class="vt-help-intro">Create a seven-day restricted link. Fellow travellers can see the itinerary and documents, but not prices, payments, supplier references, or quotation acceptance.</p><button type="button" class="vt-share-button" [disabled]="sharing() || !online()" (click)="shareWithTraveller()"><vt-icon name="share" [size]="22" /><span>{{ sharing() ? 'Creating link…' : online() ? 'Share with a traveller' : 'Connect to share' }}</span></button>@if (shareResult()) { <p class="vt-share-result" role="status"><vt-icon name="check" [size]="16" /> {{ shareResult() }}</p> }@if (shareFallbackUrl(); as shareUrl) { <div class="vt-share-fallback"><label for="share-link">Copy this link to share it</label><input id="share-link" type="text" readonly [value]="shareUrl" (focus)="selectAll($event)" /></div> }</section>
+          <section class="vt-section vt-help-card vt-help-share"><h2>Share this trip</h2><p class="vt-help-intro">Create a seven-day restricted link. Fellow travellers can see the itinerary and documents, but not prices, payments, supplier references, or quotation acceptance.</p>@if (signedOut()) { <vt-sign-in-again action="share this trip" [brandName]="currentTrip.brand.name" /> } @else { <button type="button" class="vt-share-button" [disabled]="sharing() || !online()" (click)="shareWithTraveller()"><vt-icon name="share" [size]="22" /><span>{{ sharing() ? 'Creating link…' : online() ? 'Share with a traveller' : 'Connect to share' }}</span></button> }@if (shareResult()) { <p class="vt-share-result" role="status"><vt-icon name="check" [size]="16" /> {{ shareResult() }}</p> }@if (shareFallbackUrl(); as shareUrl) { <div class="vt-share-fallback"><label for="share-link">Copy this link to share it</label><input id="share-link" type="text" readonly [value]="shareUrl" (focus)="selectAll($event)" /></div> }</section>
         }
         <section class="vt-section vt-help-card vt-help-protection"><span class="vt-help-protection__icon"><vt-icon name="shield" [size]="24" /></span><div class="vt-help-protection__body"><h2>Financial protection</h2><p class="vt-help-intro">{{ currentTrip.protection.summary }}</p>@if (currentTrip.protection.holderName) { <p class="vt-help-protection__holder">Holder: {{ currentTrip.protection.holderName }}</p> }</div></section>
       } @else {
-        <app-customer-account-section [account]="customerAccount()" [loading]="accountLoading()" [saving]="accountSaving()" [savedNotice]="accountNotice()" [openingTripId]="openingAccountTripId()" [error]="accountError()" [saveError]="accountSaveError()" (retry)="retryAccount()" (save)="saveCustomerPreferences($event)" (openTrip)="openCustomerAccountTrip($event)" [savedTripIds]="savedTripIds()" [brandName]="currentTrip.brand.name" (signOut)="signOutAccount()" (removeAll)="signOutDevice()" />
+        <app-customer-account-section [signedOut]="signedOut()" (help)="getNewTripLink()" [account]="customerAccount()" [loading]="accountLoading()" [saving]="accountSaving()" [savedNotice]="accountNotice()" [openingTripId]="openingAccountTripId()" [error]="accountError()" [saveError]="accountSaveError()" (retry)="retryAccount()" (save)="saveCustomerPreferences($event)" (openTrip)="openCustomerAccountTrip($event)" [savedTripIds]="savedTripIds()" [brandName]="currentTrip.brand.name" (signOut)="signOutAccount()" (removeAll)="signOutDevice()" />
       }
 
       <nav class="vt-nav" aria-label="Trip navigation">
