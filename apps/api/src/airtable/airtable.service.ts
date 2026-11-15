@@ -12,6 +12,14 @@ export interface AirtableListOptions {
   maxRecords?: number;
 }
 
+export interface LinkedRecordsResult {
+  records: AirtableRecord[];
+  /** Linked IDs Airtable no longer has (deleted or unlinked records). */
+  missingIds: string[];
+  /** True when a request failed, so `records` may be incomplete. */
+  unavailable: boolean;
+}
+
 @Injectable()
 export class AirtableService {
   private readonly logger = new Logger(AirtableService.name);
@@ -20,26 +28,37 @@ export class AirtableService {
 
   /**
    * Linked records by ID, in the order given, fetched in bulk (30 IDs per request, like the PHP client) instead of
-   * one request per record. Linked records are optional context: a deleted record or a failed chunk is logged and
-   * left out rather than failing the whole trip. Load the primary record with `record()`, which does throw.
+   * one request per record. A record that no longer exists is left out (and logged): that is real source data. A
+   * request that fails (authentication, missing table, rate limit, outage) throws, so a trip is never served with
+   * empty payments or itinerary that merely look valid. For optional enrichment that may degrade, use
+   * `optionalRecords()`, which reports the failure instead.
    */
   async records(baseId: string, table: string, recordIds: string[]): Promise<AirtableRecord[]> {
+    const result = await this.linkedRecords(baseId, table, recordIds);
+    if (result.error) throw result.error;
+    return result.records;
+  }
+
+  /** Linked records whose absence the caller can survive: a failed request is logged and reported as `unavailable`. */
+  async optionalRecords(baseId: string, table: string, recordIds: string[]): Promise<LinkedRecordsResult> {
+    const { error, ...result } = await this.linkedRecords(baseId, table, recordIds);
+    if (error) this.logger.warn(`Omitting linked ${table} records: ${error instanceof Error ? error.message : 'request failed'}`);
+    return result;
+  }
+
+  private async linkedRecords(baseId: string, table: string, recordIds: string[]): Promise<LinkedRecordsResult & { error?: unknown }> {
     const ids = [...new Set(recordIds)].filter(isRecordId);
-    if (!ids.length) return [];
+    if (!ids.length) return { records: [], missingIds: [], unavailable: false };
     const chunks: string[][] = [];
     for (let index = 0; index < ids.length; index += RECORDS_PER_REQUEST) chunks.push(ids.slice(index, index + RECORDS_PER_REQUEST));
-    const results = await Promise.all(chunks.map(async (chunk) => {
-      try {
-        return await this.list(baseId, table, { maxRecords: chunk.length, filterByFormula: `OR(${chunk.map((id) => `RECORD_ID()='${id}'`).join(',')})` });
-      } catch (error) {
-        this.logger.warn(`Omitting ${chunk.length} linked ${table} record(s): ${error instanceof Error ? error.message : 'request failed'}`);
-        return [];
-      }
-    }));
-    const byId = new Map(results.flat().map((record) => [record.id, record]));
-    const found = ids.flatMap((id) => { const record = byId.get(id); return record ? [record] : []; });
-    if (found.length < ids.length) this.logger.warn(`${ids.length - found.length} linked ${table} record(s) were not found and were omitted.`);
-    return found;
+    const settled = await Promise.allSettled(chunks.map((chunk) => this.list(baseId, table, { maxRecords: chunk.length, filterByFormula: `OR(${chunk.map((id) => `RECORD_ID()='${id}'`).join(',')})` })));
+    const failure = settled.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+    const byId = new Map(settled.flatMap((result) => result.status === 'fulfilled' ? result.value : []).map((record) => [record.id, record]));
+    const failedIds = new Set(settled.flatMap((result, index) => result.status === 'rejected' ? chunks[index] : []));
+    const records = ids.flatMap((id) => { const record = byId.get(id); return record ? [record] : []; });
+    const missingIds = ids.filter((id) => !byId.has(id) && !failedIds.has(id));
+    if (missingIds.length) this.logger.warn(`${missingIds.length} linked ${table} record(s) were not found and were omitted.`);
+    return { records, missingIds, unavailable: Boolean(failure), ...(failure ? { error: failure.reason } : {}) };
   }
 
   async list(baseId: string, table: string, options: AirtableListOptions = {}): Promise<AirtableRecord[]> {

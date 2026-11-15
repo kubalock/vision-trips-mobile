@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { AccessScope, ItineraryImage, PaymentStatusResponse, CabinDetail, CruisePort, ItineraryItem, ItineraryKind, PassengerAllocation, PaymentItem, RoomDetail, TravellerSummary, TripDocument, TripSnapshot } from '@vision-trips/contracts';
+import type { AccessScope, TripSection, ItineraryImage, PaymentStatusResponse, CabinDetail, CruisePort, ItineraryItem, ItineraryKind, PassengerAllocation, PaymentItem, RoomDetail, TravellerSummary, TripDocument, TripSnapshot } from '@vision-trips/contracts';
 import { createHash, createHmac } from 'node:crypto';
 import { AirtableService, type AirtableRecord } from '../airtable/airtable.service.js';
 import { airlineFields, airportFields, bookingFields, brandFields, brandTemplateFields, cabinFields, communicationFields, cruisePortFields, customerFields, elementFields, attachmentImage, firstAttachmentImage, firstAttachmentThumbnail, firstAttachmentUrl, firstString, locationFields, memberFields, numberValue, passengerFields, paymentFields, personFields, pick, roomFields, shipFields, strings, supplierFields, truthy, upsellFields, currencyCode, moneyValue, paymentAmount, PAYABLE_CURRENCIES, formatMoney, dateString } from './field-map.js';
@@ -38,43 +38,56 @@ export class TripsService {
     };
   }
 
+  /**
+   * Linked records that make up the trip itself (itinerary elements and their rooms, cabins, passengers and cruise
+   * ports; payments; travellers) are required: if Airtable can't return them the request fails, and the app keeps
+   * showing its last saved copy marked as out of date. Enrichment (agent, extras, messages, suppliers, airports,
+   * airlines, ships, places, letter templates) may degrade: the snapshot is then `partial` and names what's missing.
+   */
   async snapshot(baseId: string, recordId: string, accessScope: AccessScope): Promise<TripSnapshot> {
     const booking = await this.airtable.record(baseId, 'Bookings', recordId);
     const brandId = strings(pick(booking.fields, bookingFields.brand))[0];
+    const incomplete = new Set<TripSection>();
+    const optional = async (section: TripSection, table: string, ids: string[]) => {
+      const result = await this.airtable.optionalRecords(baseId, table, ids);
+      if (result.unavailable) incomplete.add(section);
+      return result.records;
+    };
     const [brand, members, elements, payments, people, customers, upsells, communications] = await Promise.all([
       // Only the booking itself is required; an unreadable brand falls back to defaults like a booking without one.
       brandId ? this.airtable.record(baseId, 'Brands & Branches', brandId).catch(() => emptyRecord()) : Promise.resolve(emptyRecord()),
-      this.airtable.records(baseId, 'Members', strings(pick(booking.fields, bookingFields.member))),
+      optional('agent', 'Members', strings(pick(booking.fields, bookingFields.member))),
       this.airtable.records(baseId, 'Bookings [Elements]', strings(pick(booking.fields, bookingFields.elements))),
       this.airtable.records(baseId, 'Bookings [Payments]', strings(pick(booking.fields, bookingFields.payments))),
       this.airtable.records(baseId, 'Customers [People]', strings(pick(booking.fields, bookingFields.people))),
       this.airtable.records(baseId, 'Customers', strings(pick(booking.fields, bookingFields.customers))),
-      this.airtable.records(baseId, 'Bookings [Upsells]', strings(pick(booking.fields, bookingFields.upsells))),
-      this.airtable.records(baseId, 'Bookings [Customer Communication]', strings(pick(booking.fields, bookingFields.communications)).slice(-40)),
+      optional('extras', 'Bookings [Upsells]', strings(pick(booking.fields, bookingFields.upsells))),
+      optional('messages', 'Bookings [Customer Communication]', strings(pick(booking.fields, bookingFields.communications)).slice(-40)),
     ]);
     const ids = linkedRecordIds(elements);
     ids.suppliers.push(...recordIds(pick(booking.fields, bookingFields.leadSupplier)));
     ids.suppliers.push(...upsells.flatMap((record) => recordIds(pick(record.fields, upsellFields.supplier))));
     ids.locations.push(...recordIds(pick(booking.fields, bookingFields.destinations)));
     const [suppliers, airports, airlines, rooms, cabins, passengers, ships, cruisePorts, locations, operators, brandTemplates] = await Promise.all([
-      this.airtable.records(baseId, 'Suppliers', ids.suppliers),
-      this.airtable.records(baseId, 'CMS [Airports]', ids.airports),
-      this.airtable.records(baseId, 'CMS [Airlines]', ids.airlines),
+      optional('itinerary_details', 'Suppliers', ids.suppliers),
+      optional('itinerary_details', 'CMS [Airports]', ids.airports),
+      optional('itinerary_details', 'CMS [Airlines]', ids.airlines),
       this.airtable.records(baseId, 'Bookings [Rooms]', ids.rooms),
       this.airtable.records(baseId, 'Bookings [Cabin]', ids.cabins),
       this.airtable.records(baseId, 'Bookings [Passengers]', ids.passengers),
-      this.airtable.records(baseId, 'CMS [Cruise Ships]', ids.ships),
+      optional('itinerary_details', 'CMS [Cruise Ships]', ids.ships),
       this.airtable.records(baseId, 'Bookings [Cruise Itinerary]', ids.cruisePorts),
-      this.airtable.records(baseId, 'CMS [Locations]', ids.locations),
-      this.airtable.records(baseId, 'CMS [Cruise Operators]', ids.operators),
-      this.airtable.records(baseId, process.env.AIRTABLE_BRAND_TEMPLATES_TABLE?.trim() || 'Brands & Branches [Templates]', strings(pick(brand.fields, brandFields.templates))),
+      optional('destinations', 'CMS [Locations]', ids.locations),
+      optional('itinerary_details', 'CMS [Cruise Operators]', ids.operators),
+      optional('letters', process.env.AIRTABLE_BRAND_TEMPLATES_TABLE?.trim() || 'Brands & Branches [Templates]', strings(pick(brand.fields, brandFields.templates))),
     ]);
     const portLocationIds = cruisePorts.flatMap((record) => recordIds(pick(record.fields, cruisePortFields.port)));
-    const portLocations = await this.airtable.records(baseId, 'CMS [Locations]', portLocationIds);
-    return this.mapSnapshot(baseId, booking, brand, accessScope, {
+    const portLocations = await optional('itinerary_details', 'CMS [Locations]', portLocationIds);
+    const snapshot = this.mapSnapshot(baseId, booking, brand, accessScope, {
       elements, payments, people, customers, upsells, communications, members, suppliers, airports, airlines, rooms, cabins, passengers, ships,
       cruisePorts, locations: [...locations, ...portLocations], operators, brandTemplates,
     });
+    return incomplete.size ? markPartial(snapshot, [...incomplete]) : snapshot;
   }
 
   async verificationProfile(baseId: string, recordId: string): Promise<{
@@ -539,6 +552,20 @@ interface RelatedRecords {
 }
 
 type RecordGraph = { [K in Exclude<keyof RelatedRecords, 'elements' | 'payments' | 'people' | 'customers' | 'upsells' | 'communications' | 'members' | 'brandTemplates'>]: Map<string, AirtableRecord> };
+
+/** Retry soon after a partial refresh, rather than in the usual five minutes. */
+const PARTIAL_REFRESH_MS = 60_000;
+
+export function markPartial(snapshot: TripSnapshot, sections: TripSection[]): TripSnapshot {
+  const order: TripSection[] = ['itinerary_details', 'destinations', 'extras', 'messages', 'agent', 'letters'];
+  return {
+    ...snapshot,
+    freshness: {
+      ...snapshot.freshness, status: 'partial', incompleteSections: order.filter((section) => sections.includes(section)),
+      nextRefreshAfter: new Date(Date.parse(snapshot.serverTime) + PARTIAL_REFRESH_MS).toISOString(),
+    },
+  };
+}
 
 function emptyRelated(): RelatedRecords {
   return { elements: [], payments: [], people: [], customers: [], upsells: [], communications: [], members: [], suppliers: [], airports: [], airlines: [], rooms: [], cabins: [], passengers: [], ships: [], cruisePorts: [], locations: [], operators: [], brandTemplates: [] };

@@ -31,6 +31,7 @@ import { BrandSupportSection } from './features/trip/brand-support-section';
 import { InvitationFlow } from './features/invitation/invitation-flow';
 import { VtIcon, type VtIconName } from './shared/lucide-icon';
 import { VtLogoMark } from './shared/logo-mark';
+import { incompleteSectionsText, withLastKnownGood } from './core/api/partial-snapshot';
 import { brandPalette } from './shared/brand-palette';
 import { EuropeanDatePipe, formatEuropeanDate } from './shared/european-date.pipe';
 import { isReturnedStage, monthYear, nightsText, stageLabel, tripDateRange } from './shared/trip-format';
@@ -587,6 +588,15 @@ export class App implements OnInit, OnDestroy {
   }
 
   /** A refresh that finished after the traveller switched trips: keep the saved copy current, don't show it. */
+  /** Keeps the saved copy of sections a partial refresh couldn't load (see partial-snapshot.ts). */
+  private withLastKnownGood(snapshot: TripSnapshot): TripSnapshot {
+    const open = this.trip();
+    const previous = open?.tripId === snapshot.tripId ? open : this.savedTripList().find((saved) => saved.snapshot.tripId === snapshot.tripId)?.snapshot;
+    return withLastKnownGood(snapshot, previous);
+  }
+
+  protected incompleteSectionsText(snapshot: TripSnapshot): string | null { return incompleteSectionsText(snapshot); }
+
   private async storeBackgroundRefresh(snapshot: TripSnapshot, session: MobileSession): Promise<void> {
     await this.savedTrips.save(snapshot, session);
     await this.reloadSavedTrips();
@@ -612,7 +622,8 @@ export class App implements OnInit, OnDestroy {
     const currentSession = this.session();
     if (!currentSession) return;
     try {
-      const { result: snapshot, session: activeSession } = await this.sessions.runWithSession(currentSession, (accessToken) => this.api.refreshTrip(accessToken));
+      const { result: fresh, session: activeSession } = await this.sessions.runWithSession(currentSession, (accessToken) => this.api.refreshTrip(accessToken));
+      const snapshot = this.withLastKnownGood(fresh);
       if (!this.isCurrentTrip(generation)) { await this.storeBackgroundRefresh(snapshot, activeSession); return; }
       const previous = this.trip();
       this.trip.set(snapshot);
@@ -641,7 +652,8 @@ export class App implements OnInit, OnDestroy {
     if (tripId) this.setTripRefreshState(tripId, 'refreshing');
     if (showError) this.error.set('');
     try {
-      const { result: snapshot, session: activeSession } = await this.sessions.runWithSession(currentSession, (accessToken) => this.api.refreshTrip(accessToken));
+      const { result: fresh, session: activeSession } = await this.sessions.runWithSession(currentSession, (accessToken) => this.api.refreshTrip(accessToken));
+      const snapshot = this.withLastKnownGood(fresh);
       if (!this.isCurrentTrip(generation)) { await this.storeBackgroundRefresh(snapshot, activeSession); return; }
       const previous = this.trip();
       this.trip.set(snapshot);
@@ -972,7 +984,8 @@ export class App implements OnInit, OnDestroy {
     if (!credential) { this.setTripRefreshState(tripId, 'signed_out'); return; }
     this.setTripRefreshState(tripId, 'refreshing');
     try {
-      const { result: snapshot, session } = await this.sessions.runWithSession(credential, (accessToken) => this.api.refreshTrip(accessToken));
+      const { result: fresh, session } = await this.sessions.runWithSession(credential, (accessToken) => this.api.refreshTrip(accessToken));
+      const snapshot = this.withLastKnownGood(fresh);
       await this.savedTrips.save(snapshot, session);
       // Removed while the refresh was in flight (from another screen or tab): the store refused it; drop the result too.
       if (this.savedTrips.wasRemoved(tripId)) { this.clearTripRefreshState(tripId); return; }
@@ -1101,7 +1114,7 @@ export class App implements OnInit, OnDestroy {
     this.session.set(saved.session);
     this.signedOut.set(!saved.session);
     if (!saved.session) refresh = false;
-    const status = refresh && !isSnapshotStale(saved.snapshot) ? 'fresh' as const : refresh ? 'stale' as const : 'offline' as const;
+    const status = refresh && !isSnapshotStale(saved.snapshot) ? (saved.snapshot.freshness.status === 'partial' ? 'partial' as const : 'fresh' as const) : refresh ? 'stale' as const : 'offline' as const;
     const snapshot = { ...saved.snapshot, freshness: { ...saved.snapshot.freshness, status } };
     this.trip.set(snapshot);
     this.storedSecurely.set(true);

@@ -15,7 +15,10 @@ export const tripStages = [
 
 export type TripStage = (typeof tripStages)[number];
 export type AccessScope = 'primary_customer' | 'fellow_traveller';
-export type FreshnessStatus = 'fresh' | 'stale' | 'offline';
+/** `partial`: the trip itself refreshed, but some optional details couldn't be (see `incompleteSections`). */
+export type FreshnessStatus = 'fresh' | 'stale' | 'offline' | 'partial';
+/** Parts of a snapshot that can be left out when Airtable can't return them; everything else is required. */
+export type TripSection = 'itinerary_details' | 'destinations' | 'extras' | 'messages' | 'agent' | 'letters';
 
 export interface ThemeTokens {
   key: string;
@@ -66,6 +69,8 @@ export interface TripSnapshot {
     status: FreshnessStatus;
     sourceUpdatedAt: string;
     nextRefreshAfter: string | null;
+    /** Present when `status` is `partial`: what could not be refreshed this time. */
+    incompleteSections?: TripSection[];
   };
   brand: {
     name: string;

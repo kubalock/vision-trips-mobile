@@ -97,7 +97,7 @@ describe('AirtableService', () => {
       expect(records.map((record) => record.id)).toEqual(ids);
     });
 
-    it('omits deleted records and failed chunks instead of failing', async () => {
+    it('omits deleted records but throws when a request fails', async () => {
       const ids = Array.from({ length: 35 }, (_, index) => id(index));
       vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
         const requested = requestedIds(fetchUrl(input));
@@ -105,10 +105,19 @@ describe('AirtableService', () => {
         return listResponse(requested.filter((recordId) => recordId !== id(3)));
       });
 
-      const records = await new AirtableService().records('appABCDEFGHIJKLMN', 'CMS [Locations]', ids);
+      await expect(new AirtableService().records('appABCDEFGHIJKLMN', 'Bookings [Payments]', ids)).rejects.toThrow('cannot search');
+      const optional = await new AirtableService().optionalRecords('appABCDEFGHIJKLMN', 'CMS [Locations]', ids);
+      expect(optional.unavailable).toBe(true);
+      expect(optional.records).toHaveLength(29);
+      // Only the record Airtable answered for and didn't return is "missing"; the failed chunk is unknown, not deleted.
+      expect(optional.missingIds).toEqual([id(3)]);
+    });
 
-      expect(records).toHaveLength(29);
-      expect(records.map((record) => record.id)).not.toContain(id(3));
+    it('returns deleted records as missing without failing', async () => {
+      vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => listResponse(requestedIds(fetchUrl(input)).filter((recordId) => recordId !== id(1))));
+      const records = await new AirtableService().records('appABCDEFGHIJKLMN', 'Bookings [Elements]', [id(0), id(1)]);
+      expect(records.map((record) => record.id)).toEqual([id(0)]);
+      await expect(new AirtableService().optionalRecords('appABCDEFGHIJKLMN', 'Suppliers', [id(0), id(1)])).resolves.toMatchObject({ unavailable: false, missingIds: [id(1)] });
     });
 
     it('makes no request when there are no valid ids', async () => {
