@@ -23,6 +23,8 @@ export interface StoredSession {
   accessHash: string;
   accessExpiresAt: number;
   revoked: boolean;
+  /** Ended because Airtable no longer links its holder to the trip (not an ordinary sign-out or expiry). */
+  accessRevoked?: boolean;
 }
 
 interface SessionRow {
@@ -219,8 +221,9 @@ export class DurableAuthStore implements OnModuleDestroy {
     return row ? { sessionId: row.session_id, retiredAt: row.retired_at } : null;
   }
 
-  revokeSession(sessionId: string): void {
-    this.database.prepare('UPDATE auth_sessions SET revoked = 1 WHERE id = ?').run(sessionId);
+  /** `access_revoked` remembers why, so later refreshes keep telling the device to withdraw its saved copy. */
+  revokeSession(sessionId: string, reason?: 'access_revoked'): void {
+    this.database.prepare('UPDATE auth_sessions SET revoked = ? WHERE id = ?').run(reason === 'access_revoked' ? ACCESS_REVOKED : 1, sessionId);
   }
 
   revokeByRefreshHash(hash: string): void {
@@ -430,7 +433,7 @@ export class DurableAuthStore implements OnModuleDestroy {
 }
 
 function mapSession(row: SessionRow | undefined): StoredSession | null {
-  return row ? { id: row.id, baseId: row.base_id, recordId: row.record_id, fellowTraveller: Boolean(row.fellow_traveller), customerRecordId: row.customer_record_id ?? null, assurance: assuranceOf(row.assurance), invitationId: row.invitation_id ?? null, accountKey: row.account_key ?? null, bookingOwnerCustomerRecordId: row.booking_owner_customer_record_id ?? null, refreshHash: row.refresh_hash, refreshExpiresAt: row.refresh_expires_at, accessHash: row.access_hash, accessExpiresAt: row.access_expires_at, revoked: Boolean(row.revoked) } : null;
+  return row ? { id: row.id, baseId: row.base_id, recordId: row.record_id, fellowTraveller: Boolean(row.fellow_traveller), customerRecordId: row.customer_record_id ?? null, assurance: assuranceOf(row.assurance), invitationId: row.invitation_id ?? null, accountKey: row.account_key ?? null, bookingOwnerCustomerRecordId: row.booking_owner_customer_record_id ?? null, refreshHash: row.refresh_hash, refreshExpiresAt: row.refresh_expires_at, accessHash: row.access_hash, accessExpiresAt: row.access_expires_at, revoked: Boolean(row.revoked), accessRevoked: row.revoked === ACCESS_REVOKED } : null;
 }
 
 function assuranceOf(value: string | null): SessionAssurance {
@@ -453,3 +456,6 @@ function mapInvitation(row: InvitationRow | undefined): StoredInvitation | null 
 function revokedReasonOf(value: string | null | undefined): InvitationRevokedReason | null {
   return value === 'replaced' || value === 'revoked' || value === 'delivery_failed' ? value : null;
 }
+
+/** `auth_sessions.revoked`: 0 live, 1 ended, 2 ended because access to the trip was withdrawn in Airtable. */
+const ACCESS_REVOKED = 2;

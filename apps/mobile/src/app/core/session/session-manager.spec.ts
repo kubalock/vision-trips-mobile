@@ -67,8 +67,34 @@ describe('SessionManager', () => {
 
     for (const result of results) expect(result).toMatchObject({ status: 'rejected', reason: expect.any(SessionExpiredError) });
     expect(expired).toHaveBeenCalledOnce();
-    expect(expired).toHaveBeenCalledWith('dead-refresh');
+    expect(expired).toHaveBeenCalledWith('dead-refresh', 'expired');
     expect(manager.session()).toBeNull();
+  });
+
+  it('reports a renewal refused with access_revoked as revoked, without the browser retry', async () => {
+    const manager = TestBed.inject(SessionManager);
+    const expired = vi.fn();
+    manager.connect({ tripIdFor: () => undefined, renewed: () => undefined, expired });
+    const revoked = new HttpErrorResponse({ status: 401, error: { code: 'access_revoked' } });
+    const refresh = vi.spyOn(TestBed.inject(VisionApiService), 'refreshSession').mockRejectedValue(revoked);
+
+    await expect(manager.renew({ ...session('old'), refreshToken: 'web:handle' })).rejects.toMatchObject({ reason: 'revoked' });
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(expired).toHaveBeenCalledWith('web:handle', 'revoked');
+  });
+
+  it('ends the session as revoked when a request is refused with access_revoked, without renewing', async () => {
+    const manager = TestBed.inject(SessionManager);
+    const expired = vi.fn();
+    manager.connect({ tripIdFor: () => undefined, renewed: () => undefined, expired });
+    const refresh = vi.spyOn(TestBed.inject(VisionApiService), 'refreshSession');
+    const request = vi.fn().mockRejectedValue(new HttpErrorResponse({ status: 401, error: { code: 'access_revoked' } }));
+
+    const results = await Promise.allSettled([manager.run(session('old'), request), manager.run(session('old'), request)]);
+
+    for (const result of results) expect(result).toMatchObject({ status: 'rejected', reason: expect.objectContaining({ reason: 'revoked' }) });
+    expect(refresh).not.toHaveBeenCalled();
+    expect(expired).toHaveBeenCalledOnce();
   });
 
   it('does not call the server for a session whose refresh token has already expired', async () => {

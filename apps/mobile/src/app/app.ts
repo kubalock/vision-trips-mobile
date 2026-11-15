@@ -206,7 +206,7 @@ export class App implements OnInit, OnDestroy {
         // The old refresh token is now dead server-side; keep the in-memory library in step with storage.
         this.savedTripList.update((trips) => trips.map((trip) => trip.session?.refreshToken === previousRefreshToken ? { ...trip, session } : trip));
       },
-      expired: (refreshToken) => this.handleSessionExpired(refreshToken),
+      expired: (refreshToken, reason) => reason === 'revoked' ? this.handleAccessRevoked(refreshToken) : this.handleSessionExpired(refreshToken),
     });
   }
 
@@ -1293,6 +1293,28 @@ export class App implements OnInit, OnDestroy {
     this.markFreshness('offline');
   }
 
+  /**
+   * The server said this traveller no longer has access to the trip (`access_revoked`: the agent unlinked them in
+   * Airtable). Unlike an ordinary expiry, nothing is kept for offline viewing: the saved copy, its documents,
+   * notifications, checklist and cached brand assets are removed from this device straight away.
+   */
+  private async handleAccessRevoked(refreshToken: string): Promise<void> {
+    const saved = this.savedTripList().find((trip) => trip.session?.refreshToken === refreshToken);
+    const isOpenTrip = this.session()?.refreshToken === refreshToken;
+    const tripId = isOpenTrip ? this.trip()?.tripId : saved?.snapshot.tripId;
+    if (!tripId) return;
+    await this.savedTrips.remove(tripId);
+    await this.clearTripLocalData(tripId);
+    this.savedTripList.update((trips) => trips.filter((trip) => trip.snapshot.tripId !== tripId));
+    this.clearTripRefreshState(tripId);
+    if (!this.savedTripList().length) this.showTripLibrary.set(false);
+    if (this.trip()?.tripId !== tripId) return;
+    this.clearOpenTrip();
+    this.signedOut.set(false);
+    this.refreshing.set(false);
+    this.error.set(ACCESS_REVOKED_MESSAGE);
+  }
+
   /** Payments that could be paid now (so the "sign in again to pay" note isn't shown for a fully paid trip). */
   protected hasPayableItems(payments: NonNullable<TripSnapshot['payments']>): boolean {
     return payments.items.some((item) => item.canPay) || payments.customPayments.enabled;
@@ -1439,6 +1461,8 @@ export function isVerificationRequired(error: unknown): boolean {
   return error instanceof HttpErrorResponse && error.status === 403 && (error.error as { code?: unknown } | null)?.code === 'verification_required';
 }
 
+const ACCESS_REVOKED_MESSAGE = 'You no longer have access to this trip, so it has been removed from this device. Please contact your travel agent if you think this is a mistake.';
+
 export function customerErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof DocumentTooLargeError) return 'This document is too large to download in the app. Ask your travel agent to email it to you.';
   // A response that failed its schema: say it's temporary rather than showing half-read data or a generic failure.
@@ -1446,9 +1470,10 @@ export function customerErrorMessage(error: unknown, fallback: string): string {
   if (isTripDataError(error)) return error.reason === 'unsupported_version'
     ? 'This trip needs a newer version of the app. Please update the app and try again.'
     : 'We couldn’t read this trip’s details. Please try again in a moment, or contact your travel agent.';
-  if (isTerminalSessionError(error)) return 'You’ve been signed out of this trip. Open your trip link again to continue.';
+  if (isTerminalSessionError(error)) return error.reason === 'revoked' ? ACCESS_REVOKED_MESSAGE : 'You’ve been signed out of this trip. Open your trip link again to continue.';
   if (!(error instanceof HttpErrorResponse)) return fallback;
   if (error.status === 0) return 'We can’t reach Vision Trips right now. Check your connection and try again.';
+  if (error.status === 401 && error.error?.code === 'access_revoked') return ACCESS_REVOKED_MESSAGE;
   if (error.status === 401) return 'For your security, please open your trip link again to continue.';
   // A partial save is a 503 too, but the traveller needs to know some changes did save and to save again.
   if (error.error?.code === 'preferences_partially_saved') return 'Some of your changes were saved, but not all of them. Please save again to finish.';

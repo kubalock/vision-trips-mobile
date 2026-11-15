@@ -6,6 +6,9 @@ import { App, customerErrorMessage, engagementLabel, isShareCancelled } from './
 import { VisionApiService } from './core/api/vision-api.service';
 import { ShareSheet } from './core/platform/share-sheet';
 import { parseTripSnapshot } from './core/api/trip-schema';
+import { BrandAssetsStore } from './core/storage/brand-assets.store';
+import { CustomerNotificationsStore, type CustomerNotification } from './core/storage/customer-notifications.store';
+import { DocumentWalletStore, type WalletStatus } from './core/storage/document-wallet.store';
 
 /** A complete snapshot (schema defaults fill every section), so rendering it in a test can't throw. */
 const fullTrip = (extra: Record<string, unknown> = {}) => parseTripSnapshot({ schemaVersion: 3, tripId: 'trip-1', stage: 'confirmed', accessScope: 'primary_customer', summary: { name: 'Lisbon', reference: 'REF-1' }, ...extra });
@@ -274,6 +277,38 @@ describe('App', () => {
       expect(app.savedTripList()[0].session).toBeNull();
       fixture.detectChanges();
       expect((fixture.nativeElement as HTMLElement).querySelector('.vt-signed-out')?.textContent).toContain('signed out of this trip');
+    });
+
+    it('removes the trip and everything kept for it when the server says access was withdrawn', async () => {
+      const { app, api, fixture } = setup();
+      await fixture.whenStable();
+      nativeStorage();
+      const store = TestBed.inject(SavedTripsStore);
+      const trip = { ...(minimalTrip() as object), tripId: 'trip-1', payments: { paid: 0, items: [] } };
+      const other = { ...(minimalTrip() as object), tripId: 'trip-2' };
+      app.trip.set(trip);
+      await store.save(trip as never, app.session() as never);
+      await store.save(other as never, { ...app.session(), refreshToken: 'other-refresh' } as never);
+      app.savedTripList.set(await store.all());
+      const brand = vi.spyOn(TestBed.inject(BrandAssetsStore), 'remove');
+      const wallet = vi.spyOn(TestBed.inject(DocumentWalletStore), 'remove');
+      const notifications = vi.spyOn(TestBed.inject(CustomerNotificationsStore), 'clear');
+      const revoked = new HttpErrorResponse({ status: 401, error: { statusCode: 401, code: 'access_revoked', message: 'No longer available.' } });
+      const refresh = vi.spyOn(api, 'refreshSession');
+      vi.spyOn(api, 'paymentLink').mockRejectedValue(revoked);
+      vi.spyOn(window, 'open').mockImplementation(() => null);
+
+      await app.openPayment('pay-1');
+
+      expect(refresh).not.toHaveBeenCalled(); // Renewing can't help.
+      expect((await store.all()).map((saved) => saved.snapshot.tripId)).toEqual(['trip-2']);
+      expect(app.savedTripList().map((saved) => (saved as unknown as { snapshot: { tripId: string } }).snapshot.tripId)).toEqual(['trip-2']);
+      expect(brand).toHaveBeenCalledWith('trip-1');
+      expect(wallet).toHaveBeenCalledWith('trip-1');
+      expect(notifications).toHaveBeenCalledWith('trip-1');
+      expect(app.session()).toBeNull();
+      expect((app as unknown as { trip: () => unknown }).trip()).toBeNull();
+      expect(app.error()).toContain('no longer have access to this trip');
     });
 
     it('does not bring back a trip that was removed while it was refreshing', async () => {
@@ -734,6 +769,7 @@ describe('customerErrorMessage', () => {
   it('explains offline and expired-session cases plainly', () => {
     expect(customerErrorMessage(http(0), 'fallback')).toContain('Check your connection');
     expect(customerErrorMessage(http(401), 'fallback')).toContain('open your trip link again');
+    expect(customerErrorMessage(new HttpErrorResponse({ status: 401, error: { code: 'access_revoked' } }), 'fallback')).toContain('no longer have access');
     expect(customerErrorMessage(new Error('boom'), 'Fallback copy.')).toBe('Fallback copy.');
   });
 });

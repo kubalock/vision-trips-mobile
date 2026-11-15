@@ -21,9 +21,22 @@ export interface SessionRenewal {
  */
 export class SessionExpiredError extends Error {
   override readonly name = 'SessionExpiredError';
-  constructor(readonly refreshToken: string, cause?: unknown) {
-    super('The trip session has expired.', { cause });
+  constructor(readonly refreshToken: string, cause?: unknown, readonly reason: SessionEndReason = 'expired') {
+    super(reason === 'revoked' ? 'Access to this trip has been withdrawn.' : 'The trip session has expired.', { cause });
   }
+}
+
+/**
+ * Why a session ended. `expired` (timed out, signed out, refused): the saved trip stays readable offline.
+ * `revoked`: the server said this traveller no longer has access to the trip (`access_revoked`), so the device
+ * withdraws everything it kept for it. Nothing can be withdrawn while the device stays offline; it happens as soon
+ * as the server says so.
+ */
+export type SessionEndReason = 'expired' | 'revoked';
+
+/** The server's answer when Airtable no longer links this traveller to the trip. */
+export function isAccessRevoked(error: unknown): boolean {
+  return error instanceof HttpErrorResponse && error.status === 401 && error.error?.code === 'access_revoked';
 }
 
 export function isTerminalSessionError(error: unknown): error is SessionExpiredError {
@@ -36,7 +49,7 @@ export interface SessionHooks {
   /** Runs before the renewed session is handed back to callers. */
   renewed(renewal: SessionRenewal): Promise<void> | void;
   /** Runs once when a session turns out to be unusable, before callers receive `SessionExpiredError`. */
-  expired(refreshToken: string): Promise<void> | void;
+  expired(refreshToken: string, reason: SessionEndReason): Promise<void> | void;
 }
 
 /**
@@ -75,6 +88,8 @@ export class SessionManager {
       return { result: await request(active.accessToken), session: active };
     } catch (error) {
       if (!(error instanceof HttpErrorResponse) || error.status !== 401) throw error;
+      // Withdrawn, not just expired: renewing can't help, and the device must drop what it kept for the trip.
+      if (isAccessRevoked(error)) return this.endRevoked(active.refreshToken, error);
       active = await this.renew(active);
       return { result: await request(active.accessToken), session: active };
     }
@@ -109,9 +124,20 @@ export class SessionManager {
   }
 
   private async expire(refreshToken: string, cause: unknown): Promise<never> {
-    await this.hooks.expired(refreshToken);
+    const reason: SessionEndReason = isAccessRevoked(cause) ? 'revoked' : 'expired';
+    await this.hooks.expired(refreshToken, reason);
     if (this.session()?.refreshToken === refreshToken) this.session.set(null);
-    throw new SessionExpiredError(refreshToken, cause);
+    throw new SessionExpiredError(refreshToken, cause, reason);
+  }
+
+  /** Ends a session the server reported as revoked during a request; concurrent callers share one ending. */
+  private endRevoked(refreshToken: string, cause: unknown): Promise<never> {
+    // A renewal already under way will be refused the same way and end the session itself.
+    const pending = this.inFlight.get(refreshToken);
+    if (pending) return pending.then(() => this.expire(refreshToken, cause));
+    const ending = this.expire(refreshToken, cause).finally(() => this.inFlight.delete(refreshToken));
+    this.inFlight.set(refreshToken, ending);
+    return ending;
   }
 
   /**
@@ -122,7 +148,7 @@ export class SessionManager {
     try {
       return await this.api.refreshSession(refreshToken);
     } catch (error) {
-      if (!isWebSessionHandle(refreshToken) || !(error instanceof HttpErrorResponse) || error.status !== 401) throw error;
+      if (!isWebSessionHandle(refreshToken) || !(error instanceof HttpErrorResponse) || error.status !== 401 || isAccessRevoked(error)) throw error;
       await new Promise((resolve) => setTimeout(resolve, WEB_REFRESH_RETRY_MS));
       return this.api.refreshSession(refreshToken);
     }

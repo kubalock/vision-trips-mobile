@@ -79,10 +79,15 @@ describe('TripEntitlementsService', () => {
 
     context.state.records[BOOKING] = booking([]);
     await expect(context.sessions.authorize(`Bearer ${session.accessToken}`, { fresh: true })).rejects.toMatchObject({ response: { code: 'access_revoked' } });
-    // Ended for good: the access token and the refresh token both stop working, even after relinking.
+    // Ended for good: the access token and the refresh token both stop working, even after relinking, and keep
+    // saying why, so a device that missed the first answer still withdraws its saved copy.
     context.state.records[BOOKING] = booking([GRACE]);
-    expect(() => context.sessions.validateAccess(`Bearer ${session.accessToken}`)).toThrow();
-    await expect(context.sessions.refresh(session.refreshToken)).rejects.toThrow('expired');
+    expect(() => context.sessions.validateAccess(`Bearer ${session.accessToken}`)).toThrow(expect.objectContaining({ response: expect.objectContaining({ code: 'access_revoked' }) }));
+    await expect(context.sessions.refresh(session.refreshToken)).rejects.toMatchObject({ response: { code: 'access_revoked' } });
+    // An ordinary sign-out is not a revocation.
+    const other = context.sessions.issue(direct);
+    context.sessions.revoke(other.refreshToken);
+    await expect(context.sessions.refresh(other.refreshToken)).rejects.not.toMatchObject({ response: { code: 'access_revoked' } });
   });
 
   it('refuses a deleted or soft-deleted Booking, also for share-link sessions', async () => {

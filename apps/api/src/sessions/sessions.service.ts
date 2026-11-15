@@ -3,7 +3,7 @@ import type { MobileSession, SessionAssurance } from '@vision-trips/contracts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { identityKey } from '../security/identity-key.js';
 import { DurableAuthStore, type StoredSession } from './durable-auth.store.js';
-import { TripEntitlementsService } from './trip-entitlements.service.js';
+import { TripEntitlementsService, accessRevoked } from './trip-entitlements.service.js';
 
 export interface SessionPrincipal {
   baseId: string;
@@ -94,6 +94,7 @@ export class SessionsService {
   validateAccess(authorization: unknown): SessionPrincipal {
     if (typeof authorization !== 'string' || !authorization.startsWith('Bearer ')) throw invalidSession();
     const stored = this.store.sessionByAccessHash(hash(authorization.slice(7).trim()));
+    if (stored?.accessRevoked) throw accessRevoked();
     if (!stored || stored.revoked || stored.accessExpiresAt < Date.now()) throw new UnauthorizedException('The access session has expired.');
     return principalOf(stored);
   }
@@ -116,6 +117,8 @@ export class SessionsService {
       if (retired && Date.now() - retired.retiredAt > REFRESH_REUSE_GRACE_MS) this.store.revokeSession(retired.sessionId);
       throw new UnauthorizedException('The session has expired.');
     }
+    // Keep saying why access ended, so a device that missed the first answer still withdraws its saved copy.
+    if (stored.accessRevoked) throw accessRevoked();
     if (stored.revoked || stored.refreshExpiresAt < Date.now()) throw new UnauthorizedException('The session has expired.');
     return stored;
   }

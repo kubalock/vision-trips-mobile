@@ -48,7 +48,7 @@ export class TripEntitlementsService {
     if (!options.fresh && confirmedAt !== undefined && this.now() - confirmedAt < CONFIRMED_FOR_MS) return;
     const { problem, accountKey } = await this.evaluate(principal);
     if (problem) {
-      if (key) { this.store.revokeSession(key); this.confirmed.delete(key); }
+      if (key) { this.store.revokeSession(key, 'access_revoked'); this.confirmed.delete(key); }
       this.logger.warn(JSON.stringify({ event: 'session_access_revoked', reason: problem }));
       throw accessRevoked();
     }
