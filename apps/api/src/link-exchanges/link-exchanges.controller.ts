@@ -29,7 +29,7 @@ export class LinkExchangesController {
   @Post('step-up')
   @ApiBearerAuth()
   async stepUp(@Headers('authorization') authorization: string | undefined): Promise<StepUpResponse> {
-    const principal = this.sessions.validateAccess(authorization);
+    const principal = await this.sessions.authorize(authorization, { fresh: true });
     return checkedResponse(stepUpResponseSchema, { invitationToken: await this.invitations.stepUp(principal) });
   }
 

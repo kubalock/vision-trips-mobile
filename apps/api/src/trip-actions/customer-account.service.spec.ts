@@ -191,7 +191,7 @@ describe('CustomerAccountService identity', () => {
       const back = (await account.account(fromTwin)).trips.find((trip) => trip.name === 'Japan')!;
       const japan = await account.open(fromTwin, back.accountTripId);
       expect(sessions.validateAccess(`Bearer ${japan.session.accessToken}`)).toMatchObject({ customerRecordId: GRACE, bookingOwnerCustomerRecordId: null, accountKey: 'account:acct-grace' });
-      expect(sessions.refresh(japan.session.refreshToken).identityKey).toBe(opened.session.identityKey);
+      expect((await sessions.refresh(japan.session.refreshToken)).identityKey).toBe(opened.session.identityKey);
     });
 
     it('never lets an opt-out on any grouped record be hidden by an opt-in on another', async () => {

@@ -14,7 +14,7 @@ export class ExternalContentController {
   @Get()
   @ApiBearerAuth()
   async content(@Headers('authorization') authorization: string | undefined, @Req() request: Request): Promise<ExternalTripContent> {
-    const principal = this.sessions.validateAccess(authorization);
+    const principal = await this.sessions.authorize(authorization);
     const snapshot = await this.trips.snapshot(principal.baseId, principal.recordId, principal.fellowTraveller ? 'fellow_traveller' : 'primary_customer');
     return this.external.content(snapshot, publicApiBase(`${request.protocol}://${request.get('host')}`));
   }

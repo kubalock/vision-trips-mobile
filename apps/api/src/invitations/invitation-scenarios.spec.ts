@@ -129,7 +129,7 @@ describe('invitation scenario matrix', () => {
       const second = await invite(context, {}, now + 60_000); // Inside the window, but the first was used: a fresh link.
       expect((await context.service.resolve(second, [])).status).toBe('pending');
       expect(principalOf(context, authorized.session.accessToken).customerRecordId).toBe(GRACE); // Resending never signs the customer out.
-      expect(context.sessions.refresh(authorized.session.refreshToken).accessToken).toBeTruthy();
+      expect((await context.sessions.refresh(authorized.session.refreshToken)).accessToken).toBeTruthy();
     });
 
     it('completing the second invitation first leaves the first unusable', async () => {
@@ -291,8 +291,8 @@ describe('invitation scenario matrix', () => {
       const a = await verify(context, await invite(context));
       const b = await verify(context, await invite(context, { baseId: BASE_B }));
       context.sessions.revoke(b.session.refreshToken);
-      expect(() => context.sessions.refresh(b.session.refreshToken)).toThrow();
-      expect(context.sessions.refresh(a.session.refreshToken).identityKey).toBe(a.session.identityKey);
+      await expect(context.sessions.refresh(b.session.refreshToken)).rejects.toThrow();
+      expect((await context.sessions.refresh(a.session.refreshToken)).identityKey).toBe(a.session.identityKey);
     });
 
     it('invitation codes and per-customer send limits are scoped by base', async () => {

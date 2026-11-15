@@ -3,7 +3,8 @@ import { ApiBearerAuth, ApiProduces, ApiTags } from '@nestjs/swagger';
 import type { CustomerAccount, CustomerMessageRequest, CustomerMessageResponse, CustomerMessageTopic, CustomerPreferences, FellowTravellerLinkResponse, OpenCustomerAccountTripResponse, OpenRelatedQuotationResponse, PaymentLinkResponse, QuotationAcceptanceRequest, QuotationAcceptanceResponse, RelatedQuotationsResponse, UpdateCustomerPreferencesResponse, PaymentStatusResponse } from '@vision-trips/contracts';
 import type { Request } from 'express';
 import { AirtableService } from '../airtable/airtable.service.js';
-import { SessionsService } from '../sessions/sessions.service.js';
+import { SessionsService, type SessionPrincipal } from '../sessions/sessions.service.js';
+import { TripEntitlementsService } from '../sessions/trip-entitlements.service.js';
 import { TripsService } from '../trips/trips.service.js';
 import { isVerified, requireVerified } from '../security/assurance.js';
 import { CustomerInvitationsService } from '../invitations/customer-invitations.service.js';
@@ -31,57 +32,69 @@ export class TripActionsController {
     private readonly mintPayments: MintPaymentsService,
     @Optional() private readonly relatedQuotations?: RelatedQuotationsService,
     @Optional() private readonly customerAccount?: CustomerAccountService,
+    @Optional() private readonly entitlements?: TripEntitlementsService,
   ) {}
 
+  /**
+   * The session, once Airtable confirms its holder is still linked to the trip (see TripEntitlementsService). Reads
+   * may reuse a check from the last minute; `fresh` re-checks before payments, sharing, acceptance and other writes.
+   */
+  private async live(authorization: string | undefined, fresh = false): Promise<SessionPrincipal> {
+    const principal = this.sessions.validateAccess(authorization);
+    await this.entitlements?.assertCurrent(principal, { fresh });
+    return principal;
+  }
+
   /** Account settings, and trips or quotations opened from the account, need an email-verified (or trusted-device) session. */
-  private verified(authorization: string | undefined) {
+  private async verified(authorization: string | undefined, fresh = false): Promise<SessionPrincipal> {
     const principal = this.sessions.validateAccess(authorization);
     if (principal.fellowTraveller) throw new ForbiddenException('This is only available to the lead customer.');
     requireVerified(principal);
+    await this.entitlements?.assertCurrent(principal, { fresh });
     return principal;
   }
 
   @Get('account')
   @ApiBearerAuth()
-  account(@Headers('authorization') authorization: string | undefined): Promise<CustomerAccount> {
+  async account(@Headers('authorization') authorization: string | undefined): Promise<CustomerAccount> {
     if (!this.customerAccount) throw new ServiceUnavailableException('Customer accounts are not available.');
-    return this.customerAccount.account(this.verified(authorization));
+    return this.customerAccount.account(await this.verified(authorization));
   }
 
   @Post('account/preferences')
   @ApiBearerAuth()
-  updatePreferences(@Headers('authorization') authorization: string | undefined, @Body() body: Partial<CustomerPreferences>): Promise<UpdateCustomerPreferencesResponse> {
+  async updatePreferences(@Headers('authorization') authorization: string | undefined, @Body() body: Partial<CustomerPreferences>): Promise<UpdateCustomerPreferencesResponse> {
     if (!this.customerAccount) throw new ServiceUnavailableException('Customer accounts are not available.');
-    return this.customerAccount.update(this.verified(authorization), body);
+    return this.customerAccount.update(await this.verified(authorization, true), body);
   }
 
   @Post('account/trips/:accountTripId/open')
   @ApiBearerAuth()
   @NoStoredReplay()
-  openAccountTrip(@Headers('authorization') authorization: string | undefined, @Param('accountTripId') accountTripId: string): Promise<OpenCustomerAccountTripResponse> {
+  async openAccountTrip(@Headers('authorization') authorization: string | undefined, @Param('accountTripId') accountTripId: string): Promise<OpenCustomerAccountTripResponse> {
     if (!this.customerAccount) throw new ServiceUnavailableException('Customer accounts are not available.');
-    return this.customerAccount.open(this.verified(authorization), accountTripId);
+    return this.customerAccount.open(await this.verified(authorization, true), accountTripId);
   }
 
   @Get('related-quotations')
   @ApiBearerAuth()
-  related(@Headers('authorization') authorization: string | undefined): Promise<RelatedQuotationsResponse> {
+  async related(@Headers('authorization') authorization: string | undefined): Promise<RelatedQuotationsResponse> {
     if (!this.relatedQuotations) throw new ServiceUnavailableException('Quotation comparison is not available.');
-    return this.relatedQuotations.list(this.sessions.validateAccess(authorization));
+    return this.relatedQuotations.list(await this.live(authorization));
   }
 
   @Post('related-quotations/:comparisonId/open')
   @ApiBearerAuth()
   @NoStoredReplay()
-  openRelated(@Headers('authorization') authorization: string | undefined, @Param('comparisonId') comparisonId: string): Promise<OpenRelatedQuotationResponse> {
+  async openRelated(@Headers('authorization') authorization: string | undefined, @Param('comparisonId') comparisonId: string): Promise<OpenRelatedQuotationResponse> {
     if (!this.relatedQuotations) throw new ServiceUnavailableException('Quotation comparison is not available.');
-    return this.relatedQuotations.open(this.verified(authorization), comparisonId);
+    return this.relatedQuotations.open(await this.verified(authorization, true), comparisonId);
   }
 
   @Get()
   @ApiBearerAuth()
   async snapshot(@Headers('authorization') authorization: string | undefined) {
-    const principal = this.sessions.validateAccess(authorization);
+    const principal = await this.live(authorization);
     const snapshot = await this.trips.snapshot(
       principal.baseId,
       principal.recordId,
@@ -95,8 +108,8 @@ export class TripActionsController {
 
   @Get('payment-status')
   @ApiBearerAuth()
-  paymentStatus(@Headers('authorization') authorization: string | undefined): Promise<PaymentStatusResponse> {
-    const principal = this.sessions.validateAccess(authorization);
+  async paymentStatus(@Headers('authorization') authorization: string | undefined): Promise<PaymentStatusResponse> {
+    const principal = await this.live(authorization);
     if (principal.fellowTraveller) throw new ForbiddenException('Payment details are only available to the lead customer.');
     return this.trips.paymentStatus(principal.baseId, principal.recordId);
   }
@@ -105,7 +118,7 @@ export class TripActionsController {
   @ApiBearerAuth()
   @NoStoredReplay()
   async fellowTravellerLink(@Headers('authorization') authorization: string | undefined): Promise<FellowTravellerLinkResponse> {
-    const principal = this.sessions.validateAccess(authorization);
+    const principal = await this.live(authorization, true);
     if (principal.fellowTraveller) throw new ForbiddenException('Only the lead customer can share this trip.');
     requireVerified(principal);
     const snapshot = await this.trips.snapshot(principal.baseId, principal.recordId, 'primary_customer');
@@ -116,7 +129,7 @@ export class TripActionsController {
   @Post('payments/custom/link')
   @ApiBearerAuth()
   async customPaymentLink(@Headers('authorization') authorization: string | undefined, @Body() body: { amount?: unknown }): Promise<PaymentLinkResponse> {
-    const principal = this.sessions.validateAccess(authorization);
+    const principal = await this.live(authorization, true);
     if (principal.fellowTraveller) throw new ForbiddenException('Payments are only available to the lead customer.');
     requireVerified(principal);
     return this.mintPayments.link(principal.baseId, principal.recordId, 'custom', body?.amount);
@@ -128,7 +141,7 @@ export class TripActionsController {
     @Headers('authorization') authorization: string | undefined,
     @Param('paymentId') paymentId: string,
   ): Promise<PaymentLinkResponse> {
-    const principal = this.sessions.validateAccess(authorization);
+    const principal = await this.live(authorization, true);
     if (principal.fellowTraveller) throw new ForbiddenException('Payments are only available to the lead customer.');
     requireVerified(principal);
     return this.mintPayments.link(principal.baseId, principal.recordId, paymentId);
@@ -140,7 +153,7 @@ export class TripActionsController {
     @Headers('authorization') authorization: string | undefined,
     @Body() body: Partial<CustomerMessageRequest>,
   ): Promise<CustomerMessageResponse> {
-    const principal = this.sessions.validateAccess(authorization);
+    const principal = await this.live(authorization, true);
     const topics: CustomerMessageTopic[] = ['itinerary', 'payment', 'documents', 'accessibility', 'other'];
     if (!topics.includes(body.topic as CustomerMessageTopic)) throw new BadRequestException('Choose a message topic.');
     const message = typeof body.message === 'string' ? body.message.replace(/\s+/g, ' ').trim() : '';
@@ -164,7 +177,7 @@ export class TripActionsController {
     @Body() body: Partial<QuotationAcceptanceRequest>,
     @Req() request: Request,
   ): Promise<QuotationAcceptanceResponse> {
-    const principal = this.sessions.validateAccess(authorization);
+    const principal = await this.live(authorization, true);
     if (principal.fellowTraveller) throw new ForbiddenException('Only the lead customer can accept this quotation.');
     requireVerified(principal);
     const name = typeof body.name === 'string' ? body.name.trim() : '';
@@ -207,7 +220,7 @@ export class TripActionsController {
   @ApiBearerAuth()
   @ApiProduces('text/calendar')
   async calendar(@Headers('authorization') authorization: string | undefined): Promise<StreamableFile> {
-    const principal = this.sessions.validateAccess(authorization);
+    const principal = await this.live(authorization);
     const snapshot = await this.trips.snapshot(
       principal.baseId,
       principal.recordId,
@@ -228,7 +241,7 @@ export class TripActionsController {
     @Param('kind') kind: string,
   ): Promise<StreamableFile> {
     if (kind !== 'confirmation' && kind !== 'invoice' && kind !== 'acceptance') throw new BadRequestException('Unknown document type.');
-    const principal = this.sessions.validateAccess(authorization);
+    const principal = await this.live(authorization);
     if ((kind === 'invoice' || kind === 'acceptance') && principal.fellowTraveller) throw new ForbiddenException('This document is only available to the lead customer.');
     const snapshot = await this.trips.snapshot(principal.baseId, principal.recordId, principal.fellowTraveller ? 'fellow_traveller' : 'primary_customer');
     let html: string;
@@ -254,7 +267,7 @@ export class TripActionsController {
     @Headers('authorization') authorization: string | undefined,
     @Param('action') action: string,
   ): Promise<StreamableFile> {
-    const principal = this.sessions.validateAccess(authorization);
+    const principal = await this.live(authorization);
     const snapshot = await this.trips.snapshot(principal.baseId, principal.recordId, principal.fellowTraveller ? 'fellow_traveller' : 'primary_customer');
     const walletDocument = snapshot.documents.find((item) => item.downloadAction === action);
     if (!walletDocument || walletDocument.status !== 'ready') throw new NotFoundException('This document is not available.');

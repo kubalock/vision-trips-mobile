@@ -7,7 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
 
 describe('SessionsService', () => {
-  it('rotates refresh tokens and rejects replay of the previous token', () => {
+  it('rotates refresh tokens and rejects replay of the previous token', async () => {
     const service = serviceInMemory();
     const initial = service.issue({
       baseId: 'appABCDEFGHIJKLMN',
@@ -16,38 +16,38 @@ describe('SessionsService', () => {
       customerRecordId: null,
       assurance: 'otp',
     });
-    const refreshed = service.refresh(initial.refreshToken);
+    const refreshed = await service.refresh(initial.refreshToken);
 
     expect(refreshed.refreshToken).not.toBe(initial.refreshToken);
-    expect(() => service.refresh(initial.refreshToken)).toThrow('expired');
+    await expect(service.refresh(initial.refreshToken)).rejects.toThrow('expired');
   });
 
-  it('ends the whole session when a replaced refresh token is reused after the grace period', () => {
+  it('ends the whole session when a replaced refresh token is reused after the grace period', async () => {
     vi.useFakeTimers();
     try {
       const service = serviceInMemory();
       const initial = service.issue({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false, customerRecordId: null, assurance: 'otp' });
-      const legitimate = service.refresh(initial.refreshToken);
+      const legitimate = await service.refresh(initial.refreshToken);
 
       vi.advanceTimersByTime(60_000);
-      expect(() => service.refresh(initial.refreshToken)).toThrow('expired');
+      await expect(service.refresh(initial.refreshToken)).rejects.toThrow('expired');
 
       // The holder of the current tokens is signed out too, because we can't tell which copy is genuine.
-      expect(() => service.refresh(legitimate.refreshToken)).toThrow('expired');
+      await expect(service.refresh(legitimate.refreshToken)).rejects.toThrow('expired');
       expect(() => service.validateAccess(`Bearer ${legitimate.accessToken}`)).toThrow();
     } finally { vi.useRealTimers(); }
   });
 
-  it('tolerates a near-simultaneous reuse without ending the session', () => {
+  it('tolerates a near-simultaneous reuse without ending the session', async () => {
     const service = serviceInMemory();
     const initial = service.issue({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false, customerRecordId: null, assurance: 'otp' });
-    const legitimate = service.refresh(initial.refreshToken);
+    const legitimate = await service.refresh(initial.refreshToken);
 
-    expect(() => service.refresh(initial.refreshToken)).toThrow('expired');
-    expect(service.refresh(legitimate.refreshToken).refreshToken).toBeTruthy();
+    await expect(service.refresh(initial.refreshToken)).rejects.toThrow('expired');
+    expect((await service.refresh(legitimate.refreshToken)).refreshToken).toBeTruthy();
   });
 
-  it('rejects refresh after revocation', () => {
+  it('rejects refresh after revocation', async () => {
     const service = serviceInMemory();
     const session = service.issue({
       baseId: 'appABCDEFGHIJKLMN',
@@ -57,17 +57,17 @@ describe('SessionsService', () => {
       assurance: 'link',
     });
     service.revoke(session.refreshToken);
-    expect(() => service.refresh(session.refreshToken)).toThrow('expired');
+    await expect(service.refresh(session.refreshToken)).rejects.toThrow('expired');
   });
 
-  it('validates issued access tokens and rejects fabricated ones', () => {
+  it('validates issued access tokens and rejects fabricated ones', async () => {
     const service = serviceInMemory();
     const session = service.issue({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false, customerRecordId: null, assurance: 'otp' });
     expect(service.validateAccess(`Bearer ${session.accessToken}`)).toMatchObject({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false, customerRecordId: null, assurance: 'otp' });
     expect(() => service.validateAccess('Bearer vta_fabricated.session')).toThrow('expired');
   });
 
-  it('keeps sessions valid when the API service is recreated', () => {
+  it('keeps sessions valid when the API service is recreated', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'vision-auth-'));
     const path = join(directory, 'auth.sqlite');
     const firstStore = new DurableAuthStore(path);
@@ -84,14 +84,14 @@ describe('SessionsService', () => {
 function serviceInMemory(): SessionsService { return new SessionsService(new DurableAuthStore(':memory:')); }
 
 describe('SessionsService assurance', () => {
-  it('keeps the assurance and customer a session was verified with across refreshes', () => {
+  it('keeps the assurance and customer a session was verified with across refreshes', async () => {
     const service = new SessionsService(new DurableAuthStore(':memory:'));
     const session = service.issue({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false, customerRecordId: 'recCUSTOMERABCDEF', assurance: 'trusted_device', invitationId: 'inv_1' });
-    const renewed = service.refresh(session.refreshToken);
+    const renewed = await service.refresh(session.refreshToken);
     expect(service.validateAccess(`Bearer ${renewed.accessToken}`)).toMatchObject({ customerRecordId: 'recCUSTOMERABCDEF', assurance: 'trusted_device' });
   });
 
-  it('treats sessions stored before invitations existed as legacy (unverified)', () => {
+  it('treats sessions stored before invitations existed as legacy (unverified)', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'vision-auth-legacy-'));
     const path = join(directory, 'auth.sqlite');
     const legacy = new DatabaseSync(path);

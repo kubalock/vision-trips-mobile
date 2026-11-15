@@ -9,7 +9,7 @@ export class SessionsController {
   constructor(private readonly sessions: SessionsService) {}
 
   @Post('refresh')
-  refresh(@Body() body: { refreshToken?: unknown }): MobileSession {
+  refresh(@Body() body: { refreshToken?: unknown }): Promise<MobileSession> {
     return this.sessions.refresh(body?.refreshToken);
   }
 
