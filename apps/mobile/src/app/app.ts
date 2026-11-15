@@ -628,10 +628,11 @@ export class App implements OnInit, OnDestroy {
       const previous = this.trip();
       this.trip.set(snapshot);
       await this.loadBrandLogo(snapshot, true);
-      await this.syncCustomerNotifications(previous, snapshot);
-      void this.loadExternalContent(false);
+      await this.syncCustomerNotifications(previous, snapshot, generation);
+      if (this.isCurrentTrip(generation)) void this.loadExternalContent(false);
       await this.refreshDocumentStatuses(snapshot, generation);
-      this.storedSecurely.set(await this.savedTrips.save(snapshot, this.session() ?? activeSession));
+      const stored = await this.savedTrips.save(snapshot, this.isCurrentTrip(generation) ? this.session() ?? activeSession : activeSession);
+      if (this.isCurrentTrip(generation)) this.storedSecurely.set(stored);
       await this.reloadSavedTrips();
     } catch {
       // The write already succeeded. Keep the optimistic state and refresh next time the trip opens.
@@ -658,10 +659,11 @@ export class App implements OnInit, OnDestroy {
       const previous = this.trip();
       this.trip.set(snapshot);
       await this.loadBrandLogo(snapshot, true);
-      await this.syncCustomerNotifications(previous, snapshot);
-      void this.loadExternalContent(false);
-      await this.refreshDocumentStatuses(snapshot);
-      this.storedSecurely.set(await this.savedTrips.save(snapshot, activeSession));
+      await this.syncCustomerNotifications(previous, snapshot, generation);
+      if (this.isCurrentTrip(generation)) void this.loadExternalContent(false);
+      await this.refreshDocumentStatuses(snapshot, generation);
+      const stored = await this.savedTrips.save(snapshot, activeSession);
+      if (this.isCurrentTrip(generation)) this.storedSecurely.set(stored);
       await this.reloadSavedTrips();
       this.setTripRefreshState(snapshot.tripId, 'fresh');
     } catch (error) {
@@ -714,13 +716,27 @@ export class App implements OnInit, OnDestroy {
     this.trip.update((trip) => trip ? { ...trip, freshness: { ...trip.freshness, status } } : trip);
   }
 
+  /**
+   * Opens an authorised trip. Every await is followed by a generation check before touching what's on screen: if the
+   * traveller opened another trip meanwhile, this one is still saved (and its notifications recorded) but the screen,
+   * notifications and focus stay with the trip they chose last.
+   */
   private async acceptAuthorized(response: Extract<LinkExchangeResponse, { status: 'authorized' }>): Promise<void> {
+    const startedAt = this.tripGeneration;
     const previous = { trip: this.trip(), identityKey: this.session()?.identityKey ?? null };
     const nextIdentity = response.session.identityKey ?? null;
     // Another Customer saved this same trip (booking) on this device: their copy is replaced, so clear what belonged to it.
     const savedBy = await this.savedTrips.identityFor(response.snapshot.tripId);
     const takesOver = Boolean(savedBy && nextIdentity && savedBy !== nextIdentity);
     if (takesOver) await this.clearTripLocalData(response.snapshot.tripId);
+    if (this.tripGeneration !== startedAt) {
+      // Superseded before it was shown: keep the trip on the device without taking over the screen.
+      await this.customerNotifications.sync(null, response.snapshot);
+      await this.savedTrips.save(response.snapshot, response.session, { reopened: true });
+      if (response.trustedDeviceToken) await this.savedTrips.saveDeviceTrust(response.trustedDeviceToken, nextIdentity);
+      await this.reloadSavedTrips();
+      return;
+    }
     const generation = this.beginTrip();
     this.trip.set(response.snapshot);
     this.session.set(response.session);
@@ -729,10 +745,11 @@ export class App implements OnInit, OnDestroy {
     void this.loadExternalContent();
     void this.loadRelatedQuotations();
     await this.loadBrandLogo(response.snapshot, true);
-    await this.syncCustomerNotifications(null, response.snapshot);
+    await this.syncCustomerNotifications(null, response.snapshot, generation);
     await this.refreshDocumentStatuses(response.snapshot, generation);
     // Opening a trip (link, verification, account or related quotation) brings it back even if it was removed earlier.
-    this.storedSecurely.set(await this.savedTrips.save(response.snapshot, response.session, { reopened: true }));
+    const stored = await this.savedTrips.save(response.snapshot, response.session, { reopened: true });
+    if (this.isCurrentTrip(generation)) this.storedSecurely.set(stored);
     await this.reloadSavedTrips();
     if (response.trustedDeviceToken) await this.savedTrips.saveDeviceTrust(response.trustedDeviceToken, nextIdentity);
     if (this.isCurrentTrip(generation)) this.focusMain();
@@ -1120,8 +1137,8 @@ export class App implements OnInit, OnDestroy {
     this.storedSecurely.set(true);
     await this.loadBrandLogo(snapshot, false);
     if (!this.isCurrentTrip(generation)) return;
-    await this.syncCustomerNotifications(null, snapshot);
-    if (refresh) { void this.loadExternalContent(); void this.loadRelatedQuotations(); }
+    await this.syncCustomerNotifications(null, snapshot, generation);
+    if (refresh && this.isCurrentTrip(generation)) { void this.loadExternalContent(); void this.loadRelatedQuotations(); }
     await this.refreshDocumentStatuses(snapshot, generation);
     if (refresh && this.isCurrentTrip(generation)) {
       const refreshing = this.refreshCurrentTrip(false);
@@ -1209,13 +1226,18 @@ export class App implements OnInit, OnDestroy {
     this.deviceNotificationsEnabled.set(enabled);
   }
 
-  private async syncCustomerNotifications(previous: TripSnapshot | null, snapshot: TripSnapshot): Promise<void> {
-    if (snapshot.experience.surprise?.concealed) {
+  /**
+   * Records this snapshot's notifications for its trip, then shows them, but only if that trip is still the one open
+   * (same generation and trip): a sync that finishes after the traveller switched trip never fills the new trip's list.
+   */
+  private async syncCustomerNotifications(previous: TripSnapshot | null, snapshot: TripSnapshot, generation: number): Promise<void> {
+    const stillOpen = () => this.isCurrentTrip(generation) && this.trip()?.tripId === snapshot.tripId;
+    if (snapshot.experience.surprise?.concealed && stillOpen()) {
       this.externalContent.set(null);
       if (this.externalContentTimer) clearTimeout(this.externalContentTimer);
     }
     await this.customerNotifications.sync(previous, snapshot);
-    this.loadCustomerNotifications(snapshot.tripId);
+    if (stillOpen()) this.loadCustomerNotifications(snapshot.tripId);
   }
 
   private loadCustomerNotifications(tripId: string): void {
