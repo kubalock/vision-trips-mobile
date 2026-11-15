@@ -5,7 +5,7 @@ import { AirtableService, type AirtableRecord } from '../airtable/airtable.servi
 import { SessionsService, type SessionPrincipal } from '../sessions/sessions.service.js';
 import { bookingFields, customerFields, firstAttachmentThumbnail, firstString, pick, strings, truthy } from '../trips/field-map.js';
 import { resolveStage } from '../trips/stage.js';
-import { publicTripId, TripsService } from '../trips/trips.service.js';
+import { publicTripId, SNAPSHOT_CACHE_MS, TripsService } from '../trips/trips.service.js';
 import { accountBookings, accountTripGrant, customersTable, resolveCustomerIdentity, type AccountBooking } from './customer-identity.js';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -78,7 +78,7 @@ export class CustomerAccountService {
     const identity = await resolveCustomerIdentity(this.airtable, principal);
     const target: AccountBooking | undefined = (await accountBookings(this.airtable, principal, identity)).find((booking) => this.id(principal.baseId, booking.record.id) === accountTripId);
     if (!target) throw new NotFoundException('That trip is no longer linked to your account.');
-    const snapshot = await this.trips.snapshot(principal.baseId, target.record.id, 'primary_customer');
+    const snapshot = await this.trips.snapshot(principal.baseId, target.record.id, 'primary_customer', { maxAgeMs: SNAPSHOT_CACHE_MS });
     return { snapshot, session: this.sessions.issue(accountTripGrant(principal, identity, target)) };
   }
 

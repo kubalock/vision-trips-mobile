@@ -11,7 +11,7 @@ import { DeviceTrustService } from '../security/device-trust.service.js';
 import { accountKeyFor, identityKey } from '../security/identity-key.js';
 import { DurableAuthStore, type InvitationOtp, type InvitationSource, type StoredInvitation } from '../sessions/durable-auth.store.js';
 import { SessionsService, type SessionPrincipal } from '../sessions/sessions.service.js';
-import { InvitationTargetError, TripsService, type InvitationContext } from '../trips/trips.service.js';
+import { InvitationTargetError, SNAPSHOT_CACHE_MS, TripsService, type InvitationContext } from '../trips/trips.service.js';
 import { InvitationEmailService } from './invitation-email.service.js';
 import { generateInvitationToken, generateOtpCode, hashDestination, hashInvitationToken, hashOtpCode, invitationUrl, isInvitationToken, maskEmail, otpMatches } from './invitation-token.js';
 
@@ -188,7 +188,8 @@ export class CustomerInvitationsService {
     if (invitation.verification === 'none') {
       await this.customerContext(invitation);
       const snapshot = await this.snapshotFor(invitation);
-      const session = this.sessions.issue({ baseId: invitation.baseId, recordId: invitation.bookingRecordId, fellowTraveller: true, customerRecordId: null, assurance: 'link', invitationId: invitation.id });
+      // Ends with the link: refreshing never takes a fellow traveller past the link's seven days.
+      const session = this.sessions.issue({ baseId: invitation.baseId, recordId: invitation.bookingRecordId, fellowTraveller: true, customerRecordId: null, assurance: 'link', invitationId: invitation.id, absoluteExpiresAt: invitation.expiresAt });
       this.log('share_link_opened', invitation);
       return { status: 'authorized', snapshot, session };
     }
@@ -337,7 +338,7 @@ export class CustomerInvitationsService {
 
   private async snapshotFor(invitation: Pick<StoredInvitation, 'baseId' | 'bookingRecordId' | 'scope'>): Promise<InvitationAuthorized['snapshot']> {
     try {
-      return await this.trips.snapshot(invitation.baseId, invitation.bookingRecordId, invitation.scope);
+      return await this.trips.snapshot(invitation.baseId, invitation.bookingRecordId, invitation.scope, { maxAgeMs: SNAPSHOT_CACHE_MS });
     } catch (error) {
       throw customerSafe(error);
     }

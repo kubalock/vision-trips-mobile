@@ -158,7 +158,7 @@ const snapshotSchema = z.object({
   accessScope: z.enum(['primary_customer', 'fellow_traveller']),
   freshness: record({
     status: oneOf(['fresh', 'stale', 'offline', 'partial'], 'stale'), sourceUpdatedAt: text, nextRefreshAfter: optText,
-    incompleteSections: z.optional(list(z.enum(['itinerary_details', 'destinations', 'extras', 'messages', 'agent', 'letters']))),
+    incompleteSections: z.optional(list(z.enum(['itinerary_details', 'destinations', 'extras', 'messages', 'agent', 'letters', 'brand']))),
   }),
   brand: record({ name: text, logoUrl: optText, theme, profile: brandProfile }),
   summary,

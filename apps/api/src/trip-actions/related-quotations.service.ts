@@ -6,7 +6,7 @@ import { SessionsService, type SessionPrincipal } from '../sessions/sessions.ser
 import { bookingFields, firstAttachmentThumbnail, firstString, numberValue, pick } from '../trips/field-map.js';
 import { accountBookings, accountTripGrant, resolveCustomerIdentity, type AccountBooking, type CustomerIdentity } from './customer-identity.js';
 import { resolveStage } from '../trips/stage.js';
-import { TripsService } from '../trips/trips.service.js';
+import { SNAPSHOT_CACHE_MS, TripsService } from '../trips/trips.service.js';
 
 @Injectable()
 export class RelatedQuotationsService {
@@ -23,7 +23,7 @@ export class RelatedQuotationsService {
     const related = await this.relatedWithIdentity(principal);
     const target = related?.bookings.find((booking) => this.id(principal.baseId, booking.record.id) === comparisonId);
     if (!related || !target) throw new NotFoundException('That quotation is no longer available for this customer.');
-    const snapshot = await this.trips.snapshot(principal.baseId, target.record.id, 'primary_customer');
+    const snapshot = await this.trips.snapshot(principal.baseId, target.record.id, 'primary_customer', { maxAgeMs: SNAPSHOT_CACHE_MS });
     // Same verified Customer and account, same base, same assurance.
     return { snapshot, session: this.sessions.issue(accountTripGrant(principal, related.identity, target)) };
   }

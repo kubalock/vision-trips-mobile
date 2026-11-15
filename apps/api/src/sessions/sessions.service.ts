@@ -34,6 +34,8 @@ export interface SessionGrant {
   invitationId?: string | null;
   accountKey?: string | null;
   bookingOwnerCustomerRecordId?: string | null;
+  /** A fixed end that refreshing never extends (fellow-traveller share sessions end with their link). */
+  absoluteExpiresAt?: number | null;
 }
 
 @Injectable()
@@ -48,10 +50,11 @@ export class SessionsService {
   issue(input: SessionGrant): MobileSession {
     const id = randomUUID();
     const refreshToken = token('vrt');
-    const refreshExpiresAt = Date.now() + 30 * 86_400_000;
-    const accessExpiresAt = Date.now() + 15 * 60_000;
+    const absoluteExpiresAt = input.absoluteExpiresAt ?? null;
+    const refreshExpiresAt = capped(Date.now() + 30 * 86_400_000, absoluteExpiresAt);
+    const accessExpiresAt = capped(Date.now() + 15 * 60_000, absoluteExpiresAt);
     const accessToken = `${token('vta')}.${id}`;
-    this.store.putSession({ id, baseId: input.baseId, recordId: input.recordId, fellowTraveller: input.fellowTraveller, customerRecordId: input.customerRecordId, assurance: input.assurance, invitationId: input.invitationId ?? null, accountKey: input.accountKey ?? null, bookingOwnerCustomerRecordId: input.bookingOwnerCustomerRecordId ?? null, refreshHash: hash(refreshToken), refreshExpiresAt, accessHash: hash(accessToken), accessExpiresAt, revoked: false });
+    this.store.putSession({ id, baseId: input.baseId, recordId: input.recordId, fellowTraveller: input.fellowTraveller, customerRecordId: input.customerRecordId, assurance: input.assurance, invitationId: input.invitationId ?? null, accountKey: input.accountKey ?? null, bookingOwnerCustomerRecordId: input.bookingOwnerCustomerRecordId ?? null, refreshHash: hash(refreshToken), refreshExpiresAt, accessHash: hash(accessToken), accessExpiresAt, revoked: false, absoluteExpiresAt });
     return response(accessToken, accessExpiresAt, refreshToken, refreshExpiresAt, identityKey(input));
   }
 
@@ -77,7 +80,7 @@ export class SessionsService {
     this.store.retireRefreshHash(presented, stored.id, stored.refreshExpiresAt);
     const nextRefresh = token('vrt');
     stored.refreshHash = hash(nextRefresh);
-    stored.refreshExpiresAt = Date.now() + 30 * 86_400_000;
+    stored.refreshExpiresAt = capped(Date.now() + 30 * 86_400_000, stored.absoluteExpiresAt);
     return this.rotateAccess(stored, nextRefresh);
   }
 
@@ -126,7 +129,7 @@ export class SessionsService {
   private rotateAccess(stored: StoredSession, refreshToken: string): MobileSession {
     const accessToken = `${token('vta')}.${stored.id}`;
     stored.accessHash = hash(accessToken);
-    stored.accessExpiresAt = Date.now() + 15 * 60_000;
+    stored.accessExpiresAt = capped(Date.now() + 15 * 60_000, stored.absoluteExpiresAt);
     this.store.updateTokens(stored);
     return response(accessToken, stored.accessExpiresAt, refreshToken, stored.refreshExpiresAt, identityKey(stored));
   }
@@ -142,6 +145,10 @@ function isAccessRevoked(error: unknown): boolean {
   if (!(error instanceof UnauthorizedException)) return false;
   const body = error.getResponse();
   return typeof body === 'object' && body !== null && (body as { code?: unknown }).code === 'access_revoked';
+}
+/** A rolling expiry, never past the session's fixed end. */
+function capped(expiresAt: number, absoluteExpiresAt: number | null | undefined): number {
+  return absoluteExpiresAt == null ? expiresAt : Math.min(expiresAt, absoluteExpiresAt);
 }
 function token(prefix: string): string { return `${prefix}_${randomBytes(32).toString('base64url')}`; }
 function hash(value: string): string { return createHash('sha256').update(value).digest('base64url'); }

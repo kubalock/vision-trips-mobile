@@ -6,7 +6,11 @@ export type AccessScope = 'primary_customer' | 'fellow_traveller';
 /** `partial`: the trip itself refreshed, but some optional details couldn't be (see `incompleteSections`). */
 export type FreshnessStatus = 'fresh' | 'stale' | 'offline' | 'partial';
 /** Parts of a snapshot that can be left out when Airtable can't return them; everything else is required. */
-export type TripSection = 'itinerary_details' | 'destinations' | 'extras' | 'messages' | 'agent' | 'letters';
+/**
+ * `brand`: the travel company's Brand record couldn't be read, so its name, theme, contacts, links, gallery and
+ * payment settings in this snapshot are defaults (the app keeps its earlier copy of them).
+ */
+export type TripSection = 'itinerary_details' | 'destinations' | 'extras' | 'messages' | 'agent' | 'letters' | 'brand';
 
 export interface ThemeTokens {
   key: string;

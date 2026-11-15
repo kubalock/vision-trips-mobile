@@ -48,7 +48,7 @@ describe('LinkExchangesService', () => {
     const { service, sessions, trips } = setup({ fellowTraveller: true });
     const result = await service.create('payload.signature-for-a-share-link');
     expect(result.status).toBe('authorized');
-    expect(trips.snapshot).toHaveBeenCalledWith('appABCDEFGHIJKLMN', 'recABCDEFGHIJKLMN', 'fellow_traveller');
+    expect(trips.snapshot).toHaveBeenCalledWith('appABCDEFGHIJKLMN', 'recABCDEFGHIJKLMN', 'fellow_traveller', { maxAgeMs: 30_000 });
     if (result.status !== 'authorized') return;
     expect(sessions.validateAccess(`Bearer ${result.session.accessToken}`)).toMatchObject({ fellowTraveller: true, assurance: 'link', customerRecordId: null });
   });

@@ -1,4 +1,4 @@
-import { ServiceUnavailableException } from '@nestjs/common';
+import { NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { AirtableService, type AirtableRecord } from '../airtable/airtable.service.js';
 import { TripsService } from './trips.service.js';
 
@@ -64,5 +64,24 @@ describe('TripsService.snapshot when linked Airtable reads fail', () => {
     expect(snapshot.communications).toEqual([]);
     failChunk = false; // Control: with both chunks loaded, the latest 20 messages are shown.
     expect((await new TripsService(airtable).snapshot(base, booking.id, 'primary_customer')).communications).toHaveLength(20);
+  });
+
+  it('marks the Brand (and its letters) incomplete when the Brand record cannot be read, instead of publishing default branding as fresh', async () => {
+    const branded: AirtableRecord = { ...booking, fields: { ...booking.fields, 'Brands & Branches': [id(9)] } };
+    const airtable = airtableFailing();
+    const brandRead = vi.spyOn(airtable, 'record').mockImplementation(async (_base, table) => {
+      if (table === 'Brands & Branches') throw new ServiceUnavailableException('Airtable is temporarily unavailable. Try again shortly.');
+      return branded;
+    });
+
+    const snapshot = await new TripsService(airtable).snapshot(base, branded.id, 'primary_customer');
+    expect(snapshot.freshness.status).toBe('partial');
+    expect(snapshot.freshness.incompleteSections).toEqual(['brand', 'letters']);
+
+    // A Brand record that no longer exists is not an outage: default branding, and the trip is fresh.
+    brandRead.mockImplementation(async (_base, table) => { if (table === 'Brands & Branches') throw new NotFoundException(); return branded; });
+    const missing = await new TripsService(airtable).snapshot(base, branded.id, 'primary_customer');
+    expect(missing.freshness.status).toBe('fresh');
+    expect(missing.brand.name).toBe('Your travel company');
   });
 });

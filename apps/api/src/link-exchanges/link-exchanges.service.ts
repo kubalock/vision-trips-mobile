@@ -5,7 +5,7 @@ import { CustomerInvitationsService } from '../invitations/customer-invitations.
 import { isInvitationToken } from '../invitations/invitation-token.js';
 import { LinkTokenService } from '../security/link-token.service.js';
 import { SessionsService } from '../sessions/sessions.service.js';
-import { TripsService } from '../trips/trips.service.js';
+import { SNAPSHOT_CACHE_MS, TripsService } from '../trips/trips.service.js';
 
 /**
  * Entry point for any link the app is given.
@@ -35,7 +35,7 @@ export class LinkExchangesService {
     const token = this.tokens.parseLinkOrToken(linkOrCode);
     if (token.scope === 'agent') throw new BadRequestException('Agent links cannot be saved in the customer app.');
     if (token.fellowTraveller) {
-      const snapshot = await this.trips.snapshot(token.baseId, token.recordId, 'fellow_traveller');
+      const snapshot = await this.trips.snapshot(token.baseId, token.recordId, 'fellow_traveller', { maxAgeMs: SNAPSHOT_CACHE_MS });
       const session = this.sessions.issue({ baseId: token.baseId, recordId: token.recordId, fellowTraveller: true, customerRecordId: null, assurance: 'link' });
       this.logger.log(JSON.stringify({ event: 'legacy_share_link_opened', baseId: token.baseId, bookingRecordId: token.recordId }));
       return { status: 'authorized', exchangeId: randomUUID(), expiresAt: new Date(Date.now() + 600_000).toISOString(), snapshot, session };

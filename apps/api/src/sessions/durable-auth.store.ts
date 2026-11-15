@@ -25,6 +25,11 @@ export interface StoredSession {
   revoked: boolean;
   /** Ended because Airtable no longer links its holder to the trip (not an ordinary sign-out or expiry). */
   accessRevoked?: boolean;
+  /**
+   * When the session ends however often it is refreshed (null: no fixed end, only the rolling refresh expiry). Set
+   * for fellow-traveller share sessions to the share link's own expiry.
+   */
+  absoluteExpiresAt?: number | null;
 }
 
 interface SessionRow {
@@ -32,7 +37,7 @@ interface SessionRow {
   customer_record_id: string | null; assurance: string | null; invitation_id: string | null;
   account_key: string | null; booking_owner_customer_record_id: string | null;
   refresh_hash: string; refresh_expires_at: number; access_hash: string;
-  access_expires_at: number; revoked: number;
+  access_expires_at: number; revoked: number; absolute_expires_at: number | null;
 }
 
 export type InvitationSource = 'agent' | 'legacy_link' | 'step_up' | 'share' | 'development';
@@ -183,14 +188,23 @@ export class DurableAuthStore implements OnModuleDestroy {
     if (!columns.has('invitation_id')) this.database.exec('ALTER TABLE auth_sessions ADD COLUMN invitation_id TEXT');
     if (!columns.has('account_key')) this.database.exec('ALTER TABLE auth_sessions ADD COLUMN account_key TEXT');
     if (!columns.has('booking_owner_customer_record_id')) this.database.exec('ALTER TABLE auth_sessions ADD COLUMN booking_owner_customer_record_id TEXT');
+    if (!columns.has('absolute_expires_at')) {
+      this.database.exec('ALTER TABLE auth_sessions ADD COLUMN absolute_expires_at INTEGER');
+      // Share sessions opened before the fixed end existed: end them with their link, or within seven days when the
+      // link isn't known (then at most what a new share link would give).
+      this.database.prepare(`UPDATE auth_sessions SET absolute_expires_at = COALESCE(
+          (SELECT expires_at FROM customer_invitations WHERE customer_invitations.id = auth_sessions.invitation_id), ?)
+        WHERE fellow_traveller = 1`).run(Date.now() + 7 * 86_400_000);
+      this.database.exec('UPDATE auth_sessions SET refresh_expires_at = MIN(refresh_expires_at, absolute_expires_at), access_expires_at = MIN(access_expires_at, absolute_expires_at) WHERE absolute_expires_at IS NOT NULL');
+    }
   }
 
   putSession(session: StoredSession): void {
     this.cleanup();
     this.database.prepare(`INSERT INTO auth_sessions
-      (id, base_id, record_id, fellow_traveller, customer_record_id, assurance, invitation_id, account_key, booking_owner_customer_record_id, refresh_hash, refresh_expires_at, access_hash, access_expires_at, revoked)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(session.id, session.baseId, session.recordId, Number(session.fellowTraveller), session.customerRecordId, session.assurance, session.invitationId, session.accountKey, session.bookingOwnerCustomerRecordId, session.refreshHash, session.refreshExpiresAt, session.accessHash, session.accessExpiresAt, Number(session.revoked));
+      (id, base_id, record_id, fellow_traveller, customer_record_id, assurance, invitation_id, account_key, booking_owner_customer_record_id, refresh_hash, refresh_expires_at, access_hash, access_expires_at, revoked, absolute_expires_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(session.id, session.baseId, session.recordId, Number(session.fellowTraveller), session.customerRecordId, session.assurance, session.invitationId, session.accountKey, session.bookingOwnerCustomerRecordId, session.refreshHash, session.refreshExpiresAt, session.accessHash, session.accessExpiresAt, Number(session.revoked), session.absoluteExpiresAt ?? null);
   }
 
   sessionByRefreshHash(hash: string): StoredSession | null {
@@ -349,7 +363,7 @@ export class DurableAuthStore implements OnModuleDestroy {
     const filter = customerRecordId ? ' AND customer_record_id = ?' : '';
     const values: SQLInputValue[] = [now, baseId, bookingRecordId, ...(customerRecordId ? [customerRecordId] : [])];
     return Number(this.database.prepare(`UPDATE customer_invitations SET revoked_at = ?, revoked_reason = 'revoked', active_key = NULL
-      WHERE base_id = ? AND booking_record_id = ?${filter} AND revoked_at IS NULL AND accepted_at IS NULL`).run(...values).changes);
+      WHERE base_id = ? AND booking_record_id = ?${filter} AND revoked_at IS NULL AND (accepted_at IS NULL OR reusable = 1)`).run(...values).changes);
   }
 
   /**
@@ -433,7 +447,7 @@ export class DurableAuthStore implements OnModuleDestroy {
 }
 
 function mapSession(row: SessionRow | undefined): StoredSession | null {
-  return row ? { id: row.id, baseId: row.base_id, recordId: row.record_id, fellowTraveller: Boolean(row.fellow_traveller), customerRecordId: row.customer_record_id ?? null, assurance: assuranceOf(row.assurance), invitationId: row.invitation_id ?? null, accountKey: row.account_key ?? null, bookingOwnerCustomerRecordId: row.booking_owner_customer_record_id ?? null, refreshHash: row.refresh_hash, refreshExpiresAt: row.refresh_expires_at, accessHash: row.access_hash, accessExpiresAt: row.access_expires_at, revoked: Boolean(row.revoked), accessRevoked: row.revoked === ACCESS_REVOKED } : null;
+  return row ? { id: row.id, baseId: row.base_id, recordId: row.record_id, fellowTraveller: Boolean(row.fellow_traveller), customerRecordId: row.customer_record_id ?? null, assurance: assuranceOf(row.assurance), invitationId: row.invitation_id ?? null, accountKey: row.account_key ?? null, bookingOwnerCustomerRecordId: row.booking_owner_customer_record_id ?? null, refreshHash: row.refresh_hash, refreshExpiresAt: row.refresh_expires_at, accessHash: row.access_hash, accessExpiresAt: row.access_expires_at, revoked: Boolean(row.revoked), accessRevoked: row.revoked === ACCESS_REVOKED, absoluteExpiresAt: row.absolute_expires_at ?? null } : null;
 }
 
 function assuranceOf(value: string | null): SessionAssurance {

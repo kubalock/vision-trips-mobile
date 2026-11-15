@@ -45,7 +45,7 @@ describe('generated documents', () => {
 describe('quotation acceptance', () => {
   it('records acceptance fields and an audit comment without changing booking status', async () => {
     const sessions = { validateAccess: vi.fn().mockReturnValue({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false, customerRecordId: 'recCUSTOMERAAAAAA', assurance: 'otp' }) };
-    const trips = { snapshot: vi.fn().mockResolvedValue({
+    const trips = { invalidate: vi.fn(), snapshot: vi.fn().mockResolvedValue({
       stage: 'quote', version: 'v1', summary: { reference: 'VT-1' }, support: { email: null }, payments: { items: [] }, quotation: { canAccept: true, requiredConfirmations: ['package', 'terms'] },
     }) };
     const airtable = { updateRecord: vi.fn().mockResolvedValue({}), addComment: vi.fn().mockResolvedValue(undefined), record: vi.fn().mockResolvedValue({ id: 'recCUSTOMERAAAAAA', fields: { 'Primary Email': 'Alex@Example.com' } }) };
@@ -112,7 +112,7 @@ describe('snapshot refresh', () => {
     const controller = new TripActionsController(sessions as never, trips as never, {} as never, {} as never, { send: vi.fn().mockResolvedValue({ customer: "local_preview", agent: "not_configured" }) } as never, { create: vi.fn() } as never, mint as never);
 
     await expect(controller.snapshot('Bearer token')).resolves.toEqual({ tripId: 'trp_public' });
-    expect(trips.snapshot).toHaveBeenCalledWith('appABCDEFGHIJKLMN', 'recABCDEFGHIJKLMN', 'fellow_traveller');
+    expect(trips.snapshot).toHaveBeenCalledWith('appABCDEFGHIJKLMN', 'recABCDEFGHIJKLMN', 'fellow_traveller', { maxAgeMs: 30_000 });
   });
 });
 
@@ -228,7 +228,7 @@ describe('quotation acceptance evidence', () => {
   const principal = { baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false, customerRecordId: 'recCUSTOMERAAAAAA', assurance: 'otp', sessionId: 'session-1', accountKey: 'account:acct-alex', bookingOwnerCustomerRecordId: 'recCUSTOMERTWINAA', invitationId: 'inv_abc' };
   async function accept(email: string) {
     const sessions = { validateAccess: vi.fn().mockReturnValue(principal) };
-    const trips = { snapshot: vi.fn().mockResolvedValue({ stage: 'quote', version: 'v1', summary: { reference: 'VT-1' }, support: { email: null }, payments: { items: [] }, quotation: { canAccept: true, requiredConfirmations: [] } }) };
+    const trips = { invalidate: vi.fn(), snapshot: vi.fn().mockResolvedValue({ stage: 'quote', version: 'v1', summary: { reference: 'VT-1' }, support: { email: null }, payments: { items: [] }, quotation: { canAccept: true, requiredConfirmations: [] } }) };
     const airtable = { updateRecord: vi.fn().mockResolvedValue({}), addComment: vi.fn().mockResolvedValue(undefined), record: vi.fn().mockResolvedValue({ id: 'recCUSTOMERAAAAAA', fields: { 'Primary Email': 'alex@example.com' } }) };
     const controller = new TripActionsController(sessions as never, trips as never, airtable as never, {} as never, { send: vi.fn().mockResolvedValue({ customer: 'local_preview', agent: 'not_configured' }) } as never, { create: vi.fn() } as never, { link: vi.fn(), depositLink: vi.fn().mockResolvedValue(null) } as never);
     await controller.acceptQuotation('Bearer token', { name: 'Sam Signer', email, agreed: true, confirmations: [] }, { ip: '127.0.0.1', get: vi.fn() } as never);

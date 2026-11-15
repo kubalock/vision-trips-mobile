@@ -3,7 +3,7 @@ import type { Request } from 'express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { ExternalTripContent } from '@vision-trips/contracts';
 import { SessionsService } from '../sessions/sessions.service.js';
-import { TripsService } from '../trips/trips.service.js';
+import { SNAPSHOT_CACHE_MS, TripsService } from '../trips/trips.service.js';
 import { ExternalContentService, publicApiBase } from './external-content.service.js';
 
 @ApiTags('external trip content')
@@ -15,7 +15,7 @@ export class ExternalContentController {
   @ApiBearerAuth()
   async content(@Headers('authorization') authorization: string | undefined, @Req() request: Request): Promise<ExternalTripContent> {
     const principal = await this.sessions.authorize(authorization);
-    const snapshot = await this.trips.snapshot(principal.baseId, principal.recordId, principal.fellowTraveller ? 'fellow_traveller' : 'primary_customer');
+    const snapshot = await this.trips.snapshot(principal.baseId, principal.recordId, principal.fellowTraveller ? 'fellow_traveller' : 'primary_customer', { maxAgeMs: SNAPSHOT_CACHE_MS });
     return this.external.content(snapshot, publicApiBase(`${request.protocol}://${request.get('host')}`));
   }
 }

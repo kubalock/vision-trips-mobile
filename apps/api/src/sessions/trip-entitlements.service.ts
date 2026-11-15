@@ -16,7 +16,8 @@ import type { SessionPrincipal } from './sessions.service.js';
  * - the Booking still exists, is not soft-deleted, its `Customers` lists the owner and the owner's `Trips` lists it.
  *
  * Sessions without a Customer (fellow-traveller share links, older unverified sessions) only need the Booking to still
- * exist; they cannot pay, share or accept a quotation anyway.
+ * exist; they cannot pay, share or accept a quotation anyway. A share session also ends when its link is revoked
+ * (and, separately, at the link's own expiry, which refreshing never extends; see SessionsService).
  *
  * When one of these no longer holds, the session is ended (its refresh token stops working too) and the request fails
  * with 401 `access_revoked`. An Airtable outage is not a revocation: that error is passed on as it is.
@@ -65,6 +66,10 @@ export class TripEntitlementsService {
    * (undefined for sessions without a Customer). Transient Airtable errors are thrown.
    */
   async evaluate(principal: SessionPrincipal): Promise<{ problem: EntitlementProblem | null; accountKey?: string | null }> {
+    if (principal.fellowTraveller && principal.invitationId) {
+      const link = this.store.invitationById(principal.invitationId);
+      if (!link || link.revokedAt !== null) return { problem: 'share_link_revoked' };
+    }
     const booking = await this.optional(principal.baseId, bookingsTable(), principal.recordId);
     if (!booking || truthy(booking.fields['Soft Delete'])) return { problem: 'booking_removed' };
     if (!principal.customerRecordId) return { problem: null };
@@ -97,7 +102,7 @@ export class TripEntitlementsService {
   }
 }
 
-export type EntitlementProblem = 'booking_removed' | 'customer_removed' | 'owner_not_grouped' | 'customer_not_linked';
+export type EntitlementProblem = 'booking_removed' | 'customer_removed' | 'owner_not_grouped' | 'customer_not_linked' | 'share_link_revoked';
 
 /** The pure policy (see TripEntitlementsService). `owner` is the verified Customer unless the trip belongs to a grouped duplicate. */
 export function entitlementProblem(booking: AirtableRecord, root: AirtableRecord | null, owner: AirtableRecord | null): EntitlementProblem | null {

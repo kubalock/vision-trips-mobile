@@ -1,10 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import type { AccessScope, TripSection, ItineraryImage, PaymentStatusResponse, CabinDetail, CruisePort, ItineraryItem, ItineraryKind, PassengerAllocation, PaymentItem, RoomDetail, TravellerSummary, TripDocument, TripSnapshot } from '@vision-trips/contracts';
 import { createHash, createHmac } from 'node:crypto';
 import { AirtableService, type AirtableRecord } from '../airtable/airtable.service.js';
 import { airlineFields, airportFields, bookingFields, brandFields, brandTemplateFields, cabinFields, communicationFields, cruisePortFields, customerFields, elementFields, attachmentImage, firstAttachmentImage, firstAttachmentThumbnail, firstAttachmentUrl, firstString, locationFields, memberFields, numberValue, passengerFields, paymentFields, personFields, pick, roomFields, shipFields, strings, supplierFields, truthy, upsellFields, currencyCode, moneyValue, paymentAmount, PAYABLE_CURRENCIES, formatMoney, dateString } from './field-map.js';
 import { resolveStage } from './stage.js';
 import { themeTokens } from './theme.js';
+import { TtlCache } from './ttl-cache.js';
 
 export interface InvitationContext {
   tenantId: string | null;
@@ -18,9 +19,47 @@ export class InvitationTargetError extends Error {
   constructor(readonly reason: 'customer_not_linked' | 'customer_email_missing') { super(reason); this.name = 'InvitationTargetError'; }
 }
 
+/** How old a cached snapshot read endpoints accept. Actions that act on the data (payments, acceptance) read fresh. */
+export const SNAPSHOT_CACHE_MS = 30_000;
+const BRAND_CACHE_MS = 5 * 60_000;
+/** Reference tables that change rarely (airports, airlines, ships, places, suppliers): cached per record. */
+const REFERENCE_CACHE_MS: Record<string, number> = {
+  'CMS [Airports]': 30 * 60_000, 'CMS [Airlines]': 30 * 60_000, 'CMS [Cruise Ships]': 30 * 60_000, 'CMS [Cruise Operators]': 30 * 60_000,
+  'CMS [Locations]': 30 * 60_000, Suppliers: 10 * 60_000,
+};
+
+export interface SnapshotOptions {
+  /**
+   * Accept a complete snapshot read at most this long ago (default 0: read Airtable now, though a read already under
+   * way for the same trip and scope is shared). Read endpoints pass SNAPSHOT_CACHE_MS.
+   */
+  maxAgeMs?: number;
+}
+
 @Injectable()
 export class TripsService {
+  /**
+   * Complete snapshots by base, booking and scope (a partial one is never cached), and the reads under way, so
+   * concurrent requests for one trip share a single set of Airtable calls. `invalidate()` after a write.
+   */
+  private readonly snapshots = new TtlCache<TripSnapshot>(2_000);
+  private readonly inFlight = new Map<string, Promise<TripSnapshot>>();
+  /** Bumped by `invalidate()`, so a read that started before a write can't put its older result in the cache. */
+  private readonly generations = new Map<string, number>();
+  private readonly brands = new TtlCache<AirtableRecord>(500);
+  private readonly references = new TtlCache<AirtableRecord>(20_000);
+
   constructor(private readonly airtable: AirtableService) {}
+
+  /** Forget cached snapshots of a booking (both scopes), e.g. after the customer changed it. */
+  invalidate(baseId: string, recordId: string): void {
+    const booking = `${baseId}:${recordId}`;
+    this.generations.set(booking, (this.generations.get(booking) ?? 0) + 1);
+    for (const scope of ['primary_customer', 'fellow_traveller'] as const) {
+      this.snapshots.delete(`${booking}:${scope}`);
+      this.inFlight.delete(`${booking}:${scope}`);
+    }
+  }
 
   /**
    * Payment totals and per-instalment status from just the booking and its payment records (2 Airtable reads instead
@@ -32,6 +71,10 @@ export class TripsService {
     const tripId = publicTripId(baseId, booking.id);
     // Stage and Mint readiness only affect whether "Pay now" is offered, not the status, so neutral values are fine here.
     const payments = mapPayments(booking, records, 'confirmed', tripId, false, false);
+    // The app refreshes the whole trip once a payment shows up here: don't let it get an older cached copy.
+    const cached = this.snapshots.get(`${baseId}:${recordId}:primary_customer`)?.payments;
+    const changed = (item: (typeof payments.items)[number]) => { const before = cached?.items.find((earlier) => earlier.id === item.id); return !before || before.status !== item.status || before.completedDate !== item.completedDate; };
+    if (cached && (cached.paid !== payments.paid || cached.items.length !== payments.items.length || payments.items.some(changed))) this.invalidate(baseId, recordId);
     return {
       tripId, checkedAt: new Date().toISOString(), currency: payments.currency, total: payments.total, paid: payments.paid, balance: payments.balance,
       items: payments.items.map(({ id, status, completedDate }) => ({ id, status, completedDate })),
@@ -42,24 +85,48 @@ export class TripsService {
    * Linked records that make up the trip itself (itinerary elements and their rooms, cabins, passengers and cruise
    * ports; payments; travellers) are required: if Airtable can't return them the request fails, and the app keeps
    * showing its last saved copy marked as out of date. Enrichment (agent, extras, messages, suppliers, airports,
-   * airlines, ships, places, letter templates) may degrade: the snapshot is then `partial`, names what's missing, and
+   * airlines, ships, places, letter templates) and the Brand may degrade: the snapshot is then `partial`, names what's missing, and
    * leaves each missing section out entirely (never half a section) so the app can keep its earlier copy of it.
    */
-  async snapshot(baseId: string, recordId: string, accessScope: AccessScope): Promise<TripSnapshot> {
+  async snapshot(baseId: string, recordId: string, accessScope: AccessScope, options: SnapshotOptions = {}): Promise<TripSnapshot> {
+    const key = `${baseId}:${recordId}:${accessScope}`;
+    const cached = options.maxAgeMs ? this.snapshots.get(key, options.maxAgeMs) : undefined;
+    if (cached) return { ...cached, serverTime: new Date().toISOString() };
+    const pending = this.inFlight.get(key);
+    if (pending) return pending;
+    const generation = this.generations.get(`${baseId}:${recordId}`) ?? 0;
+    const request = this.loadSnapshot(baseId, recordId, accessScope).then((snapshot) => {
+      if (snapshot.freshness.status === 'fresh' && (this.generations.get(`${baseId}:${recordId}`) ?? 0) === generation) this.snapshots.set(key, snapshot, SNAPSHOT_CACHE_MS);
+      return snapshot;
+    }).finally(() => { if (this.inFlight.get(key) === request) this.inFlight.delete(key); });
+    this.inFlight.set(key, request);
+    return request;
+  }
+
+  private async loadSnapshot(baseId: string, recordId: string, accessScope: AccessScope): Promise<TripSnapshot> {
     const booking = await this.airtable.record(baseId, 'Bookings', recordId);
     const brandId = strings(pick(booking.fields, bookingFields.brand))[0];
     const incomplete = new Set<TripSection>();
     // All or nothing per section: when any 30-record chunk fails, the section is left out entirely (not served with
     // just the chunks that loaded), so the app can keep its whole earlier copy instead of a shortened list.
     const optional = async (section: TripSection, table: string, ids: string[]) => {
-      const result = await this.airtable.optionalRecords(baseId, table, ids);
-      if (!result.unavailable) return result.records;
-      incomplete.add(section);
-      return [];
+      const ttl = REFERENCE_CACHE_MS[table];
+      ids = [...new Set(ids)];
+      const known = ttl ? ids.map((id) => this.references.get(`${baseId}:${table}:${id}`)).filter((record): record is AirtableRecord => Boolean(record)) : [];
+      const missing = ttl ? ids.filter((id) => !known.some((record) => record.id === id)) : ids;
+      const result = await this.airtable.optionalRecords(baseId, table, missing);
+      if (result.unavailable) { incomplete.add(section); return []; }
+      if (ttl) for (const record of result.records) this.references.set(`${baseId}:${table}:${record.id}`, record, ttl);
+      return [...known, ...result.records];
     };
     const [brand, members, elements, payments, people, customers, upsells, communications] = await Promise.all([
-      // Only the booking itself is required; an unreadable brand falls back to defaults like a booking without one.
-      brandId ? this.airtable.record(baseId, 'Brands & Branches', brandId).catch(() => emptyRecord()) : Promise.resolve(emptyRecord()),
+      // A booking without a Brand (or whose Brand record is gone) uses default branding. A Brand that couldn't be read
+      // is different: defaults would replace the real company, contacts, links and letters, so the section is marked
+      // incomplete and the app keeps its earlier copy.
+      brandId ? this.brand(baseId, brandId).catch((error: unknown) => {
+        if (!(error instanceof NotFoundException)) { incomplete.add('brand'); incomplete.add('letters'); }
+        return emptyRecord();
+      }) : Promise.resolve(emptyRecord()),
       optional('agent', 'Members', strings(pick(booking.fields, bookingFields.member))),
       this.airtable.records(baseId, 'Bookings [Elements]', strings(pick(booking.fields, bookingFields.elements))),
       this.airtable.records(baseId, 'Bookings [Payments]', strings(pick(booking.fields, bookingFields.payments))),
@@ -94,6 +161,16 @@ export class TripsService {
     return incomplete.size ? markPartial(snapshot, [...incomplete]) : snapshot;
   }
 
+  /** The Brand changes rarely and every snapshot needs it: kept for a few minutes. */
+  private async brand(baseId: string, brandId: string): Promise<AirtableRecord> {
+    const key = `${baseId}:${brandId}`;
+    const cached = this.brands.get(key);
+    if (cached) return cached;
+    const record = await this.airtable.record(baseId, 'Brands & Branches', brandId);
+    this.brands.set(key, record, BRAND_CACHE_MS);
+    return record;
+  }
+
   async verificationProfile(baseId: string, recordId: string): Promise<{
     postcode: string;
     email: string;
@@ -121,7 +198,12 @@ export class TripsService {
     if (customerRecordId && !linkedCustomers.includes(owner ?? customerRecordId)) throw new InvitationTargetError('customer_not_linked');
     const customersTable = process.env.AIRTABLE_CUSTOMERS_TABLE?.trim() || 'Customers';
     const [brand, customer, ownerRecord] = await Promise.all([
-      brandId ? this.airtable.record(baseId, 'Brands & Branches', brandId).catch(() => emptyRecord()) : Promise.resolve(emptyRecord()),
+      // Default branding only for a Brand that doesn't exist. An unreadable Brand fails the request (retried later),
+      // so invitation pages and emails never go out as "Your travel company" during an Airtable outage.
+      brandId ? this.airtable.record(baseId, 'Brands & Branches', brandId).catch((error: unknown) => {
+        if (error instanceof NotFoundException) return emptyRecord();
+        throw error;
+      }) : Promise.resolve(emptyRecord()),
       customerRecordId ? this.airtable.record(baseId, customersTable, customerRecordId) : Promise.resolve(null),
       owner ? this.airtable.record(baseId, customersTable, owner) : Promise.resolve(null),
     ]);
@@ -586,7 +668,7 @@ type RecordGraph = { [K in Exclude<keyof RelatedRecords, 'elements' | 'payments'
 const PARTIAL_REFRESH_MS = 60_000;
 
 export function markPartial(snapshot: TripSnapshot, sections: TripSection[]): TripSnapshot {
-  const order: TripSection[] = ['itinerary_details', 'destinations', 'extras', 'messages', 'agent', 'letters'];
+  const order: TripSection[] = ['brand', 'itinerary_details', 'destinations', 'extras', 'messages', 'agent', 'letters'];
   return {
     ...snapshot,
     freshness: {

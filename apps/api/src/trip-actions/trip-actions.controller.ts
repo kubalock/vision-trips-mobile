@@ -5,7 +5,7 @@ import type { Request } from 'express';
 import { AirtableService } from '../airtable/airtable.service.js';
 import { SessionsService, type SessionPrincipal } from '../sessions/sessions.service.js';
 import { TripEntitlementsService } from '../sessions/trip-entitlements.service.js';
-import { TripsService } from '../trips/trips.service.js';
+import { SNAPSHOT_CACHE_MS, TripsService } from '../trips/trips.service.js';
 import { isVerified, requireVerified } from '../security/assurance.js';
 import { CustomerInvitationsService } from '../invitations/customer-invitations.service.js';
 import { NoStoredReplay } from '../operations/no-stored-replay.js';
@@ -101,6 +101,7 @@ export class TripActionsController {
       principal.baseId,
       principal.recordId,
       principal.fellowTraveller ? 'fellow_traveller' : 'primary_customer',
+      { maxAgeMs: SNAPSHOT_CACHE_MS },
     );
     // Stored payment-page URLs would bypass the verified-session check on payment links: an unverified session gets
     // none, so tapping "Pay" asks the API, which asks the customer to confirm by email first.
@@ -213,6 +214,8 @@ export class TripActionsController {
       [process.env.AIRTABLE_ACCEPTED_IP_FIELD?.trim() || 'Quotation Accepted IP']: request.ip || 'unknown',
       [process.env.AIRTABLE_ACCEPTANCE_EVIDENCE_FIELD?.trim() || 'Quotation Acceptance Evidence']: evidence,
     });
+    // The quotation is now accepted: the next refresh must not get the cached quote.
+    this.trips.invalidate(principal.baseId, principal.recordId);
     try {
       await this.airtable.addComment(principal.baseId, table, principal.recordId, `Quotation accepted online by ${name} <${email}> at ${acceptedAt}. Reviewed: ${confirmations.join(', ')}. Snapshot: ${snapshot.version}. ${signedInAuditText(principal, signedIn)} Booking status was not changed.`);
     } catch (error) {
@@ -234,6 +237,7 @@ export class TripActionsController {
       principal.baseId,
       principal.recordId,
       principal.fellowTraveller ? 'fellow_traveller' : 'primary_customer',
+      { maxAgeMs: SNAPSHOT_CACHE_MS },
     );
     const calendar = buildCalendar(snapshot);
     return new StreamableFile(Buffer.from(calendar), {
@@ -252,7 +256,7 @@ export class TripActionsController {
     if (kind !== 'confirmation' && kind !== 'invoice' && kind !== 'acceptance') throw new BadRequestException('Unknown document type.');
     const principal = await this.live(authorization);
     if ((kind === 'invoice' || kind === 'acceptance') && principal.fellowTraveller) throw new ForbiddenException('This document is only available to the lead customer.');
-    const snapshot = await this.trips.snapshot(principal.baseId, principal.recordId, principal.fellowTraveller ? 'fellow_traveller' : 'primary_customer');
+    const snapshot = await this.trips.snapshot(principal.baseId, principal.recordId, principal.fellowTraveller ? 'fellow_traveller' : 'primary_customer', { maxAgeMs: SNAPSHOT_CACHE_MS });
     let html: string;
     if (kind === 'acceptance') {
       const booking = await this.airtable.record(principal.baseId, process.env.AIRTABLE_BOOKINGS_TABLE?.trim() || 'Bookings', principal.recordId);
@@ -277,7 +281,7 @@ export class TripActionsController {
     @Param('action') action: string,
   ): Promise<StreamableFile> {
     const principal = await this.live(authorization);
-    const snapshot = await this.trips.snapshot(principal.baseId, principal.recordId, principal.fellowTraveller ? 'fellow_traveller' : 'primary_customer');
+    const snapshot = await this.trips.snapshot(principal.baseId, principal.recordId, principal.fellowTraveller ? 'fellow_traveller' : 'primary_customer', { maxAgeMs: SNAPSHOT_CACHE_MS });
     const walletDocument = snapshot.documents.find((item) => item.downloadAction === action);
     if (!walletDocument || walletDocument.status !== 'ready') throw new NotFoundException('This document is not available.');
     if (action.startsWith('supplier:')) {

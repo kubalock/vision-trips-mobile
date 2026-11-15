@@ -4,6 +4,7 @@ import { DeviceTrustService } from '../security/device-trust.service.js';
 import { identityKey, trustIdentityKey } from '../security/identity-key.js';
 import { DurableAuthStore } from '../sessions/durable-auth.store.js';
 import { SessionsService } from '../sessions/sessions.service.js';
+import { TripEntitlementsService } from '../sessions/trip-entitlements.service.js';
 import { InvitationTargetError, type InvitationContext, type TripsService } from '../trips/trips.service.js';
 import { CustomerInvitationsService } from './customer-invitations.service.js';
 import type { InvitationEmailService } from './invitation-email.service.js';
@@ -370,5 +371,42 @@ describe('invitation scenario matrix', () => {
       expect(trustIdentityKey(payload)).toBe(verified.session.identityKey);
     });
   });
-});
 
+  describe('fellow-traveller share links', () => {
+    const lead = { baseId: BASE_A, recordId: BOOKING_1, fellowTraveller: false, customerRecordId: GRACE, assurance: 'otp' as const };
+    afterEach(() => vi.useRealTimers());
+
+    it('end with the link: refreshing never takes a share session past the link’s seven days', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      const context = setup();
+      const { url, expiresAt } = await context.service.shareLink(lead);
+      const opened = await context.service.open(tokenOf(url), []);
+      if (opened.status !== 'authorized') throw new Error('Expected the share link to open.');
+      expect(Date.parse(opened.session.refreshExpiresAt)).toBeLessThanOrEqual(Date.parse(expiresAt));
+
+      vi.setSystemTime(Date.now() + 6 * 86_400_000 + 23 * 3_600_000); // An hour before the link ends.
+      const renewed = await context.sessions.refresh(opened.session.refreshToken);
+      expect(renewed.refreshExpiresAt).toBe(expiresAt);
+      expect(Date.parse(renewed.accessExpiresAt)).toBeLessThanOrEqual(Date.parse(expiresAt));
+
+      vi.setSystemTime(Date.parse(expiresAt) + 1_000);
+      await expect(context.sessions.refresh(renewed.refreshToken)).rejects.toThrow('expired');
+      expect(() => context.sessions.validateAccess(`Bearer ${renewed.accessToken}`)).toThrow();
+    });
+
+    it('end when the link is revoked, also for sessions already opened from it', async () => {
+      const context = setup();
+      const airtable = { record: vi.fn(async (_base: string, _table: string, id: string) => ({ id, createdTime: '', fields: {} })) };
+      const checked = new SessionsService(context.store, new TripEntitlementsService(airtable as never, context.store));
+      const { url } = await context.service.shareLink(lead);
+      const opened = await context.service.open(tokenOf(url), []);
+      if (opened.status !== 'authorized') throw new Error('Expected the share link to open.');
+      await expect(checked.authorize(`Bearer ${opened.session.accessToken}`)).resolves.toMatchObject({ fellowTraveller: true });
+
+      await expect(context.service.revoke(BASE_A, BOOKING_1, null)).resolves.toEqual({ revoked: 1 });
+
+      await expect(checked.refresh(opened.session.refreshToken)).rejects.toMatchObject({ response: { code: 'access_revoked' } });
+      await expect(rejection(context.service.open(tokenOf(url), []))).resolves.toMatchObject({ status: 410 });
+    });
+  });
+});

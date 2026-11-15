@@ -237,7 +237,7 @@ describe('CustomerInvitationsService', () => {
       const { url } = await service.create(request({ scope: 'fellow_traveller' }));
       await service.sendCode(tokenOf(url));
       const authorized = await service.verifyCode(tokenOf(url), sentCodes[0], false);
-      expect(trips.snapshot).toHaveBeenCalledWith(BASE, BOOKING, 'fellow_traveller');
+      expect(trips.snapshot).toHaveBeenCalledWith(BASE, BOOKING, 'fellow_traveller', { maxAgeMs: 30_000 });
       expect(sessions.validateAccess(`Bearer ${authorized.session.accessToken}`)).toMatchObject({ fellowTraveller: true, assurance: 'otp' });
     });
 
@@ -404,7 +404,7 @@ describe('CustomerInvitationsService', () => {
       const second = await service.open(tokenOf(url), []);
       expect(sessions.validateAccess(`Bearer ${first.session.accessToken}`)).toMatchObject({ fellowTraveller: true, assurance: 'link' });
       expect(second.status).toBe('authorized');
-      expect(trips.snapshot).toHaveBeenCalledWith(BASE, BOOKING, 'fellow_traveller');
+      expect(trips.snapshot).toHaveBeenCalledWith(BASE, BOOKING, 'fellow_traveller', { maxAgeMs: 30_000 });
       expect(await rejection(service.sendCode(tokenOf(url)))).toMatchObject({ status: 400 });
     });
   });
