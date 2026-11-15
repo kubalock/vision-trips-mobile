@@ -16,6 +16,8 @@ import { RelatedQuotationsService } from './related-quotations.service.js';
 import { CustomerAccountService } from './customer-account.service.js';
 import { formatMoney } from '../trips/field-map.js';
 import { openSupplierDocument, SupplierDocumentError } from './supplier-document.js';
+import { type AcceptanceEvidence, parseAcceptanceEvidence, signedInAs, signedInAuditText, signedInRows } from './acceptance-evidence.js';
+import { customerEmail, customersTable } from './customer-identity.js';
 
 @ApiTags('trip actions')
 @Controller('trips/current')
@@ -195,10 +197,15 @@ export class TripActionsController {
     }
     const acceptedAt = new Date().toISOString();
     const table = process.env.AIRTABLE_BOOKINGS_TABLE?.trim() || 'Bookings';
+    // Who was signed in, recorded apart from the name and email the signer typed (they may sign on someone's behalf).
+    const verifiedEmail = principal.customerRecordId
+      ? await this.airtable.record(principal.baseId, customersTable(), principal.customerRecordId).then(customerEmail, () => null) || null
+      : null;
+    const signedIn = signedInAs(principal, verifiedEmail, email);
     const evidence = JSON.stringify({
       acceptedAt, name, email, ip: request.ip || 'unknown', userAgent: request.get('user-agent') || 'unknown',
-      snapshotVersion: snapshot.version, confirmations, reference: snapshot.summary.reference,
-    });
+      snapshotVersion: snapshot.version, confirmations, reference: snapshot.summary.reference, signedInAs: signedIn,
+    } satisfies AcceptanceEvidence);
     await this.airtable.updateRecord(principal.baseId, table, principal.recordId, {
       [process.env.AIRTABLE_ACCEPTED_FIELD?.trim() || 'Quotation Accepted']: true,
       [process.env.AIRTABLE_ACCEPTED_AT_FIELD?.trim() || 'Quotation Accepted At']: acceptedAt,
@@ -207,12 +214,14 @@ export class TripActionsController {
       [process.env.AIRTABLE_ACCEPTANCE_EVIDENCE_FIELD?.trim() || 'Quotation Acceptance Evidence']: evidence,
     });
     try {
-      await this.airtable.addComment(principal.baseId, table, principal.recordId, `Quotation accepted online by ${name} <${email}> at ${acceptedAt}. Reviewed: ${confirmations.join(', ')}. Snapshot: ${snapshot.version}. Booking status was not changed.`);
+      await this.airtable.addComment(principal.baseId, table, principal.recordId, `Quotation accepted online by ${name} <${email}> at ${acceptedAt}. Reviewed: ${confirmations.join(', ')}. Snapshot: ${snapshot.version}. ${signedInAuditText(principal, signedIn)} Booking status was not changed.`);
     } catch (error) {
       this.logger.warn(`Acceptance was saved but its Airtable comment failed: ${error instanceof Error ? error.message : 'unknown error'}`);
     }
     const notifications = await this.notifications.send(snapshot, { name, email }, acceptedAt);
-    const paymentUrl = await this.mintPayments.depositLink(principal.baseId, principal.recordId).catch(() => null);
+    const depositUrl = await this.mintPayments.depositLink(principal.baseId, principal.recordId).catch(() => null);
+    // The app only opens https payment pages; anything else is left out so the acceptance response stays valid.
+    const paymentUrl = depositUrl && /^https:\/\//i.test(depositUrl) ? depositUrl : null;
     return { accepted: true, acceptedAt, receiptAvailable: true, paymentUrl, notifications };
   }
 
@@ -296,19 +305,9 @@ export class TripActionsController {
   }
 }
 
-interface AcceptanceEvidence { acceptedAt: string; name: string; email: string; ip: string; userAgent: string; snapshotVersion: string; confirmations: string[]; reference: string }
-
-function parseAcceptanceEvidence(value: unknown): AcceptanceEvidence | null {
-  if (typeof value !== 'string') return null;
-  try {
-    const parsed = JSON.parse(value) as Partial<AcceptanceEvidence>;
-    return typeof parsed.acceptedAt === 'string' && typeof parsed.name === 'string' && typeof parsed.email === 'string' && Array.isArray(parsed.confirmations) ? parsed as AcceptanceEvidence : null;
-  } catch { return null; }
-}
-
 export function buildAcceptanceReceipt(snapshot: Awaited<ReturnType<TripsService['snapshot']>>, evidence: AcceptanceEvidence): string {
   const reviewed = snapshot.quotation.reviewSections.filter((section) => evidence.confirmations.includes(section.id));
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Quotation acceptance receipt</title><style>body{font:16px/1.5 system-ui,sans-serif;color:#172033;max-width:760px;margin:40px auto;padding:0 24px}header{border-bottom:2px solid #0f766e;padding-bottom:20px}h1{margin-bottom:4px}section{border-bottom:1px solid #ddd;padding:14px 0}dt{color:#64748b}dd{font-weight:600;margin:0 0 10px}@media print{body{margin:0}}</style></head><body><header><p>${escapeHtml(snapshot.brand.name)}</p><h1>Quotation acceptance receipt</h1><p>${escapeHtml(snapshot.summary.reference)} · ${escapeHtml(snapshot.summary.name)}</p></header><dl><dt>Accepted by</dt><dd>${escapeHtml(evidence.name)} · ${escapeHtml(evidence.email)}</dd><dt>Accepted at</dt><dd>${escapeHtml(evidence.acceptedAt)}</dd><dt>Quotation version</dt><dd>${escapeHtml(evidence.snapshotVersion)}</dd></dl><h2>Reviewed sections</h2>${reviewed.map((section) => `<section><strong>${escapeHtml(section.title)}</strong><p>${escapeHtml(section.introduction)}</p></section>`).join('')}<p>This receipt records online acceptance. It does not by itself confirm supplier availability or change the booking status.</p></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Quotation acceptance receipt</title><style>body{font:16px/1.5 system-ui,sans-serif;color:#172033;max-width:760px;margin:40px auto;padding:0 24px}header{border-bottom:2px solid #0f766e;padding-bottom:20px}h1{margin-bottom:4px}section{border-bottom:1px solid #ddd;padding:14px 0}dt{color:#64748b}dd{font-weight:600;margin:0 0 10px}@media print{body{margin:0}}</style></head><body><header><p>${escapeHtml(snapshot.brand.name)}</p><h1>Quotation acceptance receipt</h1><p>${escapeHtml(snapshot.summary.reference)} · ${escapeHtml(snapshot.summary.name)}</p></header><dl><dt>Accepted by (as entered)</dt><dd>${escapeHtml(evidence.name)} · ${escapeHtml(evidence.email)}</dd><dt>Accepted at</dt><dd>${escapeHtml(evidence.acceptedAt)}</dd><dt>Quotation version</dt><dd>${escapeHtml(evidence.snapshotVersion)}</dd>${signedInRows(evidence).map(([label, value]) => `<dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd>`).join('')}</dl><h2>Reviewed sections</h2>${reviewed.map((section) => `<section><strong>${escapeHtml(section.title)}</strong><p>${escapeHtml(section.introduction)}</p></section>`).join('')}<p>This receipt records online acceptance. It does not by itself confirm supplier availability or change the booking status.</p></body></html>`;
 }
 
 export function buildDocument(snapshot: Awaited<ReturnType<TripsService['snapshot']>>, kind: 'confirmation' | 'invoice'): string {

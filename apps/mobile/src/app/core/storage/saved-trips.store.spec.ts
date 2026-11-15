@@ -236,3 +236,29 @@ describe('SavedTripsStore identities (one booking, several customers or branches
     expect(await store.deviceTrusts()).toEqual([]);
   });
 });
+
+describe('SavedTripsStore when a Customer’s account changes', () => {
+  it('moves trips, sessions and trusted-device tokens saved under the old identity, and only those', async () => {
+    const store = nativeStore();
+    const as = (refreshToken: string, identityKey: string): MobileSession => ({ ...session(refreshToken), identityKey });
+    await store.save(snapshot('trp_1'), as('vrt_1', 'idk_old'));
+    await store.save(snapshot('trp_2'), as('vrt_2', 'idk_old'));
+    await store.save(snapshot('trp_3'), as('vrt_3', 'idk_someone_else'));
+    await store.saveDeviceTrust(trustToken('app1', 'recA'), 'idk_old');
+    const otherPersonsTrust = trustToken('app1', 'recB');
+    await store.saveDeviceTrust(otherPersonsTrust, 'idk_someone_else');
+
+    await store.migrateIdentity('idk_old', 'idk_new');
+
+    const trips = await store.all();
+    expect(trips.map((trip) => [trip.snapshot.tripId, trip.identityKey, trip.session?.identityKey])).toEqual([
+      ['trp_1', 'idk_new', 'idk_new'], ['trp_2', 'idk_new', 'idk_new'], ['trp_3', 'idk_someone_else', 'idk_someone_else'],
+    ]);
+    // "Sign out of this account" under the new identity clears the moved trust token, and not the other person's.
+    await store.clearDeviceTrust('idk_new');
+    expect(await store.deviceTrusts()).toEqual([otherPersonsTrust]);
+    // A renewal under the new identity can now be saved over the moved copy.
+    expect(await store.save(snapshot('trp_1'), as('vrt_1b', 'idk_new'))).toBe(true);
+  });
+});
+

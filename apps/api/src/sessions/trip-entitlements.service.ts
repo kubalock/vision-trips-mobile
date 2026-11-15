@@ -11,7 +11,6 @@ import type { SessionPrincipal } from './sessions.service.js';
  *
  * A session with a verified Customer stays entitled only while:
  * - the verified Customer record still exists (and is not soft-deleted);
- * - a session grouped by `Customer Account ID` still has that same ID on the verified Customer;
  * - the booking owner (the verified Customer, or the grouped duplicate the trip was opened through) still has the
  *   verified Customer's `Customer Account ID`;
  * - the Booking still exists, is not soft-deleted, its `Customers` lists the owner and the owner's `Trips` lists it.
@@ -21,6 +20,10 @@ import type { SessionPrincipal } from './sessions.service.js';
  *
  * When one of these no longer holds, the session is ended (its refresh token stops working too) and the request fails
  * with 401 `access_revoked`. An Airtable outage is not a revocation: that error is passed on as it is.
+ *
+ * The session's account follows Airtable too: when the agent adds, changes or removes the verified Customer's
+ * `Customer Account ID` (and the trip is still theirs), the session is moved to the new account key, so its next
+ * refresh returns the new identity and the app moves the trips saved under the old one.
  */
 @Injectable()
 export class TripEntitlementsService {
@@ -39,30 +42,40 @@ export class TripEntitlementsService {
    * `fresh` skips the short confirmation cache: use it before payments, sharing, acceptance and other writes.
    */
   async assertCurrent(principal: SessionPrincipal, options: { fresh?: boolean } = {}): Promise<void> {
+    // Note: moves `principal.accountKey` to the Customer's current account when it changed.
     const key = principal.sessionId;
     const confirmedAt = key ? this.confirmed.get(key) : undefined;
     if (!options.fresh && confirmedAt !== undefined && this.now() - confirmedAt < CONFIRMED_FOR_MS) return;
-    const problem = await this.problem(principal);
+    const { problem, accountKey } = await this.evaluate(principal);
     if (problem) {
       if (key) { this.store.revokeSession(key); this.confirmed.delete(key); }
       this.logger.warn(JSON.stringify({ event: 'session_access_revoked', reason: problem }));
       throw accessRevoked();
     }
+    if (accountKey !== undefined && accountKey !== (principal.accountKey ?? null)) {
+      if (key) this.store.updateAccountKey(key, accountKey);
+      this.logger.log(JSON.stringify({ event: 'session_account_moved', grouped: accountKey?.startsWith('account:') ?? false }));
+      principal.accountKey = accountKey;
+    }
     if (key) this.remember(key);
   }
 
-  /** Why the session is no longer entitled, or null while it still is. Transient Airtable errors are thrown. */
-  async problem(principal: SessionPrincipal): Promise<EntitlementProblem | null> {
+  /**
+   * Why the session is no longer entitled (null while it still is), and the verified Customer's current account key
+   * (undefined for sessions without a Customer). Transient Airtable errors are thrown.
+   */
+  async evaluate(principal: SessionPrincipal): Promise<{ problem: EntitlementProblem | null; accountKey?: string | null }> {
     const booking = await this.optional(principal.baseId, bookingsTable(), principal.recordId);
-    if (!booking || truthy(booking.fields['Soft Delete'])) return 'booking_removed';
-    if (!principal.customerRecordId) return null;
+    if (!booking || truthy(booking.fields['Soft Delete'])) return { problem: 'booking_removed' };
+    if (!principal.customerRecordId) return { problem: null };
     const ownerId = principal.bookingOwnerCustomerRecordId && principal.bookingOwnerCustomerRecordId !== principal.customerRecordId
       ? principal.bookingOwnerCustomerRecordId : null;
     const [root, owner] = await Promise.all([
       this.optional(principal.baseId, customersTable(), principal.customerRecordId),
       ownerId ? this.optional(principal.baseId, customersTable(), ownerId) : Promise.resolve(null),
     ]);
-    return entitlementProblem(principal, booking, root, ownerId ? owner : root);
+    const problem = entitlementProblem(booking, root, ownerId ? owner : root);
+    return problem || !root ? { problem } : { problem, accountKey: accountKeyFor(root.id, firstString(root.fields[CUSTOMER_ACCOUNT_ID]).trim() || null) };
   }
 
   private async optional(baseId: string, table: string, recordId: string): Promise<AirtableRecord | null> {
@@ -84,14 +97,12 @@ export class TripEntitlementsService {
   }
 }
 
-export type EntitlementProblem = 'booking_removed' | 'customer_removed' | 'account_changed' | 'owner_not_grouped' | 'customer_not_linked';
+export type EntitlementProblem = 'booking_removed' | 'customer_removed' | 'owner_not_grouped' | 'customer_not_linked';
 
 /** The pure policy (see TripEntitlementsService). `owner` is the verified Customer unless the trip belongs to a grouped duplicate. */
-export function entitlementProblem(principal: SessionPrincipal, booking: AirtableRecord, root: AirtableRecord | null, owner: AirtableRecord | null): EntitlementProblem | null {
+export function entitlementProblem(booking: AirtableRecord, root: AirtableRecord | null, owner: AirtableRecord | null): EntitlementProblem | null {
   if (!root || truthy(root.fields['Soft Delete'])) return 'customer_removed';
   const accountId = firstString(root.fields[CUSTOMER_ACCOUNT_ID]).trim() || null;
-  // A session grouped under an account keeps it only while the verified Customer still carries that account ID.
-  if (principal.accountKey?.startsWith('account:') && accountKeyFor(root.id, accountId) !== principal.accountKey) return 'account_changed';
   if (!owner || truthy(owner.fields['Soft Delete'])) return 'customer_removed';
   if (owner.id !== root.id && (!accountId || firstString(owner.fields[CUSTOMER_ACCOUNT_ID]).trim() !== accountId)) return 'owner_not_grouped';
   const bookingLists = strings(pick(booking.fields, bookingFields.customers)).includes(owner.id);

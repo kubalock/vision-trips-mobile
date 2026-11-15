@@ -74,6 +74,26 @@ export class SavedTripsStore {
     await this.secure.set('device:trust', keep as unknown as Record<string, unknown>);
   }
 
+  /**
+   * Moves everything saved under one identity to another, after the server reported that the same verified Customer
+   * now belongs to a different account (the agent changed `Customer Account ID`). Saved trips, their sessions and
+   * trusted-device tokens keep working, and "Sign out of this account" still finds all of them.
+   */
+  migrateIdentity(from: string, to: string): Promise<void> {
+    if (from === to) return Promise.resolve();
+    return this.exclusive(async () => {
+      for (const trip of await this.readAll()) {
+        if (trip.identityKey !== from) continue;
+        await this.write({ ...trip, identityKey: to, session: trip.session ? { ...trip.session, identityKey: to } : null });
+      }
+      if (!this.native) return;
+      const entries = await this.trustEntries();
+      if (entries.some((entry) => entry.identityKey === from)) {
+        await this.secure.set('device:trust', entries.map((entry) => entry.identityKey === from ? { ...entry, identityKey: to } : entry) as unknown as Record<string, unknown>);
+      }
+    });
+  }
+
   /** The identity that saved a trip on this device, if any. */
   async identityFor(tripId: string): Promise<string | null> {
     return this.exclusive(async () => (await this.readOne(tripId))?.identityKey ?? null);

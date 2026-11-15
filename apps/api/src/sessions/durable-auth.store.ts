@@ -204,6 +204,11 @@ export class DurableAuthStore implements OnModuleDestroy {
       .run(session.refreshHash, session.refreshExpiresAt, session.accessHash, session.accessExpiresAt, session.id);
   }
 
+  /** Moves a session to its Customer's current account (after the agent changed `Customer Account ID`). */
+  updateAccountKey(sessionId: string, accountKey: string | null): void {
+    this.database.prepare('UPDATE auth_sessions SET account_key = ? WHERE id = ?').run(accountKey, sessionId);
+  }
+
   /** Remembers a replaced refresh token so a later reuse can be recognised as theft. */
   retireRefreshHash(hash: string, sessionId: string, expiresAt: number, now = Date.now()): void {
     this.database.prepare('INSERT OR REPLACE INTO retired_refresh_tokens (refresh_hash, session_id, retired_at, expires_at) VALUES (?, ?, ?, ?)').run(hash, sessionId, now, expiresAt);

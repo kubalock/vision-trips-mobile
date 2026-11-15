@@ -151,6 +151,17 @@ describe('CustomerAccountService identity', () => {
       return tables;
     }
 
+    it('refuses an account grouped over more than 20 Customer records instead of silently leaving one out', async () => {
+      const tables = grouped();
+      for (let index = 0; index < 19; index += 1) tables[BASE_A].Customers[`recEXTRA${String(index).padStart(9, '0')}`] = { 'Customer Account ID': 'acct-grace', Trips: [] };
+      const { account, airtable } = setup(tables);
+      // Grace, her twin and 19 more: 21 records under one Customer Account ID.
+      await expect(account.account(principal())).rejects.toMatchObject({ response: { code: 'account_group_too_large' } });
+      expect(airtable.list.mock.calls[0][2]).toMatchObject({ maxRecords: 21 });
+      delete tables[BASE_A].Customers['recEXTRA000000018'];
+      await expect(account.account(principal())).resolves.toMatchObject({ emailHint: 'gr***@example.com' });
+    });
+
     it('opens a duplicate’s trip as the verified Customer, recording the duplicate only as the booking owner', async () => {
       const { account, sessions } = setup(grouped());
       const twin = (await account.account(principal())).trips.find((trip) => trip.name === 'Twin trip')!;

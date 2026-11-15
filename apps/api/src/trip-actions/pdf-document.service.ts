@@ -2,10 +2,11 @@ import { Injectable } from '@nestjs/common';
 import type { TripSnapshot } from '@vision-trips/contracts';
 import PDFDocument from 'pdfkit';
 import { formatMoney } from '../trips/field-map.js';
+import { type AcceptanceEvidence, signedInRows } from './acceptance-evidence.js';
 
 @Injectable()
 export class PdfDocumentService {
-  create(snapshot: TripSnapshot, action: string, acceptance?: { acceptedAt: string; name: string; email: string; confirmations: string[] } | null): Promise<Buffer> {
+  create(snapshot: TripSnapshot, action: string, acceptance?: AcceptanceEvidence | null): Promise<Buffer> {
     return render((pdf) => {
       header(pdf, snapshot, title(action));
       if (action === 'confirmation') confirmation(pdf, snapshot);
@@ -75,8 +76,9 @@ function atol(pdf: PDFKit.PDFDocument, snapshot: TripSnapshot): void {
   pdf.moveDown().fontSize(9).fillColor('#475569').text('Your protection is subject to the terms of the ATOL scheme. The scheme is run by the Civil Aviation Authority and paid for by the Air Travel Trust. Full information is available at www.atol.org.uk.');
 }
 
-function acceptanceReceipt(pdf: PDFKit.PDFDocument, snapshot: TripSnapshot, evidence: { acceptedAt: string; name: string; email: string; confirmations: string[] }): void {
-  section(pdf, 'Acceptance evidence'); row(pdf, 'Accepted by', `${evidence.name} · ${evidence.email}`); row(pdf, 'Accepted at', evidence.acceptedAt); row(pdf, 'Quotation version', snapshot.version);
+function acceptanceReceipt(pdf: PDFKit.PDFDocument, snapshot: TripSnapshot, evidence: AcceptanceEvidence): void {
+  section(pdf, 'Acceptance evidence'); row(pdf, 'Accepted by (as entered)', `${evidence.name} · ${evidence.email}`); row(pdf, 'Accepted at', evidence.acceptedAt); row(pdf, 'Quotation version', evidence.snapshotVersion || snapshot.version);
+  for (const [label, value] of signedInRows(evidence)) row(pdf, label, value);
   section(pdf, 'Reviewed sections');
   for (const item of snapshot.quotation.reviewSections.filter((entry) => evidence.confirmations.includes(entry.id))) paragraph(pdf, item.title, true);
 }

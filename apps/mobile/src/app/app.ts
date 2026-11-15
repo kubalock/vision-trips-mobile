@@ -195,7 +195,12 @@ export class App implements OnInit, OnDestroy {
     this.sessions.connect({
       tripIdFor: (refreshToken) => (this.session()?.refreshToken === refreshToken ? this.trip()?.tripId : undefined)
         ?? this.savedTripList().find((trip) => trip.session?.refreshToken === refreshToken)?.snapshot.tripId,
-      renewed: async ({ previousRefreshToken, session, fromServer }) => {
+      renewed: async ({ previousRefreshToken, session, fromServer, movedFromIdentity }) => {
+        // Already moved in storage by the session manager; keep the in-memory library in step.
+        if (movedFromIdentity && session.identityKey) {
+          const to = session.identityKey;
+          this.savedTripList.update((trips) => trips.map((trip) => trip.identityKey === movedFromIdentity ? { ...trip, identityKey: to, session: trip.session ? { ...trip.session, identityKey: to } : null } : trip));
+        }
         const snapshot = this.trip();
         if (fromServer && snapshot && this.session()?.refreshToken === session.refreshToken) this.storedSecurely.set(await this.savedTrips.save(snapshot, session));
         // The old refresh token is now dead server-side; keep the in-memory library in step with storage.
@@ -383,7 +388,11 @@ export class App implements OnInit, OnDestroy {
         this.paymentAwaitingReturn = true;
         this.paymentOpenedAt = Date.now();
         // Not reserved up front (acceptance may not return a payment link), so a blocked page falls back to a link.
-        await this.openPaymentPage(result.paymentUrl, null);
+        // The acceptance is already recorded: a payment page that can't open must not read as a failed acceptance.
+        await this.openPaymentPage(result.paymentUrl, null).catch(() => {
+          this.paymentAwaitingReturn = false;
+          this.acceptanceNotice.update((notice) => `${notice} Your deposit can be paid from the Payments tab.`);
+        });
       }
     } catch (error) {
       this.error.set(this.apiError(error, 'We could not record your acceptance. Please try again or contact your travel agent.'));
@@ -1443,6 +1452,7 @@ export function customerErrorMessage(error: unknown, fallback: string): string {
   if (error.status === 401) return 'For your security, please open your trip link again to continue.';
   // A partial save is a 503 too, but the traveller needs to know some changes did save and to save again.
   if (error.error?.code === 'preferences_partially_saved') return 'Some of your changes were saved, but not all of them. Please save again to finish.';
+  if (error.error?.code === 'account_group_too_large') return 'Your account can’t be shown right now. Please contact your travel agent.';
   if (error.status >= 500) return 'Our booking system is busy right now. Please try again in a minute.';
   const raw = error.error?.message;
   const message = typeof raw === 'string' ? raw.trim() : Array.isArray(raw) ? raw.filter((item): item is string => typeof item === 'string').join(' ') : '';

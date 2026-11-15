@@ -1,4 +1,4 @@
-import { ExternalPages } from './external-pages';
+import { ExternalPages, InsecureExternalPageError } from './external-pages';
 
 function fakeWindow(): Window & { replaced: string | null } {
   const page = {
@@ -45,4 +45,19 @@ describe('ExternalPages (web)', () => {
 
     expect(opened).toBe(false);
   });
+
+  it('refuses to open anything but an https page, closing the reserved tab', async () => {
+    for (const url of ['http://pay.example/checkout', 'javascript:alert(1)', 'not a url']) {
+      const placeholder = fakeWindow();
+      const open = vi.spyOn(window, 'open').mockReturnValue(placeholder);
+      await expect(new ExternalPages().reserve().open(url)).rejects.toBeInstanceOf(InsecureExternalPageError);
+      expect(placeholder.replaced).toBeNull();
+      expect(placeholder.closed).toBe(true);
+      open.mockClear();
+      await expect(new ExternalPages().open(url)).rejects.toBeInstanceOf(InsecureExternalPageError);
+      expect(open).not.toHaveBeenCalled();
+      vi.restoreAllMocks();
+    }
+  });
 });
+

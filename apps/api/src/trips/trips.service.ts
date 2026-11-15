@@ -42,16 +42,20 @@ export class TripsService {
    * Linked records that make up the trip itself (itinerary elements and their rooms, cabins, passengers and cruise
    * ports; payments; travellers) are required: if Airtable can't return them the request fails, and the app keeps
    * showing its last saved copy marked as out of date. Enrichment (agent, extras, messages, suppliers, airports,
-   * airlines, ships, places, letter templates) may degrade: the snapshot is then `partial` and names what's missing.
+   * airlines, ships, places, letter templates) may degrade: the snapshot is then `partial`, names what's missing, and
+   * leaves each missing section out entirely (never half a section) so the app can keep its earlier copy of it.
    */
   async snapshot(baseId: string, recordId: string, accessScope: AccessScope): Promise<TripSnapshot> {
     const booking = await this.airtable.record(baseId, 'Bookings', recordId);
     const brandId = strings(pick(booking.fields, bookingFields.brand))[0];
     const incomplete = new Set<TripSection>();
+    // All or nothing per section: when any 30-record chunk fails, the section is left out entirely (not served with
+    // just the chunks that loaded), so the app can keep its whole earlier copy instead of a shortened list.
     const optional = async (section: TripSection, table: string, ids: string[]) => {
       const result = await this.airtable.optionalRecords(baseId, table, ids);
-      if (result.unavailable) incomplete.add(section);
-      return result.records;
+      if (!result.unavailable) return result.records;
+      incomplete.add(section);
+      return [];
     };
     const [brand, members, elements, payments, people, customers, upsells, communications] = await Promise.all([
       // Only the booking itself is required; an unreadable brand falls back to defaults like a booking without one.

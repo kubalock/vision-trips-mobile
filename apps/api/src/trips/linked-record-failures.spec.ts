@@ -47,4 +47,22 @@ describe('TripsService.snapshot when linked Airtable reads fail', () => {
     expect(Date.parse(snapshot.freshness.nextRefreshAfter!) - Date.parse(snapshot.serverTime)).toBe(60_000);
     expect(snapshot.payments?.items).toHaveLength(1);
   });
+
+  it('leaves out a whole section, not just the chunk that failed', async () => {
+    const messages = Array.from({ length: 40 }, (_, index) => id(100 + index));
+    let failChunk = true;
+    const airtable = new AirtableService();
+    vi.spyOn(airtable, 'record').mockResolvedValue({ ...booking, fields: { ...booking.fields, 'Bookings [Customer Communication]': messages } });
+    vi.spyOn(airtable, 'list').mockImplementation(async (_base, table, options) => {
+      const ids = [...(options?.filterByFormula ?? '').matchAll(/RECORD_ID\(\)='(rec[A-Za-z0-9]{14})'/g)].map((match) => match[1]);
+      // The second chunk of messages (records 31–40) fails; the first 30 load.
+      if (failChunk && table === 'Bookings [Customer Communication]' && ids.includes(messages[35])) throw new ServiceUnavailableException('Airtable is temporarily unavailable. Try again shortly.');
+      return ids.map((recordId) => ({ id: recordId, fields: table === 'Bookings [Payments]' ? { Amount: 100, Status: 'Complete', 'Customer Payment Type': 'Deposit Payment' } : { Name: recordId, Subject: `Update ${recordId.slice(-3)}`, Sent: true } }));
+    });
+    const snapshot = await new TripsService(airtable).snapshot(base, booking.id, 'primary_customer');
+    expect(snapshot.freshness.incompleteSections).toEqual(['messages']);
+    expect(snapshot.communications).toEqual([]);
+    failChunk = false; // Control: with both chunks loaded, the latest 20 messages are shown.
+    expect((await new TripsService(airtable).snapshot(base, booking.id, 'primary_customer')).communications).toHaveLength(20);
+  });
 });

@@ -48,7 +48,7 @@ describe('quotation acceptance', () => {
     const trips = { snapshot: vi.fn().mockResolvedValue({
       stage: 'quote', version: 'v1', summary: { reference: 'VT-1' }, support: { email: null }, payments: { items: [] }, quotation: { canAccept: true, requiredConfirmations: ['package', 'terms'] },
     }) };
-    const airtable = { updateRecord: vi.fn().mockResolvedValue({}), addComment: vi.fn().mockResolvedValue(undefined) };
+    const airtable = { updateRecord: vi.fn().mockResolvedValue({}), addComment: vi.fn().mockResolvedValue(undefined), record: vi.fn().mockResolvedValue({ id: 'recCUSTOMERAAAAAA', fields: { 'Primary Email': 'Alex@Example.com' } }) };
     const controller = new TripActionsController(sessions as never, trips as never, airtable as never, {} as never, { send: vi.fn().mockResolvedValue({ customer: "local_preview", agent: "not_configured" }) } as never, { create: vi.fn() } as never, { link: vi.fn(), depositLink: vi.fn().mockResolvedValue(null) } as never);
 
     const result = await controller.acceptQuotation('Bearer token', {
@@ -223,3 +223,38 @@ describe('sensitive actions need an email-verified session', () => {
     await expect(controller.sendMessage('Bearer token', { topic: 'other', message: 'Can we add a transfer please?' })).resolves.toMatchObject({ sent: true });
   });
 });
+
+describe('quotation acceptance evidence', () => {
+  const principal = { baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false, customerRecordId: 'recCUSTOMERAAAAAA', assurance: 'otp', sessionId: 'session-1', accountKey: 'account:acct-alex', bookingOwnerCustomerRecordId: 'recCUSTOMERTWINAA', invitationId: 'inv_abc' };
+  async function accept(email: string) {
+    const sessions = { validateAccess: vi.fn().mockReturnValue(principal) };
+    const trips = { snapshot: vi.fn().mockResolvedValue({ stage: 'quote', version: 'v1', summary: { reference: 'VT-1' }, support: { email: null }, payments: { items: [] }, quotation: { canAccept: true, requiredConfirmations: [] } }) };
+    const airtable = { updateRecord: vi.fn().mockResolvedValue({}), addComment: vi.fn().mockResolvedValue(undefined), record: vi.fn().mockResolvedValue({ id: 'recCUSTOMERAAAAAA', fields: { 'Primary Email': 'alex@example.com' } }) };
+    const controller = new TripActionsController(sessions as never, trips as never, airtable as never, {} as never, { send: vi.fn().mockResolvedValue({ customer: 'local_preview', agent: 'not_configured' }) } as never, { create: vi.fn() } as never, { link: vi.fn(), depositLink: vi.fn().mockResolvedValue(null) } as never);
+    await controller.acceptQuotation('Bearer token', { name: 'Sam Signer', email, agreed: true, confirmations: [] }, { ip: '127.0.0.1', get: vi.fn() } as never);
+    return { evidence: JSON.parse(airtable.updateRecord.mock.calls[0][3]['Quotation Acceptance Evidence'] as string), comment: airtable.addComment.mock.calls[0][3] as string };
+  }
+
+  it('records who was signed in apart from the declared signer, with opaque references only', async () => {
+    const { evidence, comment } = await accept('sam@example.com');
+    expect(evidence).toMatchObject({ name: 'Sam Signer', email: 'sam@example.com' });
+    expect(evidence.signedInAs).toMatchObject({ assurance: 'otp', invitationId: 'inv_abc', signerIsVerifiedCustomer: false });
+    for (const key of ['customerSubject', 'accountSubject', 'bookingOwnerSubject', 'sessionSubject']) expect(evidence.signedInAs[key]).toMatch(/^sub_[A-Za-z0-9_-]{20}$/);
+    const serialized = JSON.stringify(evidence);
+    for (const raw of ['recCUSTOMER', 'acct-alex', 'session-1']) expect(serialized).not.toContain(raw);
+    // The internal audit comment keeps the actual relationship.
+    expect(comment).toContain('Signed in as Customer recCUSTOMERAAAAAA (account acct-alex), trip linked through grouped Customer recCUSTOMERTWINAA, verified by otp via invitation inv_abc');
+    expect(comment).toContain('signed on their behalf');
+  });
+
+  it('notes when the signer is the verified Customer, and the receipt says so without record IDs', async () => {
+    const { evidence } = await accept('ALEX@example.com ');
+    expect(evidence.signedInAs.signerIsVerifiedCustomer).toBe(true);
+    const html = buildAcceptanceReceipt({ summary: { name: 'Lisbon', reference: 'VT-1' }, brand: { name: 'Example Travel' }, quotation: { reviewSections: [] } } as never, evidence);
+    expect(html).toContain('The verified account holder, confirmed with a code sent to the account email');
+    expect(html).toContain('The account holder');
+    expect(html).toContain(evidence.signedInAs.accountSubject);
+    expect(html).not.toContain('recCUSTOMER');
+  });
+});
+

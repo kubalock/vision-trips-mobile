@@ -21,6 +21,8 @@ export interface SessionPrincipal {
   accountKey?: string | null;
   /** The Customer linked to this booking, when it is an explicitly grouped duplicate rather than the verified one. */
   bookingOwnerCustomerRecordId?: string | null;
+  /** The invitation the session was opened from, when there was one (recorded as evidence of how access was granted). */
+  invitationId?: string | null;
 }
 
 export interface SessionGrant {
@@ -131,7 +133,7 @@ export class SessionsService {
 const REFRESH_REUSE_GRACE_MS = 10_000;
 
 function principalOf(stored: StoredSession): SessionPrincipal {
-  return { baseId: stored.baseId, recordId: stored.recordId, fellowTraveller: stored.fellowTraveller, customerRecordId: stored.customerRecordId, assurance: stored.assurance, sessionId: stored.id, accountKey: stored.accountKey, bookingOwnerCustomerRecordId: stored.bookingOwnerCustomerRecordId };
+  return { baseId: stored.baseId, recordId: stored.recordId, fellowTraveller: stored.fellowTraveller, customerRecordId: stored.customerRecordId, assurance: stored.assurance, sessionId: stored.id, accountKey: stored.accountKey, bookingOwnerCustomerRecordId: stored.bookingOwnerCustomerRecordId, invitationId: stored.invitationId };
 }
 function isAccessRevoked(error: unknown): boolean {
   if (!(error instanceof UnauthorizedException)) return false;

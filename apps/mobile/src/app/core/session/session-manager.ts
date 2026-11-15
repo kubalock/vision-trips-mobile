@@ -11,6 +11,8 @@ export interface SessionRenewal {
   session: MobileSession;
   /** False when a newer session saved by another tab was adopted instead of calling the server. */
   fromServer: boolean;
+  /** Set when the server moved the session to another identity (the Customer's account changed in Airtable). */
+  movedFromIdentity?: string;
 }
 
 /**
@@ -95,8 +97,11 @@ export class SessionManager {
         if (isRefusal(error)) return this.expire(refreshToken, error);
         throw error; // Offline or a server fault: the session may still be fine.
       }
+      // Same verified Customer, new account: move this identity's saved trips first, so saving the renewal succeeds.
+      const movedFromIdentity = fromServer && current.identityKey && session.identityKey && current.identityKey !== session.identityKey ? current.identityKey : undefined;
+      if (movedFromIdentity && session.identityKey) await this.savedTrips.migrateIdentity(movedFromIdentity, session.identityKey);
       if (this.session()?.refreshToken === refreshToken) this.session.set(session);
-      await this.hooks.renewed({ previousRefreshToken: refreshToken, session, fromServer });
+      await this.hooks.renewed({ previousRefreshToken: refreshToken, session, fromServer, ...(movedFromIdentity ? { movedFromIdentity } : {}) });
       return session;
     })().finally(() => this.inFlight.delete(refreshToken));
     this.inFlight.set(refreshToken, request);

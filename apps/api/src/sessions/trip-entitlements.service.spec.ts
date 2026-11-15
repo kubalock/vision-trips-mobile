@@ -41,35 +41,31 @@ const direct: SessionGrant = { baseId: BASE, recordId: BOOKING, fellowTraveller:
 const viaTwin: SessionGrant = { ...direct, accountKey: 'account:acct-grace', bookingOwnerCustomerRecordId: TWIN };
 
 describe('entitlementProblem', () => {
-  const principal = (grant: SessionGrant) => ({ ...grant, sessionId: 's1' });
-
   it('accepts a Customer linked to the Booking both ways', () => {
-    expect(entitlementProblem(principal(direct), booking([GRACE]), customer(GRACE, [BOOKING]), customer(GRACE, [BOOKING]))).toBeNull();
+    expect(entitlementProblem(booking([GRACE]), customer(GRACE, [BOOKING]), customer(GRACE, [BOOKING]))).toBeNull();
   });
 
   it('refuses once the Customer is unlinked on either side, or removed', () => {
-    expect(entitlementProblem(principal(direct), booking([]), customer(GRACE, [BOOKING]), customer(GRACE, [BOOKING]))).toBe('customer_not_linked');
-    expect(entitlementProblem(principal(direct), booking([GRACE]), customer(GRACE, []), customer(GRACE, []))).toBe('customer_not_linked');
-    expect(entitlementProblem(principal(direct), booking([GRACE]), null, null)).toBe('customer_removed');
-    expect(entitlementProblem(principal(direct), booking([GRACE]), customer(GRACE, [BOOKING]), null)).toBe('customer_removed');
+    expect(entitlementProblem(booking([]), customer(GRACE, [BOOKING]), customer(GRACE, [BOOKING]))).toBe('customer_not_linked');
+    expect(entitlementProblem(booking([GRACE]), customer(GRACE, []), customer(GRACE, []))).toBe('customer_not_linked');
+    expect(entitlementProblem(booking([GRACE]), null, null)).toBe('customer_removed');
+    expect(entitlementProblem(booking([GRACE]), customer(GRACE, [BOOKING]), null)).toBe('customer_removed');
   });
 
   it('accepts a grouped duplicate only while it still shares the verified Customer’s account ID', () => {
     const root = customer(GRACE, [], 'acct-grace');
-    expect(entitlementProblem(principal(viaTwin), booking([TWIN]), root, customer(TWIN, [BOOKING], 'acct-grace'))).toBeNull();
-    expect(entitlementProblem(principal(viaTwin), booking([TWIN]), root, customer(TWIN, [BOOKING], 'acct-other'))).toBe('owner_not_grouped');
-    expect(entitlementProblem(principal(viaTwin), booking([TWIN]), root, customer(TWIN, [BOOKING]))).toBe('owner_not_grouped');
+    expect(entitlementProblem(booking([TWIN]), root, customer(TWIN, [BOOKING], 'acct-grace'))).toBeNull();
+    expect(entitlementProblem(booking([TWIN]), root, customer(TWIN, [BOOKING], 'acct-other'))).toBe('owner_not_grouped');
+    expect(entitlementProblem(booking([TWIN]), root, customer(TWIN, [BOOKING]))).toBe('owner_not_grouped');
   });
 
-  it('ends a grouped session when the verified Customer’s account ID changes', () => {
-    const owner = customer(TWIN, [BOOKING], 'acct-new');
-    expect(entitlementProblem(principal(viaTwin), booking([TWIN]), customer(GRACE, [], 'acct-new'), owner)).toBe('account_changed');
-    expect(entitlementProblem(principal({ ...direct, accountKey: 'account:acct-grace' }), booking([GRACE]), customer(GRACE, [BOOKING]), customer(GRACE, [BOOKING]))).toBe('account_changed');
+  it('ends a grouped session when its duplicate no longer shares the verified Customer’s new account ID', () => {
+    expect(entitlementProblem(booking([TWIN]), customer(GRACE, [], 'acct-new'), customer(TWIN, [BOOKING], 'acct-grace'))).toBe('owner_not_grouped');
   });
 
   it('lets an ungrouped session keep its own Booking when the agent later groups the Customer', () => {
     const grouped = customer(GRACE, [BOOKING], 'acct-grace');
-    expect(entitlementProblem(principal(direct), booking([GRACE]), grouped, grouped)).toBeNull();
+    expect(entitlementProblem(booking([GRACE]), grouped, grouped)).toBeNull();
   });
 });
 
@@ -172,3 +168,38 @@ describe('sensitive actions after unlinking', () => {
     expect(trips.snapshot).not.toHaveBeenCalled();
   });
 });
+
+describe('when the agent changes Customer Account ID', () => {
+  const identityOf = (sessions: SessionsService, accessToken: string) => sessions.validateAccess(`Bearer ${accessToken}`).accountKey;
+
+  it('moves a session on its own Booking to the new account, and the refresh returns the new identity', async () => {
+    const context = setup({ [BOOKING]: booking([GRACE]), [GRACE]: customer(GRACE, [BOOKING], 'acct-grace') });
+    const session = context.sessions.issue({ ...direct, accountKey: 'account:acct-grace' });
+    context.state.records[GRACE] = customer(GRACE, [BOOKING], 'acct-renamed');
+    const renewed = await context.sessions.refresh(session.refreshToken);
+    expect(identityOf(context.sessions, renewed.accessToken)).toBe('account:acct-renamed');
+    expect(renewed.identityKey).not.toBe(session.identityKey);
+    // Removing the ID moves it back to the Customer itself; adding one to an ungrouped Customer groups it.
+    context.state.records[GRACE] = customer(GRACE, [BOOKING]);
+    const ungrouped = await context.sessions.refresh(renewed.refreshToken);
+    expect(identityOf(context.sessions, ungrouped.accessToken)).toBe(`customer:${GRACE}`);
+    expect(ungrouped.identityKey).toBe(context.sessions.issue(direct).identityKey);
+  });
+
+  it('keeps a grouped duplicate’s session when the whole group is renamed together', async () => {
+    const context = setup({ [BOOKING]: booking([TWIN]), [GRACE]: customer(GRACE, [], 'acct-grace'), [TWIN]: customer(TWIN, [BOOKING], 'acct-grace') });
+    const session = context.sessions.issue(viaTwin);
+    context.state.records[GRACE] = customer(GRACE, [], 'acct-family');
+    context.state.records[TWIN] = customer(TWIN, [BOOKING], 'acct-family');
+    const renewed = await context.sessions.refresh(session.refreshToken);
+    expect(identityOf(context.sessions, renewed.accessToken)).toBe('account:acct-family');
+  });
+
+  it('updates the account of a session checked on an ordinary request too', async () => {
+    const context = setup({ [BOOKING]: booking([GRACE]), [GRACE]: customer(GRACE, [BOOKING], 'acct-new') });
+    const session = context.sessions.issue(direct);
+    await expect(context.sessions.authorize(`Bearer ${session.accessToken}`)).resolves.toMatchObject({ accountKey: 'account:acct-new' });
+    expect(identityOf(context.sessions, session.accessToken)).toBe('account:acct-new');
+  });
+});
+

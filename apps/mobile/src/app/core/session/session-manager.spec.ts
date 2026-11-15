@@ -116,3 +116,31 @@ describe('SessionManager across identities', () => {
     expect(renewed.identityKey).toBe('idk_customerA');
   });
 });
+
+describe('SessionManager when the server moves a session to another account', () => {
+  const future = () => new Date(Date.now() + 10 * 60_000).toISOString();
+  beforeEach(() => TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] }));
+
+  it('moves saved trips to the new identity before reporting the renewal', async () => {
+    const manager = TestBed.inject(SessionManager);
+    const store = TestBed.inject(SavedTripsStore);
+    const migrate = vi.spyOn(store, 'migrateIdentity').mockResolvedValue(undefined);
+    const renewed = vi.fn(() => { expect(migrate).toHaveBeenCalledWith('idk_old', 'idk_new'); });
+    manager.connect({ tripIdFor: () => undefined, renewed, expired: () => undefined });
+    const fresh = { accessToken: 'a2', accessExpiresAt: future(), refreshToken: 'r2', refreshExpiresAt: future(), identityKey: 'idk_new' };
+    vi.spyOn(TestBed.inject(VisionApiService), 'refreshSession').mockResolvedValue(fresh);
+
+    await manager.renew({ accessToken: 'a1', accessExpiresAt: future(), refreshToken: 'r1', refreshExpiresAt: future(), identityKey: 'idk_old' });
+    expect(renewed).toHaveBeenCalledWith({ previousRefreshToken: 'r1', session: fresh, fromServer: true, movedFromIdentity: 'idk_old' });
+  });
+
+  it('moves nothing when the identity is unchanged', async () => {
+    const manager = TestBed.inject(SessionManager);
+    const migrate = vi.spyOn(TestBed.inject(SavedTripsStore), 'migrateIdentity');
+    manager.connect({ tripIdFor: () => undefined, renewed: () => undefined, expired: () => undefined });
+    vi.spyOn(TestBed.inject(VisionApiService), 'refreshSession').mockResolvedValue({ accessToken: 'a2', accessExpiresAt: future(), refreshToken: 'r2', refreshExpiresAt: future(), identityKey: 'idk_same' });
+    await manager.renew({ accessToken: 'a1', accessExpiresAt: future(), refreshToken: 'r1', refreshExpiresAt: future(), identityKey: 'idk_same' });
+    expect(migrate).not.toHaveBeenCalled();
+  });
+});
+

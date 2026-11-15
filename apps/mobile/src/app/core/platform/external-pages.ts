@@ -11,16 +11,31 @@ export interface PendingExternalPage {
 }
 
 /**
- * Opens third-party pages (payment providers) outside the app.
+ * Opens third-party pages (payment providers) outside the app, and only over https (anything else is refused with
+ * InsecureExternalPageError, whatever the server sent).
  *
  * Native: uses the in-app browser sheet (SFSafariViewController / Custom Tabs), which works where window.open does not.
  * Web: browsers only allow window.open during the user's tap, so `reserve()` must be called before any await;
  * it opens a placeholder tab that is pointed at the real URL once the server returns it.
  */
+/** Thrown instead of opening a page that isn't https: payment pages must never load over plain http or a script URL. */
+export class InsecureExternalPageError extends Error {
+  override readonly name = 'InsecureExternalPageError';
+  constructor() { super('Refused to open a page that is not https.'); }
+}
+
+export function isHttpsUrl(value: string): boolean {
+  try { return new URL(value).protocol === 'https:'; } catch { return false; }
+}
+
+function requireHttps(url: string): void {
+  if (!isHttpsUrl(url)) throw new InsecureExternalPageError();
+}
+
 @Injectable({ providedIn: 'root' })
 export class ExternalPages {
   reserve(): PendingExternalPage {
-    if (Capacitor.isNativePlatform()) return { open: (url) => this.openNative(url), cancel: () => undefined };
+    if (Capacitor.isNativePlatform()) return { open: (url) => { requireHttps(url); return this.openNative(url); }, cancel: () => undefined };
 
     let placeholder: Window | null = null;
     try { placeholder = window.open('', '_blank'); } catch { placeholder = null; }
@@ -34,6 +49,10 @@ export class ExternalPages {
 
     return {
       open: async (url) => {
+        if (!isHttpsUrl(url)) {
+          if (placeholder && !placeholder.closed) placeholder.close();
+          throw new InsecureExternalPageError();
+        }
         if (placeholder && !placeholder.closed) {
           placeholder.opener = null;
           placeholder.location.replace(url);
@@ -47,6 +66,7 @@ export class ExternalPages {
 
   /** Opens a URL without a reserved slot. On the web this may be blocked if called after an await. */
   open(url: string): Promise<boolean> {
+    if (!isHttpsUrl(url)) return Promise.reject(new InsecureExternalPageError());
     return Capacitor.isNativePlatform() ? this.openNative(url) : Promise.resolve(this.openWeb(url));
   }
 

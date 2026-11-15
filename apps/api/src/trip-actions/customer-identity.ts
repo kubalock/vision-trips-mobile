@@ -1,4 +1,4 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import type { AirtableRecord, AirtableService } from '../airtable/airtable.service.js';
 import { accountKeyFor, CUSTOMER_ACCOUNT_ID_PATTERN } from '../security/identity-key.js';
 import type { SessionGrant, SessionPrincipal } from '../sessions/sessions.service.js';
@@ -23,7 +23,9 @@ import { bookingFields, customerFields, firstString, pick, strings, truthy } fro
  *    saving writes the customer's choice to every grouped record, so they converge.
  */
 export const CUSTOMER_ACCOUNT_ID_FIELD = 'Customer Account ID';
-const MAX_ACCOUNT_MEMBERS = 20;
+/** More Customer records than this under one `Customer Account ID` is a data problem: refused, never truncated. */
+export const MAX_ACCOUNT_MEMBERS = 20;
+const logger = new Logger('CustomerIdentity');
 
 export interface CustomerIdentity {
   /** The verified Customer the session belongs to. */
@@ -62,11 +64,16 @@ export async function resolveCustomerIdentity(airtable: AirtableService, princip
   const accountId = firstString(root.fields[CUSTOMER_ACCOUNT_ID_FIELD]);
   let members = [root];
   if (accountId && CUSTOMER_ACCOUNT_ID_PATTERN.test(accountId)) {
+    // One more than allowed, so an oversized group is reported instead of silently losing a member's trips.
     const grouped = await airtable.list(principal.baseId, customersTable(), {
-      filterByFormula: `{${CUSTOMER_ACCOUNT_ID_FIELD}}='${accountId}'`, maxRecords: MAX_ACCOUNT_MEMBERS,
+      filterByFormula: `{${CUSTOMER_ACCOUNT_ID_FIELD}}='${accountId}'`, maxRecords: MAX_ACCOUNT_MEMBERS + 1,
     });
     // Re-check each record's value: the formula is only a filter, never the authority.
     members = [root, ...grouped.filter((record) => record.id !== root.id && firstString(record.fields[CUSTOMER_ACCOUNT_ID_FIELD]) === accountId)];
+    if (members.length > MAX_ACCOUNT_MEMBERS) {
+      logger.warn(JSON.stringify({ event: 'account_group_too_large', baseId: principal.baseId, limit: MAX_ACCOUNT_MEMBERS }));
+      throw new ServiceUnavailableException({ statusCode: 503, code: 'account_group_too_large', message: 'Your account can’t be shown right now. Please contact your travel agent.' });
+    }
   }
   return { root, members, email: customerEmail(root), accountKey: accountKeyFor(root.id, accountId) };
 }

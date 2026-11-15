@@ -19,21 +19,20 @@ const currency = z.string().check(z.regex(/^[A-Z]{3}$/));
 const httpsUrl = z.string().check(z.refine((value) => { try { return new URL(value).protocol === 'https:'; } catch { return false; } }, 'Expected an https URL.'));
 /** Fellow-traveller links point at the app itself, which is plain http in local development. */
 const webUrl = z.string().check(z.refine((value) => { try { return /^https?:$/.test(new URL(value).protocol); } catch { return false; } }, 'Expected a URL.'));
-/** Images and the post-acceptance payment page are checked again where they're used; a bad one must not reject the response. */
+/** Images are checked again where they're shown; a bad image URL must not reject the response. */
 const optUrlText = z.nullable(z.string());
 
-/** A list that keeps its valid items and drops malformed ones; the list itself must be an array. */
-function listOf<T extends z.ZodMiniType>(item: T) {
-  return z.pipe(z.array(z.unknown()), z.transform((items: unknown[]) => items.flatMap((value) => {
-    const parsed = item.safeParse(value);
-    return parsed.success ? [parsed.data as z.output<T>] : [];
-  })));
-}
+/*
+ * Lists here are strict: one malformed payment, account trip or quotation rejects the whole response (the app then
+ * says the information is temporarily unavailable) rather than silently dropping a record, which could make payment
+ * reconciliation report "not confirmed" or hide a trip. Tolerant filtering is kept for non-critical enrichment only
+ * (the external-content schemas).
+ */
 
 export { mobileSessionSchema };
 
 export const quotationAcceptanceResponseSchema = z.object({
-  accepted: z.literal(true), acceptedAt: isoDateTime, receiptAvailable: z.literal(true), paymentUrl: optUrlText,
+  accepted: z.literal(true), acceptedAt: isoDateTime, receiptAvailable: z.literal(true), paymentUrl: z.nullable(httpsUrl),
   notifications: z.object({
     customer: z.enum(['sent', 'local_preview', 'failed']),
     agent: z.enum(['sent', 'local_preview', 'failed', 'not_configured']),
@@ -45,14 +44,14 @@ export const customerEngagementResponseSchema = z.object({ accepted: z.literal(t
 
 export const paymentStatusResponseSchema = z.object({
   tripId: nonEmpty, checkedAt: isoDateTime, currency, total: optAmount, paid: optAmount, balance: optAmount,
-  items: listOf(z.object({ id: nonEmpty, status: z.enum(['outstanding', 'paid', 'overdue', 'local', 'refund']), completedDate: optDate })),
+  items: z.array(z.object({ id: nonEmpty, status: z.enum(['outstanding', 'paid', 'overdue', 'local', 'refund']), completedDate: optDate })),
 });
 
 export const paymentLinkResponseSchema = z.object({ paymentId: nonEmpty, url: httpsUrl, amount, currency });
 export const fellowTravellerLinkResponseSchema = z.object({ url: webUrl, expiresAt: isoDateTime });
 
 export const relatedQuotationsResponseSchema = z.object({
-  quotations: listOf(z.object({
+  quotations: z.array(z.object({
     comparisonId: nonEmpty, reference: text, name: text, departureDate: optDate, returnDate: optDate,
     durationDays: z.nullable(z.number()), total: amount, currency, heroImageUrl: optUrlText,
     status: z.enum(['available', 'expired']), current: z.boolean(),
@@ -66,7 +65,7 @@ export const customerPreferencesSchema = z.object({
 
 export const customerAccountSchema = z.object({
   emailHint: text, preferences: customerPreferencesSchema, airportOptions: z.array(text), monthOptions: z.array(text),
-  trips: listOf(z.object({
+  trips: z.array(z.object({
     accountTripId: nonEmpty, tripId: nonEmpty, reference: text, name: text, departureDate: optDate, returnDate: optDate,
     status: z.enum(tripStages), heroImageUrl: optUrlText, current: z.boolean(),
   })),
