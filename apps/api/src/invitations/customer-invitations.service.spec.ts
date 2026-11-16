@@ -234,11 +234,14 @@ describe('CustomerInvitationsService', () => {
 
     it('scopes a fellow-traveller invitation to the fellow-traveller view', async () => {
       const { service, sessions, sentCodes, trips } = setup();
-      const { url } = await service.create(request({ scope: 'fellow_traveller' }));
+      const { url, expiresAt } = await service.create(request({ scope: 'fellow_traveller' }));
       await service.sendCode(tokenOf(url));
       const authorized = await service.verifyCode(tokenOf(url), sentCodes[0], false);
       expect(trips.snapshot).toHaveBeenCalledWith(BASE, BOOKING, 'fellow_traveller', { maxAgeMs: 30_000 });
       expect(sessions.validateAccess(`Bearer ${authorized.session.accessToken}`)).toMatchObject({ fellowTraveller: true, assurance: 'otp' });
+      // A fellow traveller's session ends with their invitation, even after refreshing.
+      expect(Date.parse(authorized.session.refreshExpiresAt)).toBeLessThanOrEqual(Date.parse(expiresAt));
+      expect(Date.parse((await sessions.refresh(authorized.session.refreshToken)).refreshExpiresAt)).toBeLessThanOrEqual(Date.parse(expiresAt));
     });
 
     it('cannot be replayed once the invitation is consumed', async () => {

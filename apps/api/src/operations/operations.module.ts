@@ -12,7 +12,7 @@ import { WebSessionCookiesInterceptor } from '../security/web-session-cookies.in
     { provide: APP_GUARD, useClass: PersistentRateLimitGuard },
     { provide: APP_INTERCEPTOR, useClass: RequestLoggingInterceptor },
     { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
-    // Innermost, so stored idempotent replies hold the web handle rather than the refresh token.
+    // Innermost, so session responses are turned into web handles and cookies last (none of them is replayable).
     { provide: APP_INTERCEPTOR, useClass: WebSessionCookiesInterceptor },
   ],
 })

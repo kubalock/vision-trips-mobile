@@ -175,7 +175,7 @@
       } @else if (activeView() === 'payments') {
         @if (paymentStatus(); as status) {
           <section class="vt-status-card" [attr.data-tone]="status.tone" [attr.role]="status.tone === 'info' ? 'status' : 'alert'" aria-live="polite">
-            <span class="vt-status-card__icon" aria-hidden="true"><vt-icon [name]="status.icon" [size]="20" /></span>
+            <span class="vt-status-card__icon" [class.vt-status-card__icon--busy]="status.icon === 'loader'" aria-hidden="true"><vt-icon [name]="status.icon" [size]="20" /></span>
             <div class="vt-status-card__copy"><strong>{{ status.title }}</strong><p>{{ status.body }}</p>
               @if (status.action) { <button type="button" class="vt-status-card__action" data-engagement="Check payment again" (click)="recheckPayment()">{{ status.action }}</button> }
             </div>

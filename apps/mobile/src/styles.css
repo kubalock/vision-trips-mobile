@@ -1531,7 +1531,8 @@ body.vt .vt-app .vt-account-danger button:active { transform: scale(.97); }
 .vt-app .vt-status-card[data-tone="ok"] { --tone: var(--ok); }
 .vt-app .vt-status-card[data-tone="warn"] { --tone: var(--warn); }
 .vt-app .vt-status-card__icon { display: grid; place-items: center; flex: 0 0 auto; width: 36px; height: 36px; border-radius: var(--r-s); background: color-mix(in srgb, var(--tone) 14%, var(--surface)); color: var(--tone); }
-.vt-app .vt-status-card[data-tone="info"] .vt-status-card__icon vt-icon { animation: vt-spin 1s linear infinite; }
+/* Only a card that is waiting on something spins its icon (not every info card). */
+.vt-app .vt-status-card__icon--busy vt-icon { animation: vt-spin 1s linear infinite; }
 .vt-app .vt-status-card__icon vt-icon { display: grid; }
 .vt-app .vt-status-card__copy { flex: 1; min-width: 0; }
 .vt-app .vt-status-card__copy strong { display: block; font-size: var(--fs-1); font-weight: 700; line-height: 1.3; }
@@ -1545,7 +1546,7 @@ body.vt .vt-app .vt-account-danger button:active { transform: scale(.97); }
 .vt-app .vt-status-card__close { display: grid; place-items: center; flex: 0 0 auto; width: 32px; height: 32px; margin: -4px -6px 0 0; padding: 0; border: 0; border-radius: var(--r-pill); background: transparent; color: var(--ink-3); cursor: pointer; }
 .vt-app .vt-status-card__close:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); }
 @keyframes vt-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .vt-app .vt-trip-error, .vt-app .vt-status-card[data-tone="info"] .vt-status-card__icon vt-icon { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .vt-app .vt-trip-error, .vt-app .vt-status-card__icon--busy vt-icon { animation: none; } }
 
 /* Shown when the browser blocked the payment tab; offers a direct, user-tapped link instead. */
 .vt-app .vt-blocked-page, .vt-app .vt-main--payments > .vt-blocked-page { display: grid; gap: var(--sp-3); margin: var(--sp-3) var(--vt-flat-gutter, 0) 0; padding: var(--card-pad); border: 1px solid color-mix(in srgb, var(--warn) 35%, var(--line)); border-radius: var(--r); background: color-mix(in srgb, var(--warn) 10%, var(--surface)); color: var(--ink); }

@@ -94,12 +94,12 @@ export class VisionApiService {
     ));
   }
 
-  acceptQuotation(input: QuotationAcceptanceRequest, accessToken: string): Promise<QuotationAcceptanceResponse> {
-    return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/trips/current/quotation-acceptance`, input, this.writeOptions(accessToken))), (value) => quotationAcceptanceResponseSchema.parse(value), 'quotation acceptance');
+  acceptQuotation(input: QuotationAcceptanceRequest, accessToken: string, operationId: string): Promise<QuotationAcceptanceResponse> {
+    return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/trips/current/quotation-acceptance`, input, this.writeOptions(accessToken, operationId))), (value) => quotationAcceptanceResponseSchema.parse(value), 'quotation acceptance');
   }
 
-  sendMessage(input: CustomerMessageRequest, accessToken: string): Promise<CustomerMessageResponse> {
-    return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/trips/current/messages`, input, this.writeOptions(accessToken))), (value) => customerMessageResponseSchema.parse(value), 'messages');
+  sendMessage(input: CustomerMessageRequest, accessToken: string, operationId: string): Promise<CustomerMessageResponse> {
+    return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/trips/current/messages`, input, this.writeOptions(accessToken, operationId))), (value) => customerMessageResponseSchema.parse(value), 'messages');
   }
 
   refreshTrip(accessToken: string): Promise<TripSnapshot> {
@@ -116,8 +116,8 @@ export class VisionApiService {
     return parsed(firstValueFrom(this.http.get<unknown>(`${this.baseUrl}/trips/current/external-content`, { headers: { Authorization: `Bearer ${accessToken}` } })), parseExternalContent);
   }
 
-  engagement(input: CustomerEngagementRequest, accessToken: string): Promise<CustomerEngagementResponse> {
-    return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/trips/current/engagement`, input, this.writeOptions(accessToken))), (value) => customerEngagementResponseSchema.parse(value), 'engagement');
+  engagement(input: CustomerEngagementRequest, accessToken: string, operationId: string): Promise<CustomerEngagementResponse> {
+    return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/trips/current/engagement`, input, this.writeOptions(accessToken, operationId))), (value) => customerEngagementResponseSchema.parse(value), 'engagement');
   }
 
   relatedQuotations(accessToken: string): Promise<RelatedQuotationsResponse> {
@@ -129,7 +129,7 @@ export class VisionApiService {
   }
 
   customerAccount(accessToken: string): Promise<CustomerAccount> { return parsed(firstValueFrom(this.http.get<unknown>(`${this.baseUrl}/trips/current/account`, this.readOptions(accessToken))), (value) => customerAccountSchema.parse(value), 'account'); }
-  updateCustomerPreferences(preferences: CustomerPreferences, accessToken: string): Promise<UpdateCustomerPreferencesResponse> { return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/trips/current/account/preferences`, preferences, this.writeOptions(accessToken))), (value) => updateCustomerPreferencesResponseSchema.parse(value), 'account preferences'); }
+  updateCustomerPreferences(preferences: CustomerPreferences, accessToken: string, operationId: string): Promise<UpdateCustomerPreferencesResponse> { return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/trips/current/account/preferences`, preferences, this.writeOptions(accessToken, operationId))), (value) => updateCustomerPreferencesResponseSchema.parse(value), 'account preferences'); }
   openCustomerAccountTrip(accountTripId: string, accessToken: string): Promise<OpenCustomerAccountTripResponse> { return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/trips/current/account/trips/${encodeURIComponent(accountTripId)}/open`, {}, this.writeOptions(accessToken))), parseTripSession, 'account trip'); }
   /**
    * Browsers: clears the HttpOnly trusted-device cookies — only that identity's when `identityKey` is given, otherwise
@@ -138,12 +138,12 @@ export class VisionApiService {
   forgetDeviceTrust(identityKey?: string): Promise<void> { return firstValueFrom(this.http.delete<void>(`${this.baseUrl}/link-exchanges/device-trust`, { body: identityKey ? { identityKey } : {}, ...this.writeOptions() })); }
   revokeSession(refreshToken: string): Promise<void> { return firstValueFrom(this.http.delete<void>(`${this.baseUrl}/sessions/current`, { body: { refreshToken }, ...this.writeOptions() })); }
 
-  paymentLink(paymentId: string, accessToken: string): Promise<PaymentLinkResponse> {
-    return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/trips/current/payments/${encodeURIComponent(paymentId)}/link`, {}, this.writeOptions(accessToken))), (value) => paymentLinkResponseSchema.parse(value), 'payment link');
+  paymentLink(paymentId: string, accessToken: string, operationId: string): Promise<PaymentLinkResponse> {
+    return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/trips/current/payments/${encodeURIComponent(paymentId)}/link`, {}, this.writeOptions(accessToken, operationId))), (value) => paymentLinkResponseSchema.parse(value), 'payment link');
   }
 
-  customPaymentLink(amount: number, accessToken: string): Promise<PaymentLinkResponse> {
-    return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/trips/current/payments/custom/link`, { amount }, this.writeOptions(accessToken))), (value) => paymentLinkResponseSchema.parse(value), 'payment link');
+  customPaymentLink(amount: number, accessToken: string, operationId: string): Promise<PaymentLinkResponse> {
+    return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/trips/current/payments/custom/link`, { amount }, this.writeOptions(accessToken, operationId))), (value) => paymentLinkResponseSchema.parse(value), 'payment link');
   }
 
   refreshSession(refreshToken: string): Promise<MobileSession> {
@@ -158,8 +158,12 @@ export class VisionApiService {
     return { headers: { Authorization: `Bearer ${accessToken}` } };
   }
 
-  private writeOptions(accessToken?: string): { headers: Record<string, string> } {
-    return { headers: { ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), 'Idempotency-Key': crypto.randomUUID() } };
+  /**
+   * `operationId` (the `Idempotency-Key`) is made by the caller once per operation, so every attempt of it, including
+   * the retry after a token renewal, sends the same key (see OperationKeys). Only the routes the API replays take one.
+   */
+  private writeOptions(accessToken?: string, operationId?: string): { headers: Record<string, string> } {
+    return { headers: { ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), ...(operationId ? { 'Idempotency-Key': operationId } : {}) } };
   }
 }
 

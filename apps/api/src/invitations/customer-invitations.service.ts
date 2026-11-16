@@ -323,7 +323,8 @@ export class CustomerInvitationsService {
     if (invitation.replacesSessionId) this.sessions.revokeById(invitation.replacesSessionId);
     const fellowTraveller = invitation.scope === 'fellow_traveller';
     const accountKey = invitation.customerRecordId ? accountKeyFor(invitation.customerRecordId, context.customer?.accountId) : null;
-    const grant = { baseId: invitation.baseId, recordId: invitation.bookingRecordId, fellowTraveller, customerRecordId: invitation.customerRecordId, assurance, invitationId: invitation.id, accountKey, bookingOwnerCustomerRecordId: invitation.bookingOwnerCustomerRecordId };
+    // A fellow traveller's access ends with their invitation, however it was verified (code or trusted device).
+    const grant = { baseId: invitation.baseId, recordId: invitation.bookingRecordId, fellowTraveller, customerRecordId: invitation.customerRecordId, assurance, invitationId: invitation.id, accountKey, bookingOwnerCustomerRecordId: invitation.bookingOwnerCustomerRecordId, absoluteExpiresAt: fellowTraveller ? invitation.expiresAt : null };
     const session = this.sessions.issue(grant);
     // The trust token names the verified Customer (for validation) and the account's identity (for sign-out by account).
     const trustedDeviceToken = rememberDevice && invitation.customerRecordId ? this.trust.issue(invitation.baseId, invitation.bookingRecordId, invitation.customerRecordId, identityKey(grant)) : undefined;

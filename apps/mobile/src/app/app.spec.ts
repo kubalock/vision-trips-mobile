@@ -348,8 +348,8 @@ describe('App', () => {
 
       await app.openPayment('pay-1');
 
-      expect(link).toHaveBeenNthCalledWith(1, 'pay-1', 'old-access');
-      expect(link).toHaveBeenNthCalledWith(2, 'pay-1', 'new-access');
+      expect(link).toHaveBeenNthCalledWith(1, 'pay-1', 'old-access', expect.any(String));
+      expect(link).toHaveBeenNthCalledWith(2, 'pay-1', 'new-access', link.mock.calls[0][2]); // Same Idempotency-Key on the retry.
       expect(app.error()).toBe('');
     });
 

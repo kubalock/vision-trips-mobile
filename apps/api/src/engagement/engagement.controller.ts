@@ -1,6 +1,7 @@
 import { BadRequestException, Body, Controller, Headers, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { CustomerEngagementRequest, CustomerEngagementResponse } from '@vision-trips/contracts';
+import { Idempotent } from '../operations/idempotent.js';
 import { SessionsService } from '../sessions/sessions.service.js';
 import { EngagementService } from './engagement.service.js';
 
@@ -10,6 +11,7 @@ export class EngagementController {
   constructor(private readonly sessions: SessionsService, private readonly engagement: EngagementService) {}
 
   @Post()
+  @Idempotent()
   @ApiBearerAuth()
   async record(@Headers('authorization') authorization: string | undefined, @Body() body: CustomerEngagementRequest): Promise<CustomerEngagementResponse> {
     const principal = await this.sessions.authorize(authorization);

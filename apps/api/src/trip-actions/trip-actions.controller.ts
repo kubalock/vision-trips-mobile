@@ -8,6 +8,7 @@ import { TripEntitlementsService } from '../sessions/trip-entitlements.service.j
 import { SNAPSHOT_CACHE_MS, TripsService } from '../trips/trips.service.js';
 import { isVerified, requireVerified } from '../security/assurance.js';
 import { CustomerInvitationsService } from '../invitations/customer-invitations.service.js';
+import { Idempotent } from '../operations/idempotent.js';
 import { NoStoredReplay } from '../operations/no-stored-replay.js';
 import { AcceptanceNotificationsService } from './acceptance-notifications.service.js';
 import { PdfDocumentService } from './pdf-document.service.js';
@@ -64,6 +65,7 @@ export class TripActionsController {
   }
 
   @Post('account/preferences')
+  @Idempotent()
   @ApiBearerAuth()
   async updatePreferences(@Headers('authorization') authorization: string | undefined, @Body() body: Partial<CustomerPreferences>): Promise<UpdateCustomerPreferencesResponse> {
     if (!this.customerAccount) throw new ServiceUnavailableException('Customer accounts are not available.');
@@ -130,6 +132,7 @@ export class TripActionsController {
   }
 
   @Post('payments/custom/link')
+  @Idempotent()
   @ApiBearerAuth()
   async customPaymentLink(@Headers('authorization') authorization: string | undefined, @Body() body: { amount?: unknown }): Promise<PaymentLinkResponse> {
     const principal = await this.live(authorization, true);
@@ -139,6 +142,7 @@ export class TripActionsController {
   }
 
   @Post('payments/:paymentId/link')
+  @Idempotent()
   @ApiBearerAuth()
   async paymentLink(
     @Headers('authorization') authorization: string | undefined,
@@ -151,6 +155,7 @@ export class TripActionsController {
   }
 
   @Post('messages')
+  @Idempotent()
   @ApiBearerAuth()
   async sendMessage(
     @Headers('authorization') authorization: string | undefined,
@@ -174,6 +179,7 @@ export class TripActionsController {
   }
 
   @Post('quotation-acceptance')
+  @Idempotent()
   @ApiBearerAuth()
   async acceptQuotation(
     @Headers('authorization') authorization: string | undefined,

@@ -14,6 +14,7 @@ import { ExternalPages, type PendingExternalPage } from './core/platform/externa
 import { ShareSheet } from './core/platform/share-sheet';
 import { tripLinkFromPath, tripLinkFromUrl, type TripLink } from './core/platform/deep-links';
 import { SessionManager, isTerminalSessionError } from './core/session/session-manager';
+import { OperationKeys } from './core/api/operation-keys';
 import { isTripDataError } from './core/api/trip-schema';
 import { IMAGE_SIZES, sourceFor, srcset } from './shared/responsive-image';
 import { Directory, Filesystem, Encoding } from '@capacitor/filesystem';
@@ -54,6 +55,7 @@ export class App implements OnInit, OnDestroy {
   private readonly api = inject(VisionApiService);
   private readonly savedTrips = inject(SavedTripsStore);
   private readonly brandAssets = inject(BrandAssetsStore);
+  private readonly operationKeys = inject(OperationKeys);
   private readonly documentWallet = inject(DocumentWalletStore);
   private readonly customerNotifications = inject(CustomerNotificationsStore);
   private readonly externalPages = inject(ExternalPages);
@@ -365,12 +367,10 @@ export class App implements OnInit, OnDestroy {
     this.error.set('');
     const generation = this.tripGeneration;
     try {
-      const result = await this.withSession(currentSession, (accessToken) => this.api.acceptQuotation({
-        name: this.acceptanceName().trim(),
-        email: this.acceptanceEmail().trim(),
-        agreed: true,
-        confirmations: this.acceptanceConfirmations(),
-      }, accessToken));
+      const acceptance = { name: this.acceptanceName().trim(), email: this.acceptanceEmail().trim(), agreed: true as const, confirmations: this.acceptanceConfirmations() };
+      // One key for every attempt, kept after an unanswered one, so a retry can't record the acceptance twice.
+      const result = await this.operationKeys.run(`accept:${currentTrip.tripId}`, acceptance, (operationId) =>
+        this.withSession(currentSession, (accessToken) => this.api.acceptQuotation(acceptance, accessToken, operationId)));
       await this.customerNotifications.quoteAccepted(currentTrip);
       if (!this.isCurrentTrip(generation)) return; // Recorded; the traveller has moved on to another trip.
       this.acceptanceComplete.set(true);
@@ -417,7 +417,8 @@ export class App implements OnInit, OnDestroy {
     this.error.set('');
     try {
       const generation = this.tripGeneration;
-      await this.withSession(currentSession, (accessToken) => this.api.sendMessage({ topic: this.messageTopic(), message: this.customerMessage().trim() }, accessToken));
+      const operationId = crypto.randomUUID(); // The same key for the retry after a token renewal.
+      await this.withSession(currentSession, (accessToken) => this.api.sendMessage({ topic: this.messageTopic(), message: this.customerMessage().trim() }, accessToken, operationId));
       if (!this.isCurrentTrip(generation)) return;
       this.messageSent.set(true);
       await this.refreshTripAfterWrite();
@@ -455,7 +456,7 @@ export class App implements OnInit, OnDestroy {
     this.paymentReturnState.set('idle');
     this.error.set('');
     try {
-      const link = await this.withSession(currentSession, (accessToken) => this.api.paymentLink(paymentId, accessToken));
+      const link = await this.operationKeys.run(`pay:${this.trip()?.tripId}:${paymentId}`, null, (operationId) => this.withSession(currentSession, (accessToken) => this.api.paymentLink(paymentId, accessToken, operationId)));
       this.paymentPaidBefore = payments.paid;
       this.paymentIdAwaiting = paymentId;
       this.paymentAwaitingReturn = true;
@@ -476,7 +477,7 @@ export class App implements OnInit, OnDestroy {
     const page = this.externalPages.reserve(); // Must happen during the tap, before any await.
     this.openingPaymentId.set('custom'); this.paymentReturnState.set('idle'); this.error.set('');
     try {
-      const link = await this.withSession(currentSession, (accessToken) => this.api.customPaymentLink(amount, accessToken));
+      const link = await this.operationKeys.run(`pay-custom:${this.trip()?.tripId}`, amount, (operationId) => this.withSession(currentSession, (accessToken) => this.api.customPaymentLink(amount, accessToken, operationId)));
       this.paymentPaidBefore = payments.paid; this.paymentIdAwaiting = null; this.paymentAwaitingReturn = true; this.paymentOpenedAt = Date.now();
       await this.openPaymentPage(link.url, page);
     } catch (error) { page.cancel(); this.error.set(this.apiError(error, 'We could not create that payment link. Check the amount and try again.')); this.paymentReturnState.set('error'); }
@@ -864,7 +865,7 @@ export class App implements OnInit, OnDestroy {
     this.accountSaving.set(true); this.accountNotice.set(''); this.accountSaveError.set('');
     const generation = this.tripGeneration;
     // Only the server's reply updates the saved preferences; until then the edits live in the form's draft.
-    try { const result = await this.withSession(currentSession, (accessToken) => this.api.updateCustomerPreferences(preferences, accessToken)); if (!this.isCurrentTrip(generation)) return; this.customerAccount.update((account) => account ? { ...account, preferences: result.preferences } : account); this.accountNotice.set(result.updatedRecords > 1 ? `Preferences saved to your ${result.updatedRecords} linked customer profiles with ${this.trip()?.brand.name ?? 'this company'}.` : `Preferences saved for your account with ${this.trip()?.brand.name ?? 'this company'}.`); }
+    try { const operationId = crypto.randomUUID(); const result = await this.withSession(currentSession, (accessToken) => this.api.updateCustomerPreferences(preferences, accessToken, operationId)); if (!this.isCurrentTrip(generation)) return; this.customerAccount.update((account) => account ? { ...account, preferences: result.preferences } : account); this.accountNotice.set(result.updatedRecords > 1 ? `Preferences saved to your ${result.updatedRecords} linked customer profiles with ${this.trip()?.brand.name ?? 'this company'}.` : `Preferences saved for your account with ${this.trip()?.brand.name ?? 'this company'}.`); }
     catch (error) { if (this.isCurrentTrip(generation)) this.accountSaveError.set(this.apiError(error, 'Something went wrong saving them.')); }
     finally { if (this.isCurrentTrip(generation)) this.accountSaving.set(false); }
   }
@@ -1332,13 +1333,9 @@ export class App implements OnInit, OnDestroy {
   private trackEngagement(event: CustomerEngagementEvent, detail: string): void {
     const session = this.session();
     if (!session || !this.online()) return;
-    void this.withSession(session, (accessToken) => this.api.engagement({
-      event,
-      detail,
-      stage: this.trip()?.stage,
-      occurredAt: new Date().toISOString(),
-      device: Capacitor.getPlatform(),
-    }, accessToken)).catch(() => undefined);
+    const input = { event, detail, stage: this.trip()?.stage, occurredAt: new Date().toISOString(), device: Capacitor.getPlatform() };
+    const operationId = crypto.randomUUID(); // The retry after a token renewal must not record the event twice.
+    void this.withSession(session, (accessToken) => this.api.engagement(input, accessToken, operationId)).catch(() => undefined);
   }
 
   protected async downloadCalendar(): Promise<void> {

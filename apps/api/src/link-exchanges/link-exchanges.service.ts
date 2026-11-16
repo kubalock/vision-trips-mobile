@@ -36,7 +36,9 @@ export class LinkExchangesService {
     if (token.scope === 'agent') throw new BadRequestException('Agent links cannot be saved in the customer app.');
     if (token.fellowTraveller) {
       const snapshot = await this.trips.snapshot(token.baseId, token.recordId, 'fellow_traveller', { maxAgeMs: SNAPSHOT_CACHE_MS });
-      const session = this.sessions.issue({ baseId: token.baseId, recordId: token.recordId, fellowTraveller: true, customerRecordId: null, assurance: 'link' });
+      // Ends with the signed link; a link without an expiry gets what a new share link would (seven days from opening).
+      const absoluteExpiresAt = token.expiresAt > 0 ? token.expiresAt * 1_000 : Date.now() + LEGACY_SHARE_SESSION_MS;
+      const session = this.sessions.issue({ baseId: token.baseId, recordId: token.recordId, fellowTraveller: true, customerRecordId: null, assurance: 'link', absoluteExpiresAt });
       this.logger.log(JSON.stringify({ event: 'legacy_share_link_opened', baseId: token.baseId, bookingRecordId: token.recordId }));
       return { status: 'authorized', exchangeId: randomUUID(), expiresAt: new Date(Date.now() + 600_000).toISOString(), snapshot, session };
     }
@@ -45,3 +47,5 @@ export class LinkExchangesService {
     return { status: 'invitation_required', invitationToken };
   }
 }
+
+const LEGACY_SHARE_SESSION_MS = 7 * 86_400_000;

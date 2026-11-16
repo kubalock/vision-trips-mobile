@@ -53,6 +53,19 @@ describe('LinkExchangesService', () => {
     expect(sessions.validateAccess(`Bearer ${result.session.accessToken}`)).toMatchObject({ fellowTraveller: true, assurance: 'link', customerRecordId: null });
   });
 
+  it('ends a legacy share session with its signed link, or within seven days for a link without an expiry', async () => {
+    const linkEnds = Math.floor(Date.now() / 1000) + 3 * 86_400;
+    const dated = setup({ fellowTraveller: true, expiresAt: linkEnds });
+    const first = await dated.service.create('payload.signature-for-a-share-link');
+    if (first.status !== 'authorized') throw new Error('Expected the share link to open.');
+    expect(first.session.refreshExpiresAt).toBe(new Date(linkEnds * 1000).toISOString());
+    expect((await dated.sessions.refresh(first.session.refreshToken)).refreshExpiresAt).toBe(new Date(linkEnds * 1000).toISOString());
+
+    const undated = await setup({ fellowTraveller: true, expiresAt: 0 }).service.create('payload.signature-for-a-share-link');
+    if (undated.status !== 'authorized') throw new Error('Expected the share link to open.');
+    expect(Date.parse(undated.session.refreshExpiresAt)).toBeLessThanOrEqual(Date.now() + 7 * 86_400_000);
+  });
+
   it('refuses agent links and junk', async () => {
     await expect(setup({ scope: 'agent' }).service.create('payload.signature-for-an-agent')).rejects.toBeInstanceOf(BadRequestException);
     await expect(setup().service.create('short')).rejects.toBeInstanceOf(BadRequestException);
