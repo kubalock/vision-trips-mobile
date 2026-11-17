@@ -13,7 +13,7 @@
 :root[data-theme="dark"] { color-scheme: dark; }
 
 /* ---------- Design tokens (mobile) ----------
-   Overrides the base tokens from php-plugin/assets/css/vision.css (kept unchanged as the upstream reference).
+   Overrides the base tokens from src/styles/vision-base.css (the app’s own copy of the plugin’s vision.css).
    Use these instead of literal radius / shadow / spacing values. */
 :root {
   --r: 16px;          /* cards and card-level surfaces */
