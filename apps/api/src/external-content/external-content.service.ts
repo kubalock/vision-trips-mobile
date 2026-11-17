@@ -1,7 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { CruiseProfile, EnrichedDestinationGuide, ExternalProviderStatus, ExternalTripContent, ItineraryItem, LiveFlightStatus, PlaceProfile, PracticalGuide, TripSnapshot, WeatherForecast } from '@vision-trips/contracts';
+import type { AgencyRating, DestinationClimate, DestinationFacts, CruiseProfile, EnrichedDestinationGuide, ExternalProviderStatus, ExternalTripContent, ItineraryItem, LiveFlightStatus, PlaceProfile, PracticalGuide, TripSnapshot, WeatherForecast } from '@vision-trips/contracts';
 import { ExternalCacheService } from './external-cache.service.js';
 import { PLACE_PHOTO_REF, resolvePlacePhoto } from './place-photos.js';
+import { arrivalFlightFor, climateFromArchive, climateWindow, haversineKm, parseDestinationFacts, parseFacilities, reassuringRating, roundedDistance, routeMapUrl } from './enrichment.js';
+import { videoFromUrl } from '../trips/trip-extras.js';
 
 @Injectable()
 export class ExternalContentService {
@@ -11,8 +13,10 @@ export class ExternalContentService {
 
   /** `apiBase` is this API's public address (…/v1), used for the signed photo links. */
   async content(snapshot: TripSnapshot, apiBase = publicApiBase()): Promise<ExternalTripContent> {
-    const [flights, weather, stays, cruises, destinations, guides] = await Promise.all([
+    const [flights, weather, stays, cruises, destinations, guides, agencyRating] = await Promise.all([
       this.flights(snapshot), this.weather(snapshot), this.stays(snapshot, apiBase), this.cruises(snapshot), this.destinations(snapshot), this.guides(snapshot),
+      // Each enrichment fails on its own; none of them can hold up or remove the trip itself.
+      this.agencyRating(snapshot).catch((error: unknown) => { this.warn('Agency rating', error); return null; }),
     ]);
     const aiPending = [...stays, ...destinations, ...guides].some((item) => 'aiPending' in item ? item.aiPending : 'pending' in item && item.pending);
     const aiReady = stays.some((item) => item.aiDescription) || destinations.some((item) => item.overview) || guides.some((item) => item.sections.length);
@@ -27,6 +31,8 @@ export class ExternalContentService {
       },
       diagnostics: this.diagnostics(),
       flights, weather, stays, cruises, destinations, guides,
+      routeMapUrl: routeMapUrl(snapshot.itinerary, process.env.GOOGLE_MAPS_EMBED_KEY?.trim()),
+      agencyRating,
     };
   }
 
@@ -109,9 +115,11 @@ export class ExternalContentService {
       }
       if (!profile) return null;
       const ai = this.aiText(`property:${entityKey(profile.name)}`, propertyPrompt(profile), 'brochure');
+      const facts = this.aiText(`facilities:${entityKey(profile.name)}`, facilitiesPrompt(profile), 'facts');
+      const airportDistance = await this.airportDistance(item, snapshot.itinerary, profile.coordinates, key).catch((error: unknown) => { this.warn('Airport distance', error); return null; });
       // Photos are cached as Google photo names and only become (signed, key-free) links here.
       const images = compact(profile.images.map((image) => resolvePlacePhoto(image, apiBase)));
-      return { ...profile, images, aiDescription: ai.text || profile.summary, aiPending: ai.pending };
+      return { ...profile, images, aiDescription: ai.text || profile.summary, aiPending: ai.pending, facilities: facts.text ? parseFacilities(facts.text) : [], airportDistance };
     })));
   }
 
@@ -142,16 +150,73 @@ export class ExternalContentService {
     const ship = object(shipData.ship) ? obj(shipData.ship) : shipData; if (!Object.keys(ship).length) return null;
     let voyage: CruiseProfile['voyage'] = null;
     if (voyageReference) { try { const path = (process.env.WIDGETY_HOLIDAY_LOOKUP || '/api/cruises.json?reference={ref}').replace('{ref}', encodeURIComponent(voyageReference)); const separator = path.includes('?') ? '&' : '?'; voyage = normaliseVoyage(obj(await json(`${base}${path}${separator}${auth}`)), voyageReference); } catch { /* ship content remains useful */ } }
-    return { itineraryItemId: item.id, name: text(ship.title) || text(ship.name) || item.title, operator: nestedText(ship, 'operator', 'title') || text(ship.operator) || null, introduction: text(ship.introduction) || text(ship.teaser) || null, coverImageUrl: urlFrom(ship.cover_image_href || ship.cover_image), profileImageUrl: urlFrom(ship.profile_image_href || ship.profile_image), facts: shipFacts(ship), sections: shipSections(ship), voyage };
+    const name = text(ship.title) || text(ship.name) || item.title;
+    const coverImageUrl = urlFrom(ship.cover_image_href || ship.cover_image);
+    return { itineraryItemId: item.id, name, operator: nestedText(ship, 'operator', 'title') || text(ship.operator) || null, introduction: text(ship.introduction) || text(ship.teaser) || null, coverImageUrl, profileImageUrl: urlFrom(ship.profile_image_href || ship.profile_image), facts: shipFacts(ship), sections: shipSections(ship), voyage, video: videoFromUrl(ship.video_url, `Take a look around ${name}`, coverImageUrl) };
   }
 
   private async destinations(snapshot: TripSnapshot): Promise<EnrichedDestinationGuide[]> {
     return Promise.all(snapshot.destinations.map(async (destination) => {
       const widgety = await this.widgetyDestination(destination.name, destination.country).catch(() => null);
       const ai = this.aiText(`destination:${entityKey(destination.name)}:${entityKey(destination.country || '')}`, destinationPrompt(destination), 'brochure');
+      const factsReply = this.aiText(`destination-facts:${entityKey(destination.name)}:${entityKey(destination.country || '')}`, destinationFactsPrompt(destination), 'facts');
+      const facts: DestinationFacts | null = factsReply.text ? parseDestinationFacts(factsReply.text) : null;
+      const climate = await this.climate(destination, snapshot.summary?.departureDate ?? null).catch((error: unknown) => { this.warn('Climate', error); return null; });
       const imageUrls = [destination.imageUrl, ...(widgety?.images ?? [])].filter((url): url is string => Boolean(url));
-      return { ...destination, overview: ai.text || destination.overview || widgety?.description || null, images: [...new Set(imageUrls)].map((url) => ({ url, attribution: widgety?.images.includes(url) ? 'Widgety' : null, official: destination.imageUrl === url })), mapUrl: mapEmbed(destination.name, destination.coordinates), aiPending: ai.pending };
+      return { ...destination, overview: ai.text || destination.overview || widgety?.description || null, images: [...new Set(imageUrls)].map((url) => ({ url, attribution: widgety?.images.includes(url) ? 'Widgety' : null, official: destination.imageUrl === url })), mapUrl: mapEmbed(destination.name, destination.coordinates), aiPending: ai.pending, facts, climate };
     }));
+  }
+
+  /** Typical weather for the month of travel: the same month over the last three years (Open-Meteo archive, free). */
+  private async climate(destination: TripSnapshot['destinations'][number], departure: string | null): Promise<DestinationClimate | null> {
+    if (process.env.WEATHER_ENABLED === 'false') return null;
+    const window = climateWindow(departure);
+    if (!window) return null;
+    const coordinates = destination.coordinates ?? await this.geocode(destination.name);
+    if (!coordinates) return null;
+    const cacheKey = `climate:${coordinates.latitude.toFixed(1)}:${coordinates.longitude.toFixed(1)}:${window.month}`;
+    const cached = this.cache.get<DestinationClimate | null>(cacheKey); if (cached !== undefined) return cached;
+    const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${coordinates.latitude}&longitude=${coordinates.longitude}&start_date=${window.start}&end_date=${window.end}&daily=temperature_2m_max,temperature_2m_min,sunshine_duration,precipitation_sum&timezone=auto`;
+    const data = obj(await json(url, {}, 10_000));
+    const climate = climateFromArchive(obj(data.daily), window.month);
+    return this.cache.set(cacheKey, climate, climate ? 31_536_000_000 : 3_600_000);
+  }
+
+  /** "About 25 km from Paphos airport": the airport of the flight that lands before the stay, located once a month. */
+  private async airportDistance(stay: ItineraryItem, itinerary: ItineraryItem[], hotel: { latitude: number; longitude: number }, key: string): Promise<{ airport: string; km: number } | null> {
+    const flight = arrivalFlightFor(stay, itinerary);
+    if (!flight || (!hotel.latitude && !hotel.longitude)) return null;
+    const airportName = flight.to || flight.toCode!;
+    const cacheKey = `airport-location:${entityKey(flight.toCode || airportName)}`;
+    let location = this.cache.get<{ latitude: number; longitude: number; name: string } | null>(cacheKey);
+    if (location === undefined) {
+      const response = await fetch('https://places.googleapis.com/v1/places:searchText', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': key, 'X-Goog-FieldMask': 'places.displayName,places.location,places.types' }, body: JSON.stringify({ textQuery: `${flight.toCode ? `${flight.toCode} ` : ''}${airportName} airport`, maxResultCount: 1, languageCode: 'en-GB' }), signal: AbortSignal.timeout(8_000) });
+      if (!response.ok) throw new Error(`Google Places ${response.status}`);
+      const place = array(obj(await response.json()).places)[0];
+      const types = object(place) ? strings(place.types) : [];
+      location = object(place) && types.includes('airport') ? { latitude: number(obj(place.location).latitude), longitude: number(obj(place.location).longitude), name: text(obj(place.displayName).text) || airportName } : null;
+      this.cache.set(cacheKey, location, location ? 2_592_000_000 : 86_400_000);
+    }
+    if (!location) return null;
+    const km = roundedDistance(haversineKm(hotel, location));
+    return km === null ? null : { airport: shortAirportName(airportName), km };
+  }
+
+  /** The agency's own Google rating, looked up once a week by trading name and address. */
+  private async agencyRating(snapshot: TripSnapshot): Promise<AgencyRating | null> {
+    const key = process.env.GOOGLE_PLACES_API_KEY?.trim();
+    const name = snapshot.brand?.name; const address = snapshot.brand?.profile?.address;
+    if (!key || !name || !address || name === 'Your travel company') return null;
+    const cacheKey = `agency-rating:${entityKey(name)}:${entityKey(address)}`;
+    const cached = this.cache.get<AgencyRating | null>(cacheKey); if (cached !== undefined) return cached;
+    const response = await fetch('https://places.googleapis.com/v1/places:searchText', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': key, 'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.googleMapsUri' }, body: JSON.stringify({ textQuery: `${name}, ${address}`, maxResultCount: 1, languageCode: 'en-GB' }), signal: AbortSignal.timeout(8_000) });
+    if (!response.ok) throw new Error(`Google Places ${response.status}`);
+    const place = array(obj(await response.json()).places)[0];
+    const rating = object(place) && place.rating !== undefined ? number(place.rating) : null;
+    const count = object(place) ? number(place.userRatingCount) : 0;
+    const matches = object(place) && safePlaceMatch(name, address, text(obj(place.displayName).text), text(place.formattedAddress));
+    const result = matches && reassuringRating(rating, count) ? { rating: Math.round(rating! * 10) / 10, count, url: httpUrl(object(place) ? place.googleMapsUri : null) } : null;
+    return this.cache.set(cacheKey, result, 604_800_000);
   }
 
   private async widgetyDestination(name: string, country: string | null): Promise<{ description: string | null; images: string[] } | null> {
@@ -173,20 +238,27 @@ export class ExternalContentService {
     return [...inputs.entries()].map(([id, input]) => { const ai = this.aiText(`guide:${id}`, guidePrompt(input.kind, input.name, input.code), 'guide'); return { id, kind: input.kind, name: input.name, logoUrl: input.logo, sections: parseGuide(ai.text), pending: ai.pending }; });
   }
 
-  private aiText(key: string, prompt: string, mode: 'brochure' | 'guide'): { text: string | null; pending: boolean } {
+  private aiText(key: string, prompt: string, mode: 'brochure' | 'guide' | 'facts'): { text: string | null; pending: boolean } {
     const apiKey = process.env.AI_API_KEY?.trim(); if (!apiKey) return { text: null, pending: false };
     const cached = this.cache.get<string | null>(`ai:${key}`); if (cached !== undefined) return { text: cached, pending: false };
     if (!this.pendingAi.has(key)) { this.pendingAi.add(key); void this.generateAi(key, prompt, mode).finally(() => this.pendingAi.delete(key)); }
     return { text: null, pending: true };
   }
 
-  private async generateAi(key: string, prompt: string, mode: 'brochure' | 'guide'): Promise<void> {
+  private async generateAi(key: string, prompt: string, mode: 'brochure' | 'guide' | 'facts'): Promise<void> {
     try {
-      const body: Record<string, unknown> = { model: process.env.AI_MODEL || 'claude-sonnet-4-5', max_tokens: mode === 'guide' ? 900 : 650, system: mode === 'guide' ? GUIDE_SYSTEM : BROCHURE_SYSTEM, messages: [{ role: 'user', content: prompt }] };
+      const body: Record<string, unknown> = { model: process.env.AI_MODEL || 'claude-sonnet-4-5', max_tokens: mode === 'guide' ? 900 : mode === 'facts' ? 400 : 650, system: mode === 'guide' ? GUIDE_SYSTEM : mode === 'facts' ? FACTS_SYSTEM : BROCHURE_SYSTEM, messages: [{ role: 'user', content: prompt }] };
       if (process.env.AI_RESEARCH !== 'false') body.tools = [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }];
       let response = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'x-api-key': process.env.AI_API_KEY!, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(45_000) });
       if (!response.ok && body.tools && [400, 403].includes(response.status)) { delete body.tools; response = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'x-api-key': process.env.AI_API_KEY!, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(45_000) }); }
       if (!response.ok) throw new Error(`Anthropic ${response.status}`); const content = array(obj(await response.json()).content).filter(object).filter((block) => block.type === 'text').map((block) => text(block.text)).join('\n');
+      if (mode === 'facts') {
+        // Only the strictly parsed <facts> block is kept (checked again when it is read); facts change rarely.
+        const block = content.match(/<facts>[\s\S]*?<\/facts>/gi)?.at(-1) ?? null;
+        const usable = block && (parseFacilities(block).length || parseDestinationFacts(block));
+        this.cache.set(`ai:${key}`, usable ? block : null, usable ? 31_536_000_000 : 3_600_000);
+        return;
+      }
       const copy = extractCopy(content); this.cache.set(`ai:${key}`, safeAi(copy, mode) ? copy : null, safeAi(copy, mode) ? 2_592_000_000 : 3_600_000);
     } catch (error) { this.warn('AI provider', error); this.cache.set(`ai:${key}`, null, 3_600_000); }
   }
@@ -195,6 +267,7 @@ export class ExternalContentService {
 }
 
 const BROCHURE_SYSTEM = `Write warm, factual British-English copy for a UK travel agent's customer brochure. Never mention reviews, ratings, sources, research, AI, instructions, warnings, prices or competitors. Do not use markdown, headings, URLs, superlatives or guarantees. Put only finished copy between <copy> and </copy>.`;
+const FACTS_SYSTEM = `Return short, plain British-English facts for a UK traveller. No markdown, URLs, sources, prices, opinions, visa, health, safety or insurance information. Put only the requested JSON between <facts> and </facts>.`;
 const GUIDE_SYSTEM = `Write calm, practical British-English travel guidance. Do not mention sources, research, AI, instructions, prices or changing allowances. Do not sell direct. Return a JSON array of {"title","text"} between <copy> and </copy>.`;
 
 function provider(configured: boolean, applicable: boolean, hasContent: number | boolean, source: string, pending = false): ExternalProviderStatus { return !applicable ? { state: 'not_applicable', source, message: null } : !configured ? { state: 'not_configured', source, message: null } : pending && hasContent ? { state: 'pending', source, message: 'Content is being prepared.' } : hasContent ? { state: 'ready', source, message: null } : { state: 'unavailable', source, message: 'No matching content was returned.' }; }
@@ -209,6 +282,9 @@ function tokenOverlap(a: string, b: string): number { const left = new Set(a.spl
 function airlineLogo(code: string | null): string | null { if (!code) return null; return (process.env.AIRLINE_LOGO_CDN || 'https://pics.avs.io/120/60/{iata}@2x.png').replace('{iata}', encodeURIComponent(code)); }
 function mapEmbed(name: string, coordinates: { latitude: number; longitude: number } | null): string | null { const key = process.env.GOOGLE_MAPS_EMBED_KEY; if (!key) return null; const query = coordinates ? `${coordinates.latitude},${coordinates.longitude}` : name; return `https://www.google.com/maps/embed/v1/place?key=${encodeURIComponent(key)}&q=${encodeURIComponent(query)}`; }
 function propertyPrompt(profile: PlaceProfile): string { return `Write 120-170 words about ${profile.name} in ${profile.address || 'its destination'}. Verified facts: ${profile.summary || 'No additional facts supplied'}.`; }
+function facilitiesPrompt(profile: PlaceProfile): string { return `List up to eight on-site facilities of ${profile.name}, ${profile.address || ''} that are well established (for example "Outdoor pool", "Spa", "Beachfront", "All inclusive available"). Each label at most four words. Omit anything you are unsure of. Return a JSON array of strings.`; }
+function destinationFactsPrompt(destination: TripSnapshot['destinations'][number]): string { return `For ${destination.name}${destination.country ? `, ${destination.country}` : ''}, return a JSON object with keys "currency", "language", "timeDifference" (from the UK, e.g. "2 hours ahead of the UK"), "flightTimeFromLondon" (approximate direct flight time, e.g. "About 4 hours 30 minutes"), "plugs" (e.g. "Type C and F, 230V") and "bestTime" (e.g. "April to June and September to October"). Use null for anything uncertain.`; }
+function shortAirportName(value: string): string { return value.replace(/\b(international\s+)?airport\b/gi, '').replace(/\s+/g, ' ').trim() || value; }
 function destinationPrompt(destination: TripSnapshot['destinations'][number]): string { return `Write 130-190 words about ${destination.name}, ${destination.country || ''}. Facts: ${[destination.overview, ...destination.attractions, destination.practicalInformation, destination.culturalInformation].filter(Boolean).join(' ')}`; }
 function guidePrompt(kind: string, name: string, code: string): string { return `Create 3-5 practical good-to-know sections for the ${kind} ${name}${code ? ` (${code})` : ''}. Cover stable, useful information only.`; }
 function parseGuide(value: string | null): Array<{ title: string; text: string }> { if (!value) return []; try { const parsed = JSON.parse(value) as unknown; return array(parsed).flatMap((row) => object(row) && text(row.title) && text(row.text) ? [{ title: text(row.title), text: text(row.text) }] : []); } catch { return []; } }
@@ -216,8 +292,8 @@ function extractCopy(value: string): string { return (value.match(/<copy>([\s\S]
 function safeAi(value: string, mode: 'brochure' | 'guide'): boolean { if (value.length < 30 || /\b(as an ai|sources?|research|instructions?|tripadvisor|trustpilot)\b/i.test(value) || /https?:\/\//i.test(value)) return false; return mode === 'guide' || !/\b(dirty|poor|negative|warning|best|finest|world-class|guarantee)\b/i.test(value); }
 function normaliseVoyage(data: Record<string, unknown>, reference: string): CruiseProfile['voyage'] { const rows = rowsFrom(data); const row = rows.find((item) => ['reference', 'code', 'voyage_code'].some((key) => text(item[key]).toLowerCase() === reference.toLowerCase())) || rows[0] || data; if (!object(row)) return null; const days = rowsFrom(row.itinerary || row.days || row.ports).flatMap((day, index) => { const port = object(day.port) ? text(obj(day.port).title) || text(obj(day.port).name) : text(day.port) || text(day.title) || text(day.name); return port ? [{ day: text(day.day) || String(index + 1), port, arrivalTime: text(day.arrive) || text(day.arrival) || null, departureTime: text(day.depart) || text(day.departure) || null, description: text(day.description) || null }] : []; }); return { reference, name: text(row.title) || text(row.name) || null, description: text(row.description) || null, highlights: text(row.highlights) || null, included: text(row.whats_included) || text(row.included) || null, images: urls(row.images || row.gallery), days }; }
 function shipFacts(ship: Record<string, unknown>): Array<{ label: string; value: string }> { const fields: Record<string, string> = { ship_class: 'Class', style: 'Style', launch_year: 'Launched', refit_year: 'Refurbished', gross_tonnage: 'Tonnage', length: 'Length', capacity: 'Guests', crew: 'Crew', decks: 'Decks', cabins: 'Cabins', currency: 'Onboard currency' }; return Object.entries(fields).flatMap(([key, label]) => text(ship[key]) ? [{ label, value: text(ship[key]) }] : []); }
-function shipSections(ship: Record<string, unknown>): CruiseProfile['sections'] { const fields: Record<string, string> = { accommodation_types: 'Accommodation', dining_options: 'Dining', entertainment_types: 'Entertainment', enrichment_types: 'Enrichment', health_fitness_types: 'Health & fitness', kids_and_teens_types: 'Kids & teens', deckplans: 'Deck plans', useful_types: 'Useful to know' }; return Object.entries(fields).flatMap(([key, title]) => { const items = rowsFrom(ship[key]).map((row) => ({ name: text(row.title) || text(row.name), text: text(row.description) || text(row.introduction) || null, images: urls(row.images || row.gallery || row.image_href), videoUrl: httpUrl(row.video_url) })).filter((item) => item.name); return items.length ? [{ title, items }] : []; }); }
-async function json(url: string, headers: Record<string, string> = {}): Promise<unknown> { let last: unknown; for (let attempt = 0; attempt < 2; attempt++) { try { const response = await fetch(url, { headers, signal: AbortSignal.timeout(15_000) }); if (!response.ok) throw new Error(`${response.status}`); return await response.json(); } catch (error) { last = error; } } throw last; }
+function shipSections(ship: Record<string, unknown>): CruiseProfile['sections'] { const fields: Record<string, string> = { accommodation_types: 'Accommodation', dining_options: 'Dining', entertainment_types: 'Entertainment', enrichment_types: 'Enrichment', health_fitness_types: 'Health & fitness', kids_and_teens_types: 'Kids & teens', deckplans: 'Deck plans', useful_types: 'Useful to know' }; return Object.entries(fields).flatMap(([key, title]) => { const items = rowsFrom(ship[key]).map((row) => ({ name: text(row.title) || text(row.name), text: text(row.description) || text(row.introduction) || null, images: urls(row.images || row.gallery || row.image_href), videoUrl: httpUrl(row.video_url), video: videoFromUrl(row.video_url, text(row.title) || text(row.name) || title) })).filter((item) => item.name); return items.length ? [{ title, items }] : []; }); }
+async function json(url: string, headers: Record<string, string> = {}, timeoutMs = 15_000): Promise<unknown> { let last: unknown; for (let attempt = 0; attempt < 2; attempt++) { try { const response = await fetch(url, { headers, signal: AbortSignal.timeout(timeoutMs) }); if (!response.ok) throw new Error(`${response.status}`); return await response.json(); } catch (error) { last = error; } } throw last; }
 function object(value: unknown): value is Record<string, unknown> { return Boolean(value) && typeof value === 'object' && !Array.isArray(value); }
 function obj(value: unknown): Record<string, unknown> { return object(value) ? value : {}; }
 function array(value: unknown): unknown[] { return Array.isArray(value) ? value : []; }

@@ -2109,3 +2109,20 @@ body.vt .vt-app .vt-account-danger__icon { width: 40px; height: 40px; }
 .vt-app .vt-payment-summary__pp { display: block; color: var(--ink-3); font-size: .8rem; }
 .vt-app .vt-el__codes { letter-spacing: .02em; }
 .vt-app .vt-show-more { min-height: 44px; margin-top: 8px; padding: 0 16px; border: 1px solid var(--line-2); border-radius: var(--r-pill); background: var(--surface); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; }
+
+/* --- External enrichment (PHP 1.16–1.18 parity) --------------------------------------------------------------- */
+.vt-app .vt-facility-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 4px; padding: 0; list-style: none; }
+.vt-app .vt-facility-chips li { padding: 4px 10px; border-radius: var(--r-pill); background: var(--tint); color: var(--vt-accent-text); font-size: .78rem; font-weight: 600; }
+.vt-app .vt-enrichment-note { margin: 4px 0 0; color: var(--ink-3); font-size: .74rem; }
+.vt-app .vt-stay-distance { display: flex; align-items: center; gap: 6px; margin: 6px 0 0; color: var(--ink-2); font-size: .85rem; }
+.vt-app .vt-stay-distance small { color: var(--ink-3); }
+.vt-app .vt-destination-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin: 0 0 4px; padding: 12px; border-radius: var(--r-s); background: var(--surface-2); }
+.vt-app .vt-destination-facts dt { color: var(--ink-3); font-size: .72rem; }
+.vt-app .vt-destination-facts dd { margin: 0; color: var(--ink); font-size: .85rem; font-weight: 600; }
+.vt-app .vt-destination-climate { display: flex; gap: 8px; align-items: flex-start; margin: 10px 0; color: var(--ink-2); font-size: .88rem; line-height: 1.5; }
+.vt-app .vt-video-card--inline { width: 100%; margin: 12px 0; text-align: left; cursor: pointer; font: inherit; }
+.vt-app .vt-video-card--inline .vt-video-card__watch { display: inline-flex; align-items: center; }
+.vt-app .vt-route-map { margin: 16px 0; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); }
+.vt-app .vt-route-map summary { display: flex; align-items: center; justify-content: space-between; min-height: 52px; padding: 0 16px; font-weight: 700; cursor: pointer; list-style: none; }
+.vt-app .vt-route-map summary span { display: inline-flex; align-items: center; gap: 8px; }
+.vt-app .vt-agency-rating { display: flex; align-items: center; gap: 6px; margin: 12px 0 0; color: var(--ink-2); }

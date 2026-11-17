@@ -115,20 +115,24 @@ export function walkthroughVideo(value: unknown, agentName: string | null): Trip
  * other link is ignored (the app never loads an arbitrary page).
  */
 export function videoMessage(value: unknown, agentName: string | null): TripVideo | null {
+  return videoFromUrl(value, agentName ? `A message from ${agentName}` : 'A message from your travel expert');
+}
+
+/** Any https video link (YouTube, Vimeo or a video file) as a privacy-friendly, click-to-play video; null otherwise. */
+export function videoFromUrl(value: unknown, title: string, posterUrl: string | null = null): TripVideo | null {
   const raw = firstString(value);
   if (!isHttps(raw)) return null;
   const url = new URL(raw);
-  const title = agentName ? `A message from ${agentName}` : 'A message from your travel expert';
   const host = url.hostname.replace(/^www\.|^m\./, '');
   let id: string | null = null;
   if (host === 'youtu.be') id = url.pathname.slice(1);
   else if (host === 'youtube.com' || host === 'youtube-nocookie.com') id = url.searchParams.get('v') ?? url.pathname.match(/^\/(?:embed|shorts)\/([^/]+)/)?.[1] ?? null;
-  if (id !== null) return /^[A-Za-z0-9_-]{6,20}$/.test(id) ? { kind: 'youtube', url: `https://www.youtube-nocookie.com/embed/${id}?rel=0`, mimeType: null, posterUrl: null, title } : null;
+  if (id !== null) return /^[A-Za-z0-9_-]{6,20}$/.test(id) ? { kind: 'youtube', url: `https://www.youtube-nocookie.com/embed/${id}?rel=0`, mimeType: null, posterUrl: posterUrl && isHttps(posterUrl) ? posterUrl : null, title } : null;
   if (host === 'vimeo.com' || host === 'player.vimeo.com') {
     const vimeo = url.pathname.match(/(\d{6,12})/)?.[1];
-    return vimeo ? { kind: 'vimeo', url: `https://player.vimeo.com/video/${vimeo}?dnt=1`, mimeType: null, posterUrl: null, title } : null;
+    return vimeo ? { kind: 'vimeo', url: `https://player.vimeo.com/video/${vimeo}?dnt=1`, mimeType: null, posterUrl: posterUrl && isHttps(posterUrl) ? posterUrl : null, title } : null;
   }
-  return /\.(mp4|m4v|webm|mov)$/i.test(url.pathname) ? { kind: 'file', url: url.toString(), mimeType: null, posterUrl: null, title } : null;
+  return /\.(mp4|m4v|webm|mov)$/i.test(url.pathname) ? { kind: 'file', url: url.toString(), mimeType: null, posterUrl: posterUrl && isHttps(posterUrl) ? posterUrl : null, title } : null;
 }
 
 export function mapContent(booking: AirtableRecord, itinerary: ItineraryItem[], agentName: string | null): TripContent {

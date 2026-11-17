@@ -1,6 +1,6 @@
 import { Component, inject, input, signal } from '@angular/core';
 import { DomSanitizer, type SafeResourceUrl } from '@angular/platform-browser';
-import type { DestinationGuide, EnrichedDestinationGuide } from '@vision-trips/contracts';
+import type { DestinationClimate, DestinationFacts, DestinationGuide, EnrichedDestinationGuide } from '@vision-trips/contracts';
 import { PhotoGallery } from '../../shared/photo-gallery';
 import { VtIcon } from '../../shared/lucide-icon';
 
@@ -17,6 +17,20 @@ import { VtIcon } from '../../shared/lucide-icon';
               @if (images(destination).length) { <div class="vt-destination-card__media"><app-photo-gallery [photos]="images(destination)" [limit]="1" /></div> }
               <div class="vt-destination-card__body">
                 <header class="vt-destination-card__header"><span class="vt-destination-card__icon"><vt-icon name="map-pin" [size]="20" /></span><div><p>{{ destination.country || 'Destination guide' }}</p><h3>{{ destination.name }}</h3></div></header>
+                @if (factsOf(destination); as facts) {
+                  <dl class="vt-destination-facts" aria-label="Quick facts (approximate)">
+                    @if (facts.currency) { <div><dt>Currency</dt><dd>{{ facts.currency }}</dd></div> }
+                    @if (facts.language) { <div><dt>Language</dt><dd>{{ facts.language }}</dd></div> }
+                    @if (facts.timeDifference) { <div><dt>Time</dt><dd>{{ facts.timeDifference }}</dd></div> }
+                    @if (facts.flightTimeFromLondon) { <div><dt>Flight from London</dt><dd>{{ facts.flightTimeFromLondon }}</dd></div> }
+                    @if (facts.plugs) { <div><dt>Plugs</dt><dd>{{ facts.plugs }}</dd></div> }
+                    @if (facts.bestTime) { <div><dt>Best time to go</dt><dd>{{ facts.bestTime }}</dd></div> }
+                  </dl>
+                  <p class="vt-enrichment-note">Approximate — check official sources before you travel.</p>
+                }
+                @if (climateOf(destination); as climate) {
+                  <p class="vt-destination-climate"><vt-icon name="sun" [size]="16" /> {{ climateLine(climate) }}</p>
+                }
                 @if (overviewIntro(destination)) {
                   <div class="vt-destination-card__overview-wrap" [class.is-truncated]="hasLongOverview(destination) && !isOverviewExpanded(destination.id)" [class.is-expanded]="isOverviewExpanded(destination.id)"><p class="vt-destination-card__overview">{{ overviewIntro(destination) }}</p></div>
                   @if (hasLongOverview(destination)) { <button type="button" class="vt-destination-card__read-more" [attr.aria-expanded]="isOverviewExpanded(destination.id)" (click)="toggleOverview(destination.id)">{{ isOverviewExpanded(destination.id) ? 'Read less' : 'Read more' }} <vt-icon name="chevron-down" [size]="15" /></button> }
@@ -54,6 +68,13 @@ export class DestinationsSection {
     if (!url) return null;
     const cached = this.safeMaps.get(url); if (cached) return cached;
     const safe = this.sanitizer.bypassSecurityTrustResourceUrl(url); this.safeMaps.set(url, safe); return safe;
+  }
+  factsOf(destination: DestinationGuide | EnrichedDestinationGuide): DestinationFacts | null { return 'facts' in destination ? destination.facts ?? null : null; }
+  climateOf(destination: DestinationGuide | EnrichedDestinationGuide): DestinationClimate | null { return 'climate' in destination ? destination.climate ?? null : null; }
+  /** "In March it's usually 24° by day and 13° at night, with about 9 hours of sunshine a day and 2 rainy days." */
+  climateLine(climate: DestinationClimate): string {
+    const extras = [climate.sunshineHours !== null ? `about ${climate.sunshineHours} ${climate.sunshineHours === 1 ? 'hour' : 'hours'} of sunshine a day` : '', climate.rainyDays !== null ? `${climate.rainyDays} rainy ${climate.rainyDays === 1 ? 'day' : 'days'} in the month` : ''].filter(Boolean);
+    return `In ${climate.month} it’s usually ${climate.highC}° by day and ${climate.lowC}° at night${extras.length ? `, with ${extras.join(' and ')}` : ''}. Based on the last ${climate.years === 1 ? 'year' : `${climate.years} years`}; actual weather will vary.`;
   }
   aiPending(destination: DestinationGuide | EnrichedDestinationGuide): boolean { return 'aiPending' in destination && destination.aiPending; }
   directionsUrl(destination: DestinationGuide): string { return destination.directionsUrl ?? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination.coordinates ? `${destination.coordinates.latitude},${destination.coordinates.longitude}` : destination.name)}`; }

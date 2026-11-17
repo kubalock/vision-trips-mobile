@@ -378,21 +378,30 @@ const externalContentSchema = z.object({
     itineraryItemId: nonEmpty, placeId: text, name: text, address: optText, rating: optNumber, ratingCount: count,
     websiteUrl: optText, phone: optText, summary: optText, mapsUrl: optText, directionsUrl: text,
     coordinates, images: list(externalImage), aiDescription: optText, aiPending: flag,
+    facilities: z.pipe(strings, z.transform((labels: string[]) => labels.filter((label) => label.length <= 40).slice(0, 8))),
+    airportDistance: z.catch(z.nullable(z.object({ airport: nonEmpty, km: z.number().check(z.positive()) })), null),
   })),
   cruises: list(z.object({
     itineraryItemId: nonEmpty, name: text, operator: optText, introduction: optText, coverImageUrl: optText, profileImageUrl: optText,
     facts: list(z.object({ label: z.string(), value: z.string() })),
-    sections: list(z.object({ title: text, items: list(z.object({ name: text, text: optText, images: strings, videoUrl: optText })) })),
+    sections: list(z.object({ title: text, items: list(z.object({ name: text, text: optText, images: strings, videoUrl: optText, video: z.catch(z.nullable(video), null) })) })),
+    video: z.catch(z.nullable(video), null),
     voyage: z.catch(z.nullable(z.object({
       reference: text, name: optText, description: optText, highlights: optText, included: optText,
       images: strings, days: list(cruisePort),
     })), null),
   })),
-  destinations: list(z.object({ ...destinationShape, images: list(externalImage), mapUrl: optText, aiPending: flag })),
+  destinations: list(z.object({
+    ...destinationShape, images: list(externalImage), mapUrl: optText, aiPending: flag,
+    facts: z.catch(z.nullable(z.object({ currency: optText, language: optText, timeDifference: optText, flightTimeFromLondon: optText, plugs: optText, bestTime: optText })), null),
+    climate: z.catch(z.nullable(z.object({ month: nonEmpty, highC: z.number(), lowC: z.number(), sunshineHours: optNumber, rainyDays: optNumber, years: z.number().check(z.positive()) })), null),
+  })),
   guides: list(z.object({
     id: nonEmpty, kind: z.enum(['airline', 'airport']), name: text, logoUrl: optText,
     sections: list(z.object({ title: z.string(), text: z.string() })), pending: flag,
   })),
+  routeMapUrl: optHttps,
+  agencyRating: z.catch(z.nullable(z.object({ rating: z.number().check(z.positive()), count: z.number().check(z.positive()), url: optHttps })), null),
 });
 
 const externalContentMatchesContract = (value: z.output<typeof externalContentSchema>): ExternalTripContent => value;

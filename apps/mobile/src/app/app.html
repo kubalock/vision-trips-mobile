@@ -186,11 +186,11 @@
             }
           </section>
         }
-        <app-external-content-section [content]="externalContent()" [loading]="externalContentLoading()" [failed]="externalContentFailed()" (refresh)="loadExternalContent()" />
+        <app-external-content-section [content]="externalContent()" [loading]="externalContentLoading()" [failed]="externalContentFailed()" (refresh)="loadExternalContent()" (watch)="watchVideo($event)" />
         <app-destinations-section [destinations]="displayedDestinations()" />
         <app-extras-section [extras]="currentTrip.extras" (enquire)="askAboutExtra($event)" (book)="bookExtra($event)" />
         <app-communications-section [communications]="currentTrip.communications" />
-        <app-brand-support-section [trip]="currentTrip" />
+        <app-brand-support-section [trip]="currentTrip" [rating]="externalContent()?.agencyRating" />
       } @else if (activeView() === 'itinerary') {
         <app-itinerary-section [items]="currentTrip.itinerary" />
       } @else if (activeView() === 'payments') {

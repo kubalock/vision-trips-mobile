@@ -48,6 +48,7 @@ type AppearancePreference = Appearance | 'system';
 import { TripContentSection } from './features/trip/trip-content-section';
 import { VideoViewer } from './shared/video-viewer';
 import { TravellerDetailsSection } from './features/account/traveller-details-section';
+import { withEarlierEnrichment } from './core/api/external-merge';
 @Component({
   selector: 'app-root',
   imports: [BookingJourneySection, BrandSupportSection, CommunicationsSection, CustomerAccountSection, DestinationsSection, DocumentsSection, EuropeanDatePipe, ExtrasSection, ExternalContentSection, InvitationFlow, ItinerarySection, PaymentsSection, StageExperienceSection, TravellerDetailsSection, TripContentSection, VideoViewer, VtIcon, VtLogoMark, VtSignInAgain],
@@ -1422,7 +1423,8 @@ export class App implements OnInit, OnDestroy {
     try {
       const content = await this.withSession(currentSession, (accessToken) => this.api.externalContent(accessToken));
       if (!this.isCurrentTrip(generation)) return; // Another trip was opened while this was loading.
-      this.externalContent.set(content);
+      // A provider that failed this time doesn't take away what the app already showed for this trip.
+      this.externalContent.update((earlier) => withEarlierEnrichment(content, earlier));
       const pending = content.providers.ai.state === 'pending';
       const delayMs = pending ? 5_000 : Math.max(60, content.refreshAfterSeconds) * 1_000;
       this.externalContentTimer = setTimeout(() => { if (this.trip() && this.online()) void this.loadExternalContent(false); }, delayMs);

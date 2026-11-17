@@ -207,20 +207,51 @@ export interface PlaceProfile {
   itineraryItemId: string; placeId: string; name: string; address: string | null; rating: number | null; ratingCount: number;
   websiteUrl: string | null; phone: string | null; summary: string | null; mapsUrl: string | null; directionsUrl: string;
   coordinates: { latitude: number; longitude: number }; images: ExternalImage[]; aiDescription: string | null; aiPending: boolean;
+  /** Up to eight short facility labels from the brochure writer (plain text, 40 characters max). Indicative only. */
+  facilities?: string[];
+  /** Straight-line distance from the airport of the flight that lands before this stay; always approximate. */
+  airportDistance?: { airport: string; km: number } | null;
 }
-export interface CruiseSection { title: string; items: Array<{ name: string; text: string | null; images: string[]; videoUrl: string | null }> }
+export interface CruiseSection { title: string; items: Array<{ name: string; text: string | null; images: string[]; videoUrl: string | null; /** `videoUrl` as a playable, privacy-friendly video, or null. */ video?: TripVideo | null }> }
 export interface CruiseProfile {
   itineraryItemId: string; name: string; operator: string | null; introduction: string | null; coverImageUrl: string | null;
   profileImageUrl: string | null; facts: Array<{ label: string; value: string }>; sections: CruiseSection[];
+  /** The ship's film (Widgety `video_url`), click-to-play; nothing loads until the customer taps it. */
+  video?: TripVideo | null;
   voyage: { reference: string; name: string | null; description: string | null; highlights: string | null; included: string | null; images: string[]; days: CruisePort[] } | null;
 }
-export interface EnrichedDestinationGuide extends DestinationGuide { images: ExternalImage[]; mapUrl: string | null; aiPending: boolean }
+export interface EnrichedDestinationGuide extends DestinationGuide {
+  images: ExternalImage[]; mapUrl: string | null; aiPending: boolean;
+  /** Generated, approximate travel facts; never visa, health or safety advice. */
+  facts?: DestinationFacts | null;
+  /** Typical weather in the month of travel, averaged over recent years (Open-Meteo archive). */
+  climate?: DestinationClimate | null;
+}
+export interface DestinationFacts {
+  currency: string | null; language: string | null; timeDifference: string | null;
+  /** Approximate flight time from London. */
+  flightTimeFromLondon: string | null; plugs: string | null; bestTime: string | null;
+}
+export interface DestinationClimate {
+  /** "March". */
+  month: string;
+  highC: number; lowC: number;
+  sunshineHours: number | null;
+  rainyDays: number | null;
+  /** How many past years the averages come from. */
+  years: number;
+}
+export interface AgencyRating { rating: number; count: number; url: string | null }
 export interface PracticalGuide { id: string; kind: 'airline' | 'airport'; name: string; logoUrl: string | null; sections: Array<{ title: string; text: string }>; pending: boolean }
 export interface ExternalTripContent {
   generatedAt: string; refreshAfterSeconds: number;
   providers: { flights: ExternalProviderStatus; weather: ExternalProviderStatus; places: ExternalProviderStatus; widgety: ExternalProviderStatus; ai: ExternalProviderStatus };
   diagnostics: { cache: { entries: number; hits: number; misses: number; writes: number }; sources: Array<{ provider: string; configured: boolean; source: string }> };
   flights: LiveFlightStatus[]; weather: WeatherForecast[]; stays: PlaceProfile[]; cruises: CruiseProfile[]; destinations: EnrichedDestinationGuide[]; guides: PracticalGuide[];
+  /** Every stay and port on one map (Maps Embed); null without an embed key or with fewer than two places. */
+  routeMapUrl?: string | null;
+  /** The agency's own Google rating, only when 4.3 or better from ten or more reviews. */
+  agencyRating?: AgencyRating | null;
 }
 
 export type CustomerEngagementEvent = 'section_opened' | 'action_clicked';
