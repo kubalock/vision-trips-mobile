@@ -4,6 +4,7 @@ import { SessionsModule } from '../sessions/sessions.module.js';
 import { IdempotencyInterceptor } from './idempotency.interceptor.js';
 import { PersistentRateLimitGuard } from './persistent-rate-limit.guard.js';
 import { RequestLoggingInterceptor } from './request-logging.interceptor.js';
+import { SnapshotVersionInterceptor } from './snapshot-version.interceptor.js';
 import { WebSessionCookiesInterceptor } from '../security/web-session-cookies.interceptor.js';
 
 @Module({
@@ -11,6 +12,7 @@ import { WebSessionCookiesInterceptor } from '../security/web-session-cookies.in
   providers: [
     { provide: APP_GUARD, useClass: PersistentRateLimitGuard },
     { provide: APP_INTERCEPTOR, useClass: RequestLoggingInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: SnapshotVersionInterceptor },
     { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
     // Innermost, so session responses are turned into web handles and cookies last (none of them is replayable).
     { provide: APP_INTERCEPTOR, useClass: WebSessionCookiesInterceptor },

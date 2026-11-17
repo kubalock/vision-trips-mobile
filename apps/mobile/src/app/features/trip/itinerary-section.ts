@@ -44,6 +44,7 @@ interface DayGroup {
                         @if (item.startTime) { <time class="vt-chip">{{ item.startTime }}</time> }
                       </div>
                       @if (item.from || item.to) { <p class="vt-el__route flex items-center gap-1">{{ item.from }}@if (item.to) { <vt-icon name="arrow-right" [size]="15" /> {{ item.to }} }</p> }
+                      @if (item.kind === 'flight' && flightCodes(item); as codes) { <p class="vt-el__meta vt-el__codes">{{ codes }}</p> }
                       @if (item.carrier || item.flightNumber) { <p class="vt-el__meta">{{ item.carrier }} {{ item.flightNumber }}</p> }
                       @if (item.address) { <p class="vt-el__meta">{{ item.address }}</p> }
                       @if (item.details.length) {
@@ -120,6 +121,15 @@ export class ItinerarySection {
   }
 
   telephoneLink(phone: string): string { return `tel:${phone.replace(/[^0-9+]/g, '')}`; }
+  /**
+   * The line beneath the airport names: codes and terminals as booked ("LHR T5 → PFO T1"). Terminals come from the
+   * booking (or its notes); live flight data never replaces them here.
+   */
+  protected flightCodes(item: ItineraryItem): string {
+    const end = (code: string | null, terminal: string | null | undefined) => [code, terminal].filter(Boolean).join(' ');
+    const from = end(item.fromCode, item.departureTerminal); const to = end(item.toCode, item.arrivalTerminal);
+    return from || to ? `${from || '—'} → ${to || '—'}` : '';
+  }
 }
 
 export function groupByDay(items: ItineraryItem[]): DayGroup[] {

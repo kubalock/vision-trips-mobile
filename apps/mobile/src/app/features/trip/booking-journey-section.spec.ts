@@ -41,8 +41,34 @@ describe('BookingJourneySection quotation comparison', () => {
     const actions = element.querySelectorAll<HTMLButtonElement>('.vt-quotation-card__action');
 
     expect(actions).toHaveLength(1);
-    expect(actions[0].textContent).toContain('Open quotation');
+    expect(actions[0].textContent).toContain('View');
     expect(actions[0].querySelector('vt-icon')).not.toBeNull();
+  });
+});
+
+describe('BookingJourneySection quotation layouts', () => {
+  const alternatives = (count: number): RelatedQuotationSummary[] => [quotations[0]!, ...Array.from({ length: count }, (_, index) => ({
+    ...quotations[1]!, comparisonId: `alt-${index}`, name: `Option ${index}`, nights: 7, perPerson: 749.5,
+  }))];
+  const render = (related: RelatedQuotationSummary[]) => {
+    const fixture = TestBed.createComponent(BookingJourneySection);
+    fixture.componentRef.setInput('journey', journey);
+    fixture.componentRef.setInput('related', related);
+    fixture.detectChanges();
+    return fixture.nativeElement as HTMLElement;
+  };
+
+  it('shows one alternative side by side, two or three as cards, four or more as compact rows', () => {
+    expect(render(alternatives(1)).querySelector('.vt-quotation-grid--pair')).not.toBeNull();
+    const three = render(alternatives(3));
+    expect(three.querySelectorAll('.vt-quotation-card')).toHaveLength(4);
+    expect(three.querySelector('.vt-quotation-grid--pair')).toBeNull();
+    const many = render(alternatives(5));
+    expect(many.querySelectorAll('.vt-quotation-row')).toHaveLength(6);
+    expect(many.querySelector('.vt-quotation-card')).toBeNull();
+    expect(many.textContent).toContain('7 nights');
+    expect(many.textContent).toContain('£749.50 pp');
+    expect(many.querySelectorAll('.vt-quotation-row button')).toHaveLength(5);
   });
 });
 

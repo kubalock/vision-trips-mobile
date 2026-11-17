@@ -28,7 +28,7 @@ async function bootstrap() {
     // Browsers send their HttpOnly refresh and trusted-device cookies (SameSite=Strict, so the app and API must share a site).
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Authorization', 'Content-Type', 'Idempotency-Key', 'X-Request-Id', 'X-Vision-Key', 'X-Vision-Client'],
+    allowedHeaders: ['Authorization', 'Content-Type', 'Idempotency-Key', 'X-Request-Id', 'X-Vision-Key', 'X-Vision-Client', 'X-Vision-Snapshot-Version'],
     maxAge: 86_400,
   });
   app.use((_request: unknown, response: { setHeader(name: string, value: string): void }, next: () => void) => {

@@ -44,7 +44,22 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
           <h2 id="quotation-compare-title">Compare your options</h2>
           <p class="vt-quotation-compare__intro">These quotations were found securely through the email verified for this booking.</p>
         </header>
-        <div class="vt-quotation-grid">
+        @if (layout() === 'rows') {
+          <!-- Four or more alternatives: compact comparison rows that stack on a phone. -->
+          <ul class="vt-quotation-rows" role="list">
+            @for (quote of related(); track quote.comparisonId) {
+              <li class="vt-quotation-row" [class.is-current]="quote.current">
+                <div class="vt-quotation-row__name"><strong>{{ quote.name }}</strong>@if (quote.current) { <span class="vt-quotation-card__current">Open now</span> }</div>
+                <span>{{ (quote.departureDate | europeanDate) || 'Dates to be confirmed' }}@if (nights(quote) !== null) { · {{ nights(quote) }} {{ nights(quote) === 1 ? 'night' : 'nights' }} }</span>
+                <span class="vt-quotation-row__price"><strong>{{ money(quote) }}</strong>@if (quote.perPerson !== null && quote.perPerson !== undefined) { <small>{{ perPerson(quote) }} pp</small> }</span>
+                @if (!quote.current) {
+                  <button type="button" class="vt-quotation-card__action" [disabled]="openingId() !== null" (click)="open.emit(quote.comparisonId)">{{ openingId() === quote.comparisonId ? 'Opening…' : 'View' }}</button>
+                }
+              </li>
+            }
+          </ul>
+        } @else {
+        <div class="vt-quotation-grid" [class.vt-quotation-grid--pair]="layout() === 'pair'">
           @for (quote of related(); track quote.comparisonId) {
             <article class="vt-quotation-card" [class.is-current]="quote.current">
               @if (quote.heroImageUrl) {
@@ -59,16 +74,16 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
                 <dl class="vt-quotation-card__meta">
                   <div>
                     <dt>Dates</dt>
-                    <dd>{{ (quote.departureDate | europeanDate) || 'To be confirmed' }}@if (quote.durationDays !== null) { <span>· {{ quote.durationDays }} nights</span> }</dd>
+                    <dd>{{ (quote.departureDate | europeanDate) || 'To be confirmed' }}@if (nights(quote) !== null) { <span>· {{ nights(quote) }} {{ nights(quote) === 1 ? 'night' : 'nights' }}</span> }</dd>
                   </div>
                   <div class="vt-quotation-card__total">
                     <dt>Total price</dt>
-                    <dd>{{ money(quote) }}</dd>
+                    <dd>{{ money(quote) }}@if (quote.perPerson !== null && quote.perPerson !== undefined) { <small> · {{ perPerson(quote) }} per person</small> }</dd>
                   </div>
                 </dl>
                 @if (!quote.current) {
-                  <button type="button" class="vt-quotation-card__action" [disabled]="openingId() === quote.comparisonId" (click)="open.emit(quote.comparisonId)">
-                    <span>{{ openingId() === quote.comparisonId ? 'Opening…' : 'Open quotation' }}</span>
+                  <button type="button" class="vt-quotation-card__action" [disabled]="openingId() !== null" (click)="open.emit(quote.comparisonId)">
+                    <span>{{ openingId() === quote.comparisonId ? 'Opening…' : 'View' }}</span>
                     @if (openingId() !== quote.comparisonId) { <vt-icon name="arrow-right" [size]="17" /> }
                   </button>
                 }
@@ -76,6 +91,7 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
             </article>
           }
         </div>
+        }
       </section>
     }
 
@@ -100,6 +116,12 @@ export class BookingJourneySection {
   readonly stage = input<TripStage | null>(null);
   protected readonly returned = computed(() => ['home', 'past', 'closed'].includes(this.stage() ?? ''));
   readonly related = input<RelatedQuotationSummary[]>([]);
+  /** One alternative: side by side with this quotation; two or three: cards; four or more: comparison rows. */
+  protected readonly layout = computed(() => { const others = this.related().filter((quote) => !quote.current).length; return others <= 1 ? 'pair' : others <= 3 ? 'cards' : 'rows'; });
+  protected nights(quote: RelatedQuotationSummary): number | null { return quote.nights ?? quote.durationDays ?? null; }
+  protected perPerson(quote: RelatedQuotationSummary): string {
+    try { return new Intl.NumberFormat('en-GB', { style: 'currency', currency: quote.currency }).format(quote.perPerson ?? 0); } catch { return `${quote.perPerson} ${quote.currency}`; }
+  }
   readonly openingId = input<string | null>(null);
   readonly enquire = output<string>();
   readonly open = output<string>();

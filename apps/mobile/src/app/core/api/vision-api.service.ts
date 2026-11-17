@@ -1,7 +1,7 @@
 import { HttpClient, HttpEventType, type HttpResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import type { CustomerAccount, CustomerEngagementRequest, CustomerEngagementResponse, CustomerMessageRequest, CustomerMessageResponse, CustomerPreferences, DevInvitationStatus, ExternalTripContent, FellowTravellerLinkResponse, InvitationAuthorized, InvitationOtpState, InvitationState, LinkExchangeResponse, MobileSession, OpenCustomerAccountTripResponse, OpenRelatedQuotationResponse, PaymentLinkResponse, PaymentStatusResponse, QuotationAcceptanceRequest, QuotationAcceptanceResponse, RelatedQuotationsResponse, TripSnapshot, UpdateCustomerPreferencesResponse } from '@vision-trips/contracts';
-import { authorizedLinkExchangeSchema, customerAccountSchema, customerEngagementResponseSchema, customerMessageResponseSchema, devInvitationResponseSchema, devInvitationStatusSchema, fellowTravellerLinkResponseSchema, invitationAuthorizedResponseSchema, invitationOtpStateSchema, invitationRequiredLinkExchangeSchema, invitationStateSchema, mobileSessionSchema, paymentLinkResponseSchema, paymentStatusResponseSchema, quotationAcceptanceResponseSchema, relatedQuotationsResponseSchema, stepUpResponseSchema, tripSessionResponseSchema, updateCustomerPreferencesResponseSchema } from '@vision-trips/contracts';
+import type { CallbackRequest, CallbackResponse, TravellerProfilesResponse, TravellerProfileUpdate, TravellerProfileUpdateResponse, CustomerAccount, CustomerEngagementRequest, CustomerEngagementResponse, CustomerMessageRequest, CustomerMessageResponse, CustomerPreferences, DevInvitationStatus, ExternalTripContent, FellowTravellerLinkResponse, InvitationAuthorized, InvitationOtpState, InvitationState, LinkExchangeResponse, MobileSession, OpenCustomerAccountTripResponse, OpenRelatedQuotationResponse, PaymentLinkResponse, PaymentStatusResponse, QuotationAcceptanceContext, QuotationAcceptanceRequest, QuotationAcceptanceResponse, RelatedQuotationsResponse, TripSnapshot, UpdateCustomerPreferencesResponse } from '@vision-trips/contracts';
+import { callbackResponseSchema, travellerProfilesResponseSchema, travellerProfileUpdateResponseSchema, authorizedLinkExchangeSchema, customerAccountSchema, customerEngagementResponseSchema, customerMessageResponseSchema, devInvitationResponseSchema, devInvitationStatusSchema, fellowTravellerLinkResponseSchema, invitationAuthorizedResponseSchema, invitationOtpStateSchema, invitationRequiredLinkExchangeSchema, invitationStateSchema, mobileSessionSchema, paymentLinkResponseSchema, paymentStatusResponseSchema, quotationAcceptanceContextSchema, quotationAcceptanceResponseSchema, relatedQuotationsResponseSchema, stepUpResponseSchema, tripSessionResponseSchema, updateCustomerPreferencesResponseSchema } from '@vision-trips/contracts';
 import { filter, firstValueFrom, map } from 'rxjs';
 import { API_BASE_URL } from '../config/api-base-url';
 import { isTripDataError, parseExternalContent, parseTripSnapshot } from './trip-schema';
@@ -96,6 +96,23 @@ export class VisionApiService {
 
   acceptQuotation(input: QuotationAcceptanceRequest, accessToken: string, operationId: string): Promise<QuotationAcceptanceResponse> {
     return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/trips/current/quotation-acceptance`, input, this.writeOptions(accessToken, operationId))), (value) => quotationAcceptanceResponseSchema.parse(value), 'quotation acceptance');
+  }
+
+  /** The masked verified email shown on the acceptance form (the customer is never asked for it again). */
+  quotationAcceptanceContext(accessToken: string): Promise<QuotationAcceptanceContext> {
+    return parsed(firstValueFrom(this.http.get<unknown>(`${this.baseUrl}/trips/current/quotation-acceptance`, this.readOptions(accessToken))), (value) => quotationAcceptanceContextSchema.parse(value), 'quotation acceptance');
+  }
+
+  requestCallback(input: CallbackRequest, accessToken: string, operationId: string): Promise<CallbackResponse> {
+    return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/trips/current/callback`, input, this.writeOptions(accessToken, operationId))), (value) => callbackResponseSchema.parse(value), 'callback');
+  }
+
+  travellerProfiles(accessToken: string): Promise<TravellerProfilesResponse> {
+    return parsed(firstValueFrom(this.http.get<unknown>(`${this.baseUrl}/trips/current/account/travellers`, this.readOptions(accessToken))), (value) => travellerProfilesResponseSchema.parse(value), 'traveller details');
+  }
+
+  updateTravellerProfile(travellerId: string, update: TravellerProfileUpdate, accessToken: string, operationId: string): Promise<TravellerProfileUpdateResponse> {
+    return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/trips/current/account/travellers/${encodeURIComponent(travellerId)}`, update, this.writeOptions(accessToken, operationId))), (value) => travellerProfileUpdateResponseSchema.parse(value), 'traveller details');
   }
 
   sendMessage(input: CustomerMessageRequest, accessToken: string, operationId: string): Promise<CustomerMessageResponse> {

@@ -15,7 +15,7 @@ import * as z from 'zod/mini';
  * - Unknown fields are dropped, so the app only ever holds the shape it was built for.
  */
 
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
 
 export class TripDataError extends Error {
   override readonly name = 'TripDataError';
@@ -38,6 +38,9 @@ const flag = z.catch(z.boolean(), false);
 const count = z.catch(z.number(), 0);
 const optNumber = z.catch(z.nullable(z.number()), null);
 const currencyCode = z.string().check(z.regex(/^[A-Z]{3}$/));
+/** Video and affiliate links must be https; anything else is dropped (never opened). */
+const httpsText = z.string().check(z.refine((value) => { try { return new URL(value).protocol === 'https:'; } catch { return false; } }, 'Expected an https URL.'));
+const optHttps = z.catch(z.nullable(httpsText), null);
 
 function oneOf<const T extends readonly [string, ...string[]]>(values: T, fallback: T[number]) {
   return z.catch(z.enum(values), fallback);
@@ -85,6 +88,7 @@ const brandProfile = record({
   footerImages: strings,
   footerText: optText,
   letterTemplates: list(z.object({ id: nonEmpty, name: z.string(), subject: optText, body: z.string() })),
+  whyChooseHeader: optText, whyChooseSubheader: optText,
 });
 
 const summary = z.object({
@@ -122,7 +126,9 @@ const itineraryItem = z.object({
   emergencyContact: z.catch(z.nullable(z.object({ name: z.string(), phone: nonEmpty })), null),
   details: list(z.object({ label: z.string(), value: z.string() })),
   fromCode: optText, toCode: optText, carrierCode: optText, carrierLogoUrl: optText,
-  arrivesNextDay: flag, packageIncluded: flag, termsUrl: optText, confirmationReceived: flag, ticketsReceived: flag,
+  arrivesNextDay: flag, packageIncluded: flag,
+  departureTerminal: optText, arrivalTerminal: optText,
+  terminalSource: z.catch(z.nullable(z.enum(['booking', 'notes'])), null), termsUrl: optText, confirmationReceived: flag, ticketsReceived: flag,
 });
 
 const paymentItem = z.object({
@@ -130,6 +136,7 @@ const paymentItem = z.object({
   status: oneOf(['outstanding', 'paid', 'overdue', 'local', 'refund'], 'outstanding'),
   dueDate: optText, completedDate: optText,
   canPay: flag, actionUrl: optText,
+  kind: oneOf(['money', 'points'], 'money'), points: optNumber,
 });
 
 /** A payment summary without a readable currency is left out entirely rather than shown in the wrong currency. */
@@ -140,7 +147,13 @@ const payments = z.catch(z.optional(z.object({
   totalIncludingResort: optNumber, nextDueAmount: optNumber, nextDueDate: optText, balanceDueDate: optText,
   alternativeCurrency: z.catch(z.nullable(z.object({ currency: currencyCode, amount: z.number() })), null),
   customPayments: record({ enabled: flag, minimum: count, maximum: count }),
+  perPerson: optNumber,
 })), undefined);
+
+const video = z.object({
+  kind: z.enum(['file', 'youtube', 'vimeo']), url: httpsText, mimeType: optText, posterUrl: optText, title: text,
+});
+const contentItem = z.object({ text: nonEmpty });
 
 const tripDocument = z.object({
   id: nonEmpty, title: text, description: text,
@@ -158,7 +171,7 @@ const snapshotSchema = z.object({
   accessScope: z.enum(['primary_customer', 'fellow_traveller']),
   freshness: record({
     status: oneOf(['fresh', 'stale', 'offline', 'partial'], 'stale'), sourceUpdatedAt: text, nextRefreshAfter: optText,
-    incompleteSections: z.optional(list(z.enum(['itinerary_details', 'destinations', 'extras', 'messages', 'agent', 'letters', 'brand']))),
+    incompleteSections: z.optional(list(z.enum(['itinerary_details', 'destinations', 'extras', 'messages', 'agent', 'letters', 'brand', 'loyalty']))),
   }),
   brand: record({ name: text, logoUrl: optText, theme, profile: brandProfile }),
   summary,
@@ -183,7 +196,7 @@ const snapshotSchema = z.object({
   }),
   quotation: record({
     status: oneOf(['available', 'expired', 'not_applicable'], 'not_applicable'),
-    expiresAt: optText, canAccept: flag, requiredConfirmations: strings,
+    expiresAt: optText, canAccept: flag, requiredConfirmations: strings, accepted: flag,
     reviewSections: list(z.object({
       id: z.enum(['package', 'names', 'important', 'protection', 'terms']),
       title: text, introduction: text, items: strings,
@@ -204,7 +217,7 @@ const snapshotSchema = z.object({
     })),
   }),
   destinations: list(z.object(destinationShape)),
-  extras: list(z.object({ id: nonEmpty, name: text, description: optText, imageUrl: optText, supplierName: optText })),
+  extras: list(z.object({ id: nonEmpty, name: text, description: optText, imageUrl: optText, supplierName: optText, affiliateUrl: optHttps })),
   communications: list(z.object({ id: nonEmpty, type: text, subject: text, content: optText, sentAt: optText })),
   integrations: record({
     liveFlightStatus: oneOf(['available', 'not_configured', 'not_applicable'], 'not_configured'),
@@ -214,12 +227,23 @@ const snapshotSchema = z.object({
   travellers: list(z.object({
     name: text, firstName: text, isLead: flag, assistance: strings, meals: strings,
     nationality: optText, passportExpiry: optText, insuranceStatus: optText,
+    age: optNumber, dateOfBirth: optText, passportEnding: optText, passportWarning: flag,
   })),
   itinerary: list(itineraryItem),
   payments,
   documents: list(tripDocument),
   // Anything not explicitly allowed stays switched off.
   capabilities: record({ acceptQuotation: flag, makePayment: flag, shareWithTraveller: flag, sendMessage: flag }),
+  agent: z.catch(z.nullable(z.object({ name: optText, email: optText, branchName: optText, branchPhone: optText })), null),
+  loyalty: z.catch(z.nullable(z.object({
+    pointsEarned: optNumber, state: oneOf(['quote', 'pending', 'post_return', 'awarded'], 'pending'), eligibleFrom: optText,
+    available: optNumber, availableValue: optNumber, currency: z.catch(currencyCode, 'GBP'), vip: flag,
+  })), null),
+  content: record({
+    included: list(contentItem), notIncluded: list(contentItem),
+    includedSource: oneOf(['booking', 'itinerary', 'none'], 'none'),
+    videoMessage: z.catch(z.nullable(video), null), walkthrough: z.catch(z.nullable(video), null),
+  }),
 });
 
 // The parsed shape must satisfy the shared contract (checked at compile time).
@@ -234,11 +258,35 @@ void snapshotMatchesContract;
 const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => Record<string, unknown>> = {
   1: (raw) => ({ ...raw, schemaVersion: 2 }),
   2: (raw) => ({ ...raw, schemaVersion: 3 }),
+  // v4 only adds optional fields (the schema fills them). A cached v3 quotation could still carry "Pay now" (the
+  // legacy Show Pay Now on Quotation field) or required confirmations: neither survives the upgrade.
+  3: (raw) => ({ ...withoutQuotationPayments(raw), schemaVersion: 4 }),
 };
+/** Steps after which the trip is marked stale and refreshed: v3 → v4 data is still complete and current. */
+const REFRESH_AFTER = new Set([1, 2]);
+
+const UNPAYABLE_STAGES = ['quote', 'quote_expired', 'closed', 'cancelled'];
+function withoutQuotationPayments(raw: Record<string, unknown>): Record<string, unknown> {
+  const quotation = asObject(raw['quotation']);
+  const next: Record<string, unknown> = { ...raw, ...(quotation ? { quotation: { ...quotation, requiredConfirmations: [] } } : {}) };
+  if (!UNPAYABLE_STAGES.includes(String(raw['stage']))) return next;
+  const payments = asObject(raw['payments']);
+  if (payments) {
+    const items = Array.isArray(payments['items']) ? payments['items'] : [];
+    next['payments'] = {
+      ...payments,
+      items: items.map((item) => (asObject(item) ? { ...(item as Record<string, unknown>), canPay: false, actionUrl: null } : item)),
+      customPayments: { ...(asObject(payments['customPayments']) ?? {}), enabled: false },
+    };
+  }
+  next['capabilities'] = { ...(asObject(raw['capabilities']) ?? {}), makePayment: false };
+  return next;
+}
 
 export function migrateSnapshot(raw: Record<string, unknown>): { value: Record<string, unknown>; migrated: boolean } {
   let value = raw;
   let migrated = false;
+  let refresh = false;
   for (let guard = 0; guard < 10; guard += 1) {
     const version = value['schemaVersion'];
     if (version === CURRENT_SCHEMA_VERSION) break;
@@ -246,8 +294,9 @@ export function migrateSnapshot(raw: Record<string, unknown>): { value: Record<s
     if (!step) throw new TripDataError('unsupported_version', `Trip schema version ${String(version)} is not supported.`);
     value = step(value);
     migrated = true;
+    if (REFRESH_AFTER.has(version as number)) refresh = true;
   }
-  if (migrated) value = { ...value, freshness: { ...(asObject(value['freshness']) ?? {}), status: 'stale', nextRefreshAfter: null } };
+  if (refresh) value = { ...value, freshness: { ...(asObject(value['freshness']) ?? {}), status: 'stale', nextRefreshAfter: null } };
   return { value, migrated };
 }
 

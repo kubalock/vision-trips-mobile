@@ -35,6 +35,7 @@ const ICONS = {
   'phone-call': Icons.PhoneCall,
   plane: Icons.PlaneTakeoff,
   'plane-arrival': Icons.PlaneLanding,
+  play: Icons.Play,
   plus: Icons.Plus,
   pound: Icons.PoundSterling,
   refresh: Icons.RefreshCw,

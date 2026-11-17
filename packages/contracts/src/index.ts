@@ -10,7 +10,7 @@ export type FreshnessStatus = 'fresh' | 'stale' | 'offline' | 'partial';
  * `brand`: the travel company's Brand record couldn't be read, so its name, theme, contacts, links, gallery and
  * payment settings in this snapshot are defaults (the app keeps its earlier copy of them).
  */
-export type TripSection = 'itinerary_details' | 'destinations' | 'extras' | 'messages' | 'agent' | 'letters' | 'brand';
+export type TripSection = 'itinerary_details' | 'destinations' | 'extras' | 'messages' | 'agent' | 'letters' | 'brand' | 'loyalty';
 
 export interface ThemeTokens {
   key: string;
@@ -50,8 +50,16 @@ export interface TripCapabilities {
   sendMessage: boolean;
 }
 
+/**
+ * Version 4 adds optional loyalty, traveller, agent, quotation-content and terminal fields and `quotation.accepted`.
+ * Every addition is optional, so a v3 snapshot is a valid v4 one; clients that don't send
+ * `X-Vision-Snapshot-Version: 4` are still told 3 (see the API's snapshot-version interceptor).
+ */
+export const TRIP_SNAPSHOT_SCHEMA_VERSION = 4;
+export const SNAPSHOT_VERSION_HEADER = 'x-vision-snapshot-version';
+
 export interface TripSnapshot {
-  schemaVersion: 3;
+  schemaVersion: 3 | 4;
   tripId: string;
   version: string;
   serverTime: string;
@@ -87,6 +95,57 @@ export interface TripSnapshot {
   payments?: PaymentSummary;
   documents: TripDocument[];
   capabilities: TripCapabilities;
+  /** The booking's agent and branch, when known. Never carries collaborator or record IDs. */
+  agent?: TripAgent | null;
+  /** Present only when the member's loyalty scheme is enabled and the booking takes part. */
+  loyalty?: TripLoyalty | null;
+  /** Structured quotation/booking content: inclusions, exclusions and the agent's videos. */
+  content?: TripContent;
+}
+
+export interface TripAgent {
+  name: string | null;
+  /** Validated address; null when the collaborator has none or it isn't a valid email. */
+  email: string | null;
+  branchName: string | null;
+  /** `tel:` link (digits and + only). */
+  branchPhone: string | null;
+}
+
+export type LoyaltyTripState = 'quote' | 'pending' | 'post_return' | 'awarded';
+
+export interface TripLoyalty {
+  /** Points this trip earns; null when the booking has no figure (never shown as 0). */
+  pointsEarned: number | null;
+  state: LoyaltyTripState;
+  /** The date the points become eligible (normally the return date). */
+  eligibleFrom: string | null;
+  /** The verified customer's balance, when it could be read. */
+  available: number | null;
+  availableValue: number | null;
+  currency: string;
+  vip: boolean;
+}
+
+export interface TripContent {
+  included: ContentListItem[];
+  notIncluded: ContentListItem[];
+  /** `booking` when the agent wrote the lists; `itinerary` when derived conservatively from the booked items. */
+  includedSource: 'booking' | 'itinerary' | 'none';
+  videoMessage: TripVideo | null;
+  walkthrough: TripVideo | null;
+}
+
+export interface ContentListItem { text: string }
+
+export interface TripVideo {
+  kind: 'file' | 'youtube' | 'vimeo';
+  /** Direct https file URL, or a privacy-friendly https embed URL. Never autoplays. */
+  url: string;
+  mimeType: string | null;
+  /** Airtable's own video thumbnail when there is one; never the trip hero. */
+  posterUrl: string | null;
+  title: string;
 }
 
 export interface BrandProfile {
@@ -106,6 +165,9 @@ export interface BrandProfile {
   footerImages: string[];
   footerText: string | null;
   letterTemplates: Array<{ id: string; name: string; subject: string | null; body: string }>;
+  /** "Why choose…" heading set on the brand; the app falls back to About & Bio when absent. */
+  whyChooseHeader?: string | null;
+  whyChooseSubheader?: string | null;
 }
 
 export interface TripCommunication {
@@ -166,14 +228,25 @@ export interface TripExtra {
   description: string | null;
   imageUrl: string | null;
   supplierName: string | null;
+  /** Allow-listed https affiliate link chosen by the member; null keeps the "ask your agent" action. */
+  affiliateUrl?: string | null;
 }
 
 export interface QuotationState {
   status: 'available' | 'expired' | 'not_applicable';
   expiresAt: string | null;
   canAccept: boolean;
+  /** @deprecated Always empty since v4: sections are offered for review, not individually confirmed. */
   requiredConfirmations: string[];
   reviewSections: QuotationReviewSection[];
+  /** True once the quotation has been accepted online (the booking status may still read Quotation). */
+  accepted?: boolean;
+}
+
+/** GET /trips/current/quotation-acceptance: what the acceptance form shows about the signed-in customer. */
+export interface QuotationAcceptanceContext {
+  /** The verified customer's email, masked (d•••a@example.com); null when it couldn't be read. */
+  emailHint: string | null;
 }
 
 export type QuotationReviewSectionId = 'package' | 'names' | 'important' | 'protection' | 'terms';
@@ -187,10 +260,21 @@ export interface QuotationReviewSection {
 }
 
 export interface QuotationAcceptanceRequest {
+  /** The signer's full name. */
   name: string;
-  email: string;
+  /** The single explicit "I confirm…" agreement. */
   agreed: boolean;
-  confirmations: string[];
+  /** Review sections the customer opened: recorded for audit, never required. */
+  openedSections?: QuotationReviewSectionId[];
+  /**
+   * Optional declared signer/receipt address ("use a different email"). It is recorded as given and receives the
+   * receipt; it never changes the customer identity, selects Customer records or widens account access.
+   */
+  signerEmail?: string;
+  /** @deprecated v3 clients: treated exactly like `signerEmail`. */
+  email?: string;
+  /** @deprecated v3 clients: treated exactly like `openedSections`. */
+  confirmations?: string[];
 }
 
 export interface QuotationAcceptanceResponse {
@@ -257,7 +341,11 @@ export interface RelatedQuotationSummary {
   departureDate: string | null;
   returnDate: string | null;
   durationDays: number | null;
+  /** Nights (duration in days minus one is not assumed: departure to return). */
+  nights?: number | null;
   total: number;
+  /** Per person: the booking's own figure, otherwise the total shared across travellers (when more than one). */
+  perPerson?: number | null;
   currency: string;
   heroImageUrl: string | null;
   status: 'available' | 'expired';
@@ -290,11 +378,65 @@ export interface CustomerAccountTrip {
 
 export interface CustomerAccount {
   emailHint: string;
+  /** Present only when the member's loyalty scheme is enabled. */
+  loyalty?: CustomerLoyalty | null;
+  vip?: boolean;
   preferences: CustomerPreferences;
   airportOptions: string[];
   monthOptions: string[];
   trips: CustomerAccountTrip[];
 }
+
+export type LoyaltyTransactionType = 'earn' | 'redeem' | 'adjustment' | 'expiry';
+export interface LoyaltyTransaction {
+  id: string;
+  type: LoyaltyTransactionType;
+  points: number;
+  date: string | null;
+  /** The trip's name, when the transaction is linked to one of this customer's bookings. */
+  tripName: string | null;
+  description: string | null;
+}
+export interface CustomerLoyalty {
+  available: number | null;
+  availableValue: number | null;
+  currency: string;
+  lifetime: number | null;
+  expiresAt: string | null;
+  transactions: LoyaltyTransaction[];
+}
+
+/** One traveller on the verified customer's record (Account → Traveller details). Sensitive values are masked. */
+export interface TravellerProfile {
+  /** Opaque, session-scoped ID (never an Airtable record ID). */
+  travellerId: string;
+  name: string;
+  dateOfBirth: string | null;
+  passport: { numberHint: string | null; nationality: string | null; issuingCountry: string | null; issueDate: string | null; expiryDate: string | null };
+  drivingLicence: { numberHint: string | null; expiryDate: string | null };
+  nextOfKin: { name: string | null; phone: string | null };
+  airlineLoyalty: string | null;
+  cruiseLoyalty: string | null;
+}
+export interface TravellerProfilesResponse { travellers: TravellerProfile[] }
+/** The only fields a customer may change; names, dates of birth and contact details go through the agent. */
+export interface TravellerProfileUpdate {
+  passportNumber?: string;
+  nationality?: string;
+  passportIssuingCountry?: string;
+  passportIssueDate?: string;
+  passportExpiryDate?: string;
+  drivingLicenceNumber?: string;
+  drivingLicenceExpiryDate?: string;
+  nextOfKinName?: string;
+  nextOfKinPhone?: string;
+  airlineLoyalty?: string;
+  cruiseLoyalty?: string;
+}
+export interface TravellerProfileUpdateResponse { saved: true; traveller: TravellerProfile }
+
+export interface CallbackRequest { preferredTime: 'morning' | 'afternoon' | 'evening' | 'anytime'; phone?: string; note?: string }
+export interface CallbackResponse { sent: true; sentAt: string }
 
 export interface UpdateCustomerPreferencesResponse { saved: true; updatedRecords: number; preferences: CustomerPreferences }
 /** Body of DELETE /v1/link-exchanges/device-trust: omit `identityKey` to forget every trusted identity in this browser. */
@@ -372,6 +514,14 @@ export interface TravellerSummary {
   nationality: string | null;
   passportExpiry: string | null;
   insuranceStatus: string | null;
+  /** Age on the departure date (or today when unknown); primary customer only. */
+  age?: number | null;
+  /** Only on verified sessions when DOB display is allowed (TRAVELLER_DOB_VISIBLE). */
+  dateOfBirth?: string | null;
+  /** Last three characters only (···876); primary customer only. */
+  passportEnding?: string | null;
+  /** True when the passport expires within six months after the return date (or is already expired). */
+  passportWarning?: boolean;
 }
 
 export interface ItineraryItem {
@@ -404,6 +554,11 @@ export interface ItineraryItem {
   carrierCode: string | null;
   carrierLogoUrl: string | null;
   arrivesNextDay: boolean;
+  /** Normalised terminal ("T5", "2A"); explicit Airtable fields win over text parsed from notes. */
+  departureTerminal?: string | null;
+  arrivalTerminal?: string | null;
+  /** Where the terminal came from, so live data can supplement but never silently overwrite it. */
+  terminalSource?: 'booking' | 'notes' | null;
   packageIncluded: boolean;
   termsUrl: string | null;
   confirmationReceived: boolean;
@@ -484,6 +639,9 @@ export interface ItineraryDetail {
 export interface PaymentItem {
   id: string;
   label: string;
+  /** `points`: a customer payment made with loyalty points, shown as points, never as money. */
+  kind?: 'money' | 'points';
+  points?: number | null;
   /** Null when Airtable has no readable amount for this payment; never shown as 0. */
   amount: number | null;
   currency: string;
@@ -518,6 +676,8 @@ export interface PaymentSummary {
   balanceDueDate: string | null;
   alternativeCurrency: { currency: string; amount: number } | null;
   customPayments: { enabled: boolean; minimum: number; maximum: number };
+  /** Per person, shown when more than one traveller: the booking's own figure or the total shared out. */
+  perPerson?: number | null;
 }
 
 export interface CustomPaymentLinkRequest { amount: number }
@@ -586,3 +746,4 @@ export interface RefreshSessionRequest {
 
 export * from './invitations.js';
 export * from './responses.js';
+export * from './format.js';

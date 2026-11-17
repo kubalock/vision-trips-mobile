@@ -2,7 +2,7 @@ import { BadGatewayException, BadRequestException, ForbiddenException, Injectabl
 import type { PaymentLinkResponse, TripSnapshot } from '@vision-trips/contracts';
 import { createHmac, randomUUID } from 'node:crypto';
 import { AirtableService, type AirtableRecord } from '../airtable/airtable.service.js';
-import { TripsService } from '../trips/trips.service.js';
+import { BOOKED_PAYMENT_STAGES, paymentStageAllows, TripsService } from '../trips/trips.service.js';
 import { PAYABLE_CURRENCIES, bookingFields, brandFields, currencyCode, firstString, paymentAmount, paymentFields, pick, strings, truthy } from '../trips/field-map.js';
 
 @Injectable()
@@ -11,12 +11,16 @@ export class MintPaymentsService {
 
   async link(baseId: string, recordId: string, paymentId: string, customAmount?: unknown): Promise<PaymentLinkResponse> {
     if (customAmount === undefined) {
-      // A stored "Payment Link URL" needs no Mint credentials, so answer from the snapshot alone.
-      const stored = (await this.trips.snapshot(baseId, recordId, 'primary_customer')).payments?.items.find((item) => item.id === paymentId);
+      // A stored "Payment Link URL" needs no Mint credentials, so answer from the snapshot alone. The snapshot is
+      // read fresh (no cache), so the booking stage is re-checked immediately before any payment link is returned.
+      const fresh = await this.trips.snapshot(baseId, recordId, 'primary_customer');
+      assertPayable(fresh, false);
+      const stored = fresh.payments?.items.find((item) => item.id === paymentId);
       if (stored?.actionUrl && stored.canPay && stored.status !== 'paid' && stored.amount !== null) return { paymentId: stored.id, url: stored.actionUrl, amount: stored.amount, currency: stored.currency };
     }
     const context = await this.context(baseId, recordId);
     const snapshot = context.snapshot;
+    assertPayable(snapshot, customAmount !== undefined);
     if (customAmount !== undefined) {
       if (!snapshot.payments?.customPayments.enabled) throw new ForbiddenException('Custom payments are not available for this booking.');
       const amount = parseAmount(customAmount);
@@ -35,6 +39,8 @@ export class MintPaymentsService {
 
   async depositLink(baseId: string, recordId: string): Promise<string | null> {
     const context = await this.context(baseId, recordId);
+    // Only straight after acceptance (the fresh snapshot then shows it accepted) or once booked.
+    if (!paymentStageAllows(context.snapshot.stage, context.snapshot.quotation.accepted === true)) return null;
     // A payment's own currency if valid, otherwise the booking's (same rule as the trip snapshot).
     const recordCurrency = (record: AirtableRecord) => currencyCode(pick(record.fields, paymentFields.currency)) ?? context.snapshot.payments?.currency ?? 'GBP';
     const payable = context.payments.filter((record) => {
@@ -87,3 +93,14 @@ function parseAmount(value: unknown): number { if (typeof value === 'number' && 
 function isMintUrl(value: string): boolean { try { return new URL(value).protocol === 'https:' && new URL(value).hostname.endsWith('mintpayments.com'); } catch { return false; } }
 function payBy(snapshot: TripSnapshot): string { const returnDate = snapshot.summary.returnDate ? new Date(`${snapshot.summary.returnDate}T23:59:59Z`) : null; const fallback = new Date(Date.now() + 2 * 365 * 86_400_000); return (returnDate && returnDate.getTime() > Date.now() ? returnDate : fallback).toISOString().replace('.000', ''); }
 function isHttpsUrl(value: string): boolean { try { return new URL(value).protocol === 'https:'; } catch { return false; } }
+
+/**
+ * Fresh, server-side stage check before any payment link. A quotation can't be paid through the scheduled-payment or
+ * custom-amount endpoints: it must be accepted first (then only its deposit), and "pay another amount" needs a booking.
+ */
+function assertPayable(snapshot: TripSnapshot, custom: boolean): void {
+  const accepted = snapshot.quotation?.accepted === true;
+  if (custom ? !(BOOKED_PAYMENT_STAGES as readonly string[]).includes(snapshot.stage) : !paymentStageAllows(snapshot.stage, accepted)) {
+    throw new ForbiddenException(snapshot.stage === 'quote' ? 'Accept the quotation to pay your deposit.' : 'Payments are not available for this booking.');
+  }
+}

@@ -1,5 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { AccessScope, TripSection, ItineraryImage, PaymentStatusResponse, CabinDetail, CruisePort, ItineraryItem, ItineraryKind, PassengerAllocation, PaymentItem, RoomDetail, TravellerSummary, TripDocument, TripSnapshot } from '@vision-trips/contracts';
+import { TRIP_SNAPSHOT_SCHEMA_VERSION } from '@vision-trips/contracts';
+import { affiliateUrl, isPointsPayment, isSchemeFunding, mapAgent, mapContent, mapTripLoyalty, redeemedPoints, terminals, travellerDetails } from './trip-extras.js';
 import { createHash, createHmac } from 'node:crypto';
 import { AirtableService, type AirtableRecord } from '../airtable/airtable.service.js';
 import { airlineFields, airportFields, bookingFields, brandFields, brandTemplateFields, cabinFields, communicationFields, cruisePortFields, customerFields, elementFields, attachmentImage, firstAttachmentImage, firstAttachmentThumbnail, firstAttachmentUrl, firstString, locationFields, memberFields, numberValue, passengerFields, paymentFields, personFields, pick, roomFields, shipFields, strings, supplierFields, truthy, upsellFields, currencyCode, moneyValue, paymentAmount, PAYABLE_CURRENCIES, formatMoney, dateString } from './field-map.js';
@@ -154,11 +156,14 @@ export class TripsService {
       optional('itinerary_details', 'CMS [Cruise Operators]', ids.operators),
       optional('letters', process.env.AIRTABLE_BRAND_TEMPLATES_TABLE?.trim() || 'Brands & Branches [Templates]', strings(pick(brand.fields, brandFields.templates))),
     ]);
+    // Points behind customer payments made with loyalty points (only those rows; scheme-funding rows are never shown).
+    const loyaltyTransactionIds = payments.filter((record) => isPointsPayment(pick(record.fields, paymentFields.method))).flatMap((record) => recordIds(pick(record.fields, paymentFields.loyaltyTransactions)));
+    const loyaltyTransactions = loyaltyTransactionIds.length ? await optional('loyalty', process.env.AIRTABLE_LOYALTY_TABLE?.trim() || 'Loyalty Transactions', loyaltyTransactionIds) : [];
     const portLocationIds = cruisePorts.flatMap((record) => recordIds(pick(record.fields, cruisePortFields.port)));
     const portLocations = await optional('itinerary_details', 'CMS [Locations]', portLocationIds);
     const snapshot = this.mapSnapshot(baseId, booking, brand, accessScope, {
       elements, payments, people, customers, upsells, communications, members, suppliers, airports, airlines, rooms, cabins, passengers, ships,
-      cruisePorts, locations: [...locations, ...portLocations], operators, brandTemplates,
+      cruisePorts, locations: [...locations, ...portLocations], operators, brandTemplates, loyaltyTransactions,
     });
     return incomplete.size ? markPartial(snapshot, [...incomplete]) : snapshot;
   }
@@ -283,10 +288,10 @@ export class TripsService {
     const hideSupplierInfo = accessScope === 'fellow_traveller' || stage === 'quote' || stage === 'quote_expired';
     const graph = recordGraph(allRelated);
     const itinerary = allRelated.elements.map((record, index) => mapElement(record, tripId, index, graph, hideSupplierInfo)).filter((item) => item.status.toLowerCase() !== 'cancelled');
-    const travellers = mapTravellers(allRelated.customers, allRelated.people, accessScope);
+    const travellers = mapTravellers(allRelated.customers, allRelated.people, accessScope, departure, returns);
     const mintReady = Boolean(firstString(brandValue('mintApiKey')) && firstString(brandValue('mintBusinessUnit')) && firstString(bookingValue('mintBookingId')).startsWith('BK.'));
     const payments = accessScope === 'primary_customer'
-      ? mapPayments(booking, allRelated.payments, stage, tripId, mintReady, truthy(brandValue('mintAllowCustom')))
+      ? mapPayments(booking, allRelated.payments, stage, tripId, mintReady, truthy(brandValue('mintAllowCustom')), quotationAccepted, redeemedPoints(allRelated.loyaltyTransactions))
       : undefined;
     const destinations = mapDestinations(allRelated.locations, tripId);
     const extras = mapExtras(allRelated.upsells, graph.suppliers, tripId, hideSupplierInfo);
@@ -333,7 +338,7 @@ export class TripsService {
     const visibleDocuments = surpriseConcealed ? documents.filter((item) => item.kind !== 'supplier') : documents;
 
     return {
-      schemaVersion: 3,
+      schemaVersion: TRIP_SNAPSHOT_SCHEMA_VERSION,
       tripId,
       version: sourceUpdatedAt, // Replaced by the content version in mapSnapshot.
       serverTime: now.toISOString(),
@@ -395,7 +400,9 @@ export class TripsService {
         status: stage === 'quote' ? 'available' : stage === 'quote_expired' ? 'expired' : 'not_applicable',
         expiresAt: quoteExpiry,
         canAccept: accessScope === 'primary_customer' && stage === 'quote' && !quotationAccepted,
-        requiredConfirmations: stage === 'quote' ? ['package', 'names', 'important', 'protection', 'terms'] : [],
+        // Sections are offered for review and which were opened is recorded; none has to be confirmed (v4).
+        requiredConfirmations: [],
+        accepted: quotationAccepted,
         reviewSections: stage === 'quote' ? mapQuotationReview(summary, travellers, itinerary, payments, protection, brandName) : [],
       },
       timeline: mapTimeline(visibleItinerary, departure, now),
@@ -421,9 +428,13 @@ export class TripsService {
       itinerary: visibleItinerary,
       ...(payments ? { payments } : {}),
       documents: visibleDocuments,
+      agent: mapAgent(booking, brand, safeText(bookingValue('agent')) || null),
+      loyalty: surpriseConcealed ? null : mapTripLoyalty({ booking, member: allRelated.members[0], customer: accessScope === 'primary_customer' ? allRelated.customers[0] : undefined, stage, returns, currency: payments?.currency ?? 'GBP' }),
+      content: surpriseConcealed ? { included: [], notIncluded: [], includedSource: 'none', videoMessage: null, walkthrough: null } : mapContent(booking, itinerary, safeText(bookingValue('agent')) || null),
       capabilities: {
         acceptQuotation: accessScope === 'primary_customer' && stage === 'quote' && !quotationAccepted,
-        makePayment: accessScope === 'primary_customer' && !['closed', 'cancelled', 'quote_expired'].includes(stage),
+        // A quotation is never paid directly: only once accepted (the deposit) or booked.
+        makePayment: accessScope === 'primary_customer' && paymentStageAllows(stage, quotationAccepted) && Boolean(payments?.items.some((item) => item.canPay) || payments?.customPayments.enabled),
         shareWithTraveller: accessScope === 'primary_customer',
         sendMessage: true,
       },
@@ -541,6 +552,8 @@ function mapBrandProfile(brandValue: (key: keyof typeof brandFields) => unknown,
     footerImages: attachmentImages(brandValue('footerImages')).map((image) => image.url),
     footerText: safeText(brandValue('footerContent')) || null,
     letterTemplates: mapLetterTemplates(brandTemplates, tripId),
+    whyChooseHeader: safeText(brandValue('whyHeader')) || null,
+    whyChooseSubheader: safeText(brandValue('whySubheader')) || null,
   };
 }
 
@@ -604,6 +617,7 @@ function mapExtras(records: AirtableRecord[], suppliers: Map<string, AirtableRec
       description: safeText(pick(record.fields, upsellFields.description)) || null,
       imageUrl: firstAttachmentThumbnail(pick(record.fields, upsellFields.image)),
       supplierName: hideSupplierInfo ? null : recordText(supplier, supplierFields.name) || null,
+      affiliateUrl: affiliateUrl(pick(record.fields, upsellFields.affiliate)),
     }];
   });
 }
@@ -625,7 +639,7 @@ function mapCommunications(records: AirtableRecord[], tripId: string, accessScop
   }).sort((a, b) => (b.sentAt ?? '').localeCompare(a.sentAt ?? '')).slice(0, 20);
 }
 
-function mapTravellers(customers: AirtableRecord[], people: AirtableRecord[], accessScope: AccessScope): TravellerSummary[] {
+function mapTravellers(customers: AirtableRecord[], people: AirtableRecord[], accessScope: AccessScope, departure: string | null = null, returns: string | null = null): TravellerSummary[] {
   const rows: TravellerSummary[] = [];
   const lead = customers[0];
   if (lead) {
@@ -638,7 +652,14 @@ function mapTravellers(customers: AirtableRecord[], people: AirtableRecord[], ac
     const last = firstString(pick(person.fields, personFields.last));
     const name = firstString(pick(person.fields, personFields.name)) || `${first} ${last}`.trim();
     if (!name || rows.some((row) => row.name.toLowerCase() === name.toLowerCase())) continue;
-    rows.push({ name, firstName: first, isLead: false, assistance: strings(pick(person.fields, personFields.ssr)), meals: strings(pick(person.fields, personFields.meal)), nationality: accessScope === 'primary_customer' ? safeText(pick(person.fields, personFields.nationality)) || null : null, passportExpiry: accessScope === 'primary_customer' ? dateString(pick(person.fields, personFields.passportExpiry)) : null, insuranceStatus: accessScope === 'primary_customer' ? safeText(pick(person.fields, personFields.insurance)) || null : null });
+    const primary = accessScope === 'primary_customer';
+    rows.push({ name, firstName: first, isLead: false, assistance: strings(pick(person.fields, personFields.ssr)), meals: strings(pick(person.fields, personFields.meal)), nationality: primary ? safeText(pick(person.fields, personFields.nationality)) || null : null, passportExpiry: primary ? dateString(pick(person.fields, personFields.passportExpiry)) : null, insuranceStatus: primary ? safeText(pick(person.fields, personFields.insurance)) || null : null, ...(primary ? travellerDetails(person, departure, returns) : {}) });
+  }
+  // The lead customer's own person record (same name) carries their passport details: fold them into the lead row.
+  const leadRow = rows.find((row) => row.isLead);
+  if (leadRow && accessScope === 'primary_customer') {
+    const own = people.find((person) => (firstString(pick(person.fields, personFields.name)) || `${firstString(pick(person.fields, personFields.first))} ${firstString(pick(person.fields, personFields.last))}`.trim()).toLowerCase() === leadRow.name.toLowerCase());
+    if (own) Object.assign(leadRow, { assistance: strings(pick(own.fields, personFields.ssr)), meals: strings(pick(own.fields, personFields.meal)), nationality: safeText(pick(own.fields, personFields.nationality)) || null, passportExpiry: dateString(pick(own.fields, personFields.passportExpiry)), insuranceStatus: safeText(pick(own.fields, personFields.insurance)) || null, ...travellerDetails(own, departure, returns) });
   }
   return rows;
 }
@@ -662,15 +683,16 @@ interface RelatedRecords {
   locations: AirtableRecord[];
   operators: AirtableRecord[];
   brandTemplates: AirtableRecord[];
+  loyaltyTransactions: AirtableRecord[];
 }
 
-type RecordGraph = { [K in Exclude<keyof RelatedRecords, 'elements' | 'payments' | 'people' | 'customers' | 'upsells' | 'communications' | 'members' | 'brandTemplates'>]: Map<string, AirtableRecord> };
+type RecordGraph = { [K in Exclude<keyof RelatedRecords, 'elements' | 'payments' | 'people' | 'customers' | 'upsells' | 'communications' | 'members' | 'brandTemplates' | 'loyaltyTransactions'>]: Map<string, AirtableRecord> };
 
 /** Retry soon after a partial refresh, rather than in the usual five minutes. */
 const PARTIAL_REFRESH_MS = 60_000;
 
 export function markPartial(snapshot: TripSnapshot, sections: TripSection[]): TripSnapshot {
-  const order: TripSection[] = ['brand', 'itinerary_details', 'destinations', 'extras', 'messages', 'agent', 'letters'];
+  const order: TripSection[] = ['brand', 'itinerary_details', 'destinations', 'extras', 'messages', 'agent', 'letters', 'loyalty'];
   return {
     ...snapshot,
     freshness: {
@@ -681,7 +703,7 @@ export function markPartial(snapshot: TripSnapshot, sections: TripSection[]): Tr
 }
 
 function emptyRelated(): RelatedRecords {
-  return { elements: [], payments: [], people: [], customers: [], upsells: [], communications: [], members: [], suppliers: [], airports: [], airlines: [], rooms: [], cabins: [], passengers: [], ships: [], cruisePorts: [], locations: [], operators: [], brandTemplates: [] };
+  return { elements: [], payments: [], people: [], customers: [], upsells: [], communications: [], members: [], suppliers: [], airports: [], airlines: [], rooms: [], cabins: [], passengers: [], ships: [], cruisePorts: [], locations: [], operators: [], brandTemplates: [], loyaltyTransactions: [] };
 }
 
 function recordGraph(related: RelatedRecords): RecordGraph {
@@ -749,6 +771,7 @@ function mapElement(record: AirtableRecord, tripId: string, index: number, graph
     toCode: (recordText(toAirport, airportFields.iata) || safeText(value('toCode'))).toUpperCase() || null,
     carrierCode,
     carrierLogoUrl: firstAttachmentThumbnail(carrierRecord?.fields ? pick(carrierRecord.fields, airlineFields.logo) : undefined),
+    ...(kind === 'flight' ? terminals(value('departureTerminal'), value('arrivalTerminal'), safeText(value('notes')) || null) : { departureTerminal: null, arrivalTerminal: null, terminalSource: null }),
     arrivesNextDay: kind === 'flight' && Boolean(dateString(value('start')) && dateString(value('end')) && dateString(value('start')) !== dateString(value('end'))),
     packageIncluded: truthy(value('package')),
     termsUrl: safeWebUrl(value('termsUrl')),
@@ -853,7 +876,20 @@ function resolveProtectionMode(selection: string, hasFlight: boolean, isGlobal: 
   return hasFlight ? 'agent_single_contract' : 'not_applicable';
 }
 
-function mapPayments(booking: AirtableRecord, records: AirtableRecord[], stage: string, tripId: string, mintReady: boolean, allowCustom: boolean) {
+/** Stages at which a booking's normal payments and "pay another amount" may be offered. */
+export const BOOKED_PAYMENT_STAGES: readonly TripSnapshot['stage'][] = ['confirmed', 'countdown', 'prep', 'departure', 'travelling', 'returning', 'home', 'past'];
+
+/**
+ * Whether any payment may be taken at this stage. A quotation takes none until it has been accepted online, and then
+ * only its deposit; the legacy "Show Pay Now on Quotation" field is deliberately ignored.
+ */
+export function paymentStageAllows(stage: string, quotationAccepted: boolean): boolean {
+  return (BOOKED_PAYMENT_STAGES as readonly string[]).includes(stage) || (stage === 'quote' && quotationAccepted);
+}
+
+export function mapPayments(booking: AirtableRecord, allRecords: AirtableRecord[], stage: string, tripId: string, mintReady: boolean, allowCustom: boolean, quotationAccepted = false, pointsByTransaction = new Map<string, number>()) {
+  // Scheme-funding rows (Payment Type "Loyalty Redemption") are between the scheme and the member: never shown.
+  const records = allRecords.filter((record) => !isSchemeFunding(pick(record.fields, paymentFields.type)));
   // Missing currency means the business default (GBP, as in the PHP plugin); a value that isn't a currency makes the
   // booking-level figures unavailable rather than silently relabelling them.
   const bookingCode = currencyCode(pick(booking.fields, bookingFields.currency));
@@ -872,9 +908,11 @@ function mapPayments(booking: AirtableRecord, records: AirtableRecord[], stage: 
     const local = /^\s*resort\s+payment\s*$/i.test(type);
     const refund = /refund/i.test(type) || (signed ?? 0) < 0;
     const paymentUrl = safeUrl(value('link'));
+    const pointsPayment = isPointsPayment(value('method'));
+    const redeemed = pointsPayment ? recordIds(value('loyaltyTransactions')).reduce<number | null>((sum, id) => { const found = pointsByTransaction.get(id); return found === undefined ? sum : (sum ?? 0) + found; }, null) : null;
     const status: PaymentItem['status'] = refund ? 'refund' : local ? 'local' : paid ? 'paid' : dueDate && dueDate < now ? 'overdue' : 'outstanding';
     // Only offer "Pay now" when the amount is known and in a currency the payment provider supports.
-    const payable = !paid && !local && !refund && signed !== null && signed > 0 && (PAYABLE_CURRENCIES as readonly string[]).includes(itemCurrency) && (stage !== 'quote' || truthy(value('showOnQuote')));
+    const payable = !pointsPayment && !paid && !local && !refund && signed !== null && signed > 0 && (PAYABLE_CURRENCIES as readonly string[]).includes(itemCurrency) && paymentStageAllows(stage, quotationAccepted);
     return {
       id: publicChildId(tripId, record.id || String(index), 'pay'),
       label: safeText(value('customerType')) || (paid ? 'Payment received' : 'Payment due'),
@@ -882,8 +920,15 @@ function mapPayments(booking: AirtableRecord, records: AirtableRecord[], stage: 
       completedDate: dateString(value('completed')),
       canPay: payable && (Boolean(paymentUrl) || mintReady),
       actionUrl: payable ? paymentUrl : null,
+      kind: pointsPayment ? 'points' as const : 'money' as const,
+      points: redeemed,
     };
   }).sort((a, b) => (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999'));
+  // An accepted quotation offers its deposit only (the same choice as the deposit link made at acceptance).
+  if (stage === 'quote') {
+    const deposit = items.find((item) => item.canPay && /deposit/i.test(item.label)) ?? items.find((item) => item.canPay);
+    for (const item of items) if (item !== deposit) { item.canPay = false; item.actionUrl = null; }
+  }
   const alternativeType = safeText(pick(booking.fields, bookingFields.alternativeCurrencyType)).toUpperCase();
   const alternativeAmount = alternativeType === 'USD' ? moneyValue(pick(booking.fields, bookingFields.usdAmount)) : alternativeType === 'EUR' ? moneyValue(pick(booking.fields, bookingFields.eurAmount)) : null;
   const balance = bookingMoney('balance');
@@ -900,8 +945,9 @@ function mapPayments(booking: AirtableRecord, records: AirtableRecord[], stage: 
     alternativeCurrency: truthy(pick(booking.fields, bookingFields.alternativeCurrency)) && ['USD', 'EUR'].includes(alternativeType) && alternativeAmount !== null
       ? { currency: alternativeType, amount: alternativeAmount }
       : null,
+    perPerson: bookingMoney('pricePerPerson'),
     // Paying "another amount" needs a known balance in a supported currency.
-    customPayments: { enabled: mintReady && allowCustom && !['quote_expired', 'closed', 'cancelled', 'past'].includes(stage) && balance !== null && balance > 0 && (PAYABLE_CURRENCIES as readonly string[]).includes(currency), minimum: 0.01, maximum: Math.min(100_000, Math.max(0, balance ?? 0)) },
+    customPayments: { enabled: mintReady && allowCustom && (BOOKED_PAYMENT_STAGES as readonly string[]).includes(stage) && stage !== 'past' && balance !== null && balance > 0 && (PAYABLE_CURRENCIES as readonly string[]).includes(currency), minimum: 0.01, maximum: Math.min(100_000, Math.max(0, balance ?? 0)) },
   };
 }
 
@@ -954,7 +1000,7 @@ function mapQuotationReview(
 
 function mapDocuments(records: AirtableRecord[], itinerary: ItineraryItem[], tripId: string, stage: string, accessScope: AccessScope, versions: { confirmation: string; invoice: string }, updatedAt: string): TripDocument[] {
   const isQuote = stage === 'quote' || stage === 'quote_expired';
-  const documents: TripDocument[] = [document(`${tripId}:confirmation`, isQuote ? 'Trip quotation' : 'Booking confirmation', 'Full itinerary and important information', 'confirmation', 'confirmation', versions.confirmation, updatedAt)];
+  const documents: TripDocument[] = [document(`${tripId}:confirmation`, isQuote ? 'Your quotation (PDF)' : 'Booking confirmation', 'Full itinerary and important information', 'confirmation', 'confirmation', versions.confirmation, updatedAt)];
   if (accessScope === 'primary_customer' && !isQuote) {
     documents.push(document(`${tripId}:invoice`, 'Booking invoice', 'Your booking costs and payment history', 'invoice', 'invoice', versions.invoice, updatedAt));
   }

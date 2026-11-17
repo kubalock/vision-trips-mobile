@@ -109,49 +109,50 @@
             <button type="button" class="vt-accept-card__secondary" (click)="downloadDocument('acceptance')"><vt-icon name="download" [size]="18" /> Download acceptance receipt</button>
           </section>
         } @else if (currentTrip.quotation.canAccept) {
-          <section class="vt-accept-card" aria-labelledby="accept-title">
-            <header class="vt-lower-section__header"><p>Ready to book?</p><h2 id="accept-title">Review and accept this quotation</h2></header>
-            <p class="vt-accept-card__lead">Open each section, read it to the end and confirm it. Accepting doesn’t confirm the booking — your travel agent does that after checking with the suppliers.</p>
-            <div class="vt-accept-progress" aria-live="polite">
-              <span class="vt-accept-progress__label">{{ acceptanceConfirmations().length }} of {{ currentTrip.quotation.reviewSections.length }} sections confirmed</span>
-              <span class="vt-accept-progress__bar" aria-hidden="true"><span [style.width.%]="currentTrip.quotation.reviewSections.length ? acceptanceConfirmations().length / currentTrip.quotation.reviewSections.length * 100 : 0"></span></span>
-            </div>
+          <section class="vt-accept-card" id="accept-quotation" aria-labelledby="accept-title">
+            <header class="vt-lower-section__header"><p>Ready to book?</p><h2 id="accept-title">Accept this quotation</h2></header>
+            <p class="vt-accept-card__lead">The key information and terms are below — open any section to read it. Accepting doesn’t confirm the booking: your travel agent does that after checking with the suppliers.</p>
             @if (signedOut()) {
-              <vt-sign-in-again action="review and accept this quotation" [brandName]="currentTrip.brand.name" [showHelp]="true" (help)="getNewTripLink()" />
+              <vt-sign-in-again action="accept this quotation" [brandName]="currentTrip.brand.name" [showHelp]="true" (help)="getNewTripLink()" />
             } @else {
             <form class="vt-accept-form" (submit)="acceptQuotation($event)">
               <div class="vt-accept-list">
                 @for (section of currentTrip.quotation.reviewSections; track section.id; let index = $index) {
-                  <details class="vt-accept-item vt-read" [class.is-read]="acceptanceSectionsOpened().includes(section.id)" [class.is-confirmed]="acceptanceConfirmations().includes(section.id)" (toggle)="markAcceptanceSectionOpened(section.id, $event)">
+                  <details class="vt-accept-item" [class.is-read]="acceptanceSectionsOpened().includes(section.id)" (toggle)="markAcceptanceSectionOpened(section.id, $event)">
                     <summary>
-                      <span class="vt-accept-item__status" aria-hidden="true">@if (acceptanceConfirmations().includes(section.id)) { <vt-icon name="check" [size]="16" /> } @else { {{ index + 1 }} }</span>
-                      <span class="vt-accept-item__title"><span>{{ section.title }}</span><small>{{ acceptanceConfirmations().includes(section.id) ? 'Confirmed' : acceptanceSectionsOpened().includes(section.id) ? 'Read — please confirm' : 'Not read yet' }}</small></span>
+                      <span class="vt-accept-item__status" aria-hidden="true">@if (acceptanceSectionsOpened().includes(section.id)) { <vt-icon name="check" [size]="16" /> } @else { {{ index + 1 }} }</span>
+                      <span class="vt-accept-item__title"><span>{{ section.title }}</span><small>{{ acceptanceSectionsOpened().includes(section.id) ? 'Opened' : 'Tap to read' }}</small></span>
                       <span class="vt-faq-item__chevron" aria-hidden="true"><vt-icon name="chevron-down" [size]="18" /></span>
                     </summary>
-                    <div class="vt-accept-item__body vt-read__body" (scroll)="checkAcceptanceSectionScroll(section.id, $event)">
+                    <div class="vt-accept-item__body">
                       <p class="vt-accept-item__intro">{{ section.introduction }}</p>
                       @if (section.items.length) { <ul class="vt-accept-item__list">@for (item of section.items; track item) { <li>{{ item }}</li> }</ul> }
                       @if (section.links.length) { <ul class="vt-accept-item__links">@for (link of section.links; track link.url) { <li><a [href]="link.url" target="_blank" rel="noopener">{{ link.label }} <vt-icon name="external" [size]="14" /></a></li> }</ul> }
-                      <p class="vt-accept-item__end">End of section</p>
-                      <label class="vt-accept-item__confirm" [class.is-disabled]="!acceptanceSectionsOpened().includes(section.id)">
-                        <input type="checkbox" [checked]="acceptanceConfirmations().includes(section.id)" [disabled]="!acceptanceSectionsOpened().includes(section.id)" (change)="toggleAcceptanceConfirmation(section.id, $event)">
-                        <span>I have read and understood this section@if (!acceptanceSectionsOpened().includes(section.id)) { <small>Scroll to the end of the section to confirm</small> }</span>
-                      </label>
                     </div>
                   </details>
                 }
               </div>
               <fieldset class="vt-accept-signature">
-                <legend>Your details</legend>
-                <label for="acceptance-name"><span>Full name</span><input id="acceptance-name" autocomplete="name" [value]="acceptanceName()" (input)="updateAcceptanceName($event)"></label>
-                <label for="acceptance-email"><span>Email address</span><input id="acceptance-email" type="email" autocomplete="email" [value]="acceptanceEmail()" (input)="updateAcceptanceEmail($event)"></label>
+                <legend>Sign to accept</legend>
+                <label for="acceptance-name"><span>Your full name</span><input id="acceptance-name" autocomplete="name" maxlength="120" [value]="acceptanceName()" (input)="updateAcceptanceName($event)"></label>
+                <p class="vt-accept-card__email" id="acceptance-email-note">
+                  @if (acceptanceUseOtherEmail()) { Your receipt will go to the address below. } @else { We’ll send your receipt to {{ acceptanceEmailHint() || 'your account email' }}. }
+                  <button type="button" class="vt-link-button" (click)="toggleAcceptanceOtherEmail()" [attr.aria-expanded]="acceptanceUseOtherEmail()">{{ acceptanceUseOtherEmail() ? 'Use my account email' : 'Use a different email' }}</button>
+                </p>
+                @if (acceptanceUseOtherEmail()) {
+                  <label for="acceptance-email"><span>Receipt email (for the signer)</span><input id="acceptance-email" type="email" autocomplete="email" maxlength="254" [value]="acceptanceEmail()" (input)="updateAcceptanceEmail($event)" aria-describedby="acceptance-email-note"></label>
+                }
+                <label class="vt-accept-item__confirm" for="acceptance-agree">
+                  <input id="acceptance-agree" type="checkbox" [checked]="acceptanceAgreed()" (change)="toggleAcceptanceAgreed($event)">
+                  <span>I confirm the traveller names and details are correct, and I accept this quotation and its booking conditions, including the cancellation terms.</span>
+                </label>
               </fieldset>
-              <p class="vt-accept-card__legal">By selecting Accept quotation, you confirm that the information is correct and agree to the applicable booking conditions and cancellation terms.</p>
-              <button type="submit" class="vt-accept-card__submit" [disabled]="submitting() || !online() || !acceptanceName().trim() || !acceptanceEmail().trim() || acceptanceConfirmations().length !== currentTrip.quotation.requiredConfirmations.length">{{ submitting() ? 'Recording your acceptance…' : online() ? 'Accept quotation and continue to deposit' : 'Connect to accept' }}</button>
+              <button type="submit" class="vt-accept-card__submit" [disabled]="submitting() || !online() || !acceptanceReady()">{{ submitting() ? 'Recording your acceptance…' : online() ? 'Accept and pay deposit' : 'Connect to accept' }}</button>
             </form>
             }
           </section>
         }
+        <app-trip-content-section [trip]="currentTrip" (watch)="openVideo.set($event)" (message)="messageAgent()" (accept)="goToAcceptance()" />
         @if (!isReturned(currentTrip.stage) && (currentTrip.timeline.nextItemTitle || currentTrip.timeline.daysUntilDeparture !== null)) {
           <section class="vt-home-info-card vt-home-up-next"><p class="vt-home-info-card__kicker">Up next</p><h2>{{ currentTrip.timeline.nextItemTitle || 'Your trip is coming up' }}</h2>@if (currentTrip.timeline.nextItemDate) { <p class="vt-home-up-next__date">{{ currentTrip.timeline.nextItemDate | europeanDate }}{{ currentTrip.timeline.nextItemTime ? ' at ' + currentTrip.timeline.nextItemTime : '' }}</p> }@if (currentTrip.timeline.daysUntilDeparture !== null && currentTrip.timeline.daysUntilDeparture > 0) { <p class="vt-home-up-next__countdown">{{ currentTrip.timeline.daysUntilDeparture }} days until departure</p> }</section>
         }
@@ -162,12 +163,32 @@
         @if (currentTrip.travellers.length) {
           <section class="vt-travellers-card" aria-labelledby="travellers-title">
             <header class="vt-lower-section__header"><p>Your party</p><h2 id="travellers-title">{{ isReturned(currentTrip.stage) ? 'Travelled' : 'Travelling' }}</h2></header>
-            <ul class="vt-traveller-list">@for (traveller of currentTrip.travellers; track traveller.name) { <li><span class="vt-traveller-list__icon"><vt-icon name="user" [size]="16" /></span><span>{{ traveller.name }}</span></li> }</ul>
+            <ul class="vt-traveller-list">
+              @for (traveller of currentTrip.travellers; track traveller.name) {
+                <li class="vt-traveller">
+                  <span class="vt-traveller-list__icon"><vt-icon name="user" [size]="16" /></span>
+                  <div class="vt-traveller__body">
+                    <strong>{{ traveller.name }}@if (traveller.isLead) { <span class="vt-traveller__lead">Lead traveller</span> }</strong>
+                    @if (travellerFacts(traveller); as facts) { @if (facts) { <small>{{ facts }}</small> } }
+                    @if (traveller.passportEnding || traveller.passportExpiry) { <small>Passport{{ traveller.passportEnding ? ' ' + traveller.passportEnding : '' }}{{ traveller.passportExpiry ? ' · expires ' + (traveller.passportExpiry | europeanDate) : '' }}</small> }
+                    @if (traveller.passportWarning) { <p class="vt-traveller__warning" role="note"><vt-icon name="alert" [size]="14" /> This passport expires within six months of your return. Many countries need six months’ validity — check before you travel.</p> }
+                    @if (traveller.meals.length) { <small>Meals: {{ traveller.meals.join(', ') }}</small> }
+                    @if (traveller.assistance.length) { <small>Requests: {{ traveller.assistance.join(', ') }}</small> }
+                  </div>
+                </li>
+              }
+            </ul>
+            @if (currentTrip.accessScope === 'primary_customer') {
+              <div class="vt-travellers-card__actions">
+                <button type="button" class="vt-link-button" (click)="enquireAboutExtra('I think something in the traveller details is wrong: ')">Spot a mistake? Tell us</button>
+                <button type="button" class="vt-link-button" (click)="selectView('account')">Update passports and details</button>
+              </div>
+            }
           </section>
         }
         <app-external-content-section [content]="externalContent()" [loading]="externalContentLoading()" [failed]="externalContentFailed()" (refresh)="loadExternalContent()" />
         <app-destinations-section [destinations]="displayedDestinations()" />
-        <app-extras-section [extras]="currentTrip.extras" (enquire)="selectView('help')" />
+        <app-extras-section [extras]="currentTrip.extras" (enquire)="askAboutExtra($event)" (book)="bookExtra($event)" />
         <app-communications-section [communications]="currentTrip.communications" />
         <app-brand-support-section [trip]="currentTrip" />
       } @else if (activeView() === 'itinerary') {
@@ -182,12 +203,36 @@
             @if (status.tone !== 'info') { <button type="button" class="vt-status-card__close" aria-label="Dismiss" data-engagement="Dismiss payment status" (click)="dismissPaymentStatus()"><vt-icon name="close" [size]="18" /></button> }
           </section>
         }
-        @if (currentTrip.payments; as payments) { @if (signedOut() && hasPayableItems(payments)) { <vt-sign-in-again action="make a payment" [brandName]="currentTrip.brand.name" [showHelp]="true" (help)="getNewTripLink()" /> }<app-payments-section [payments]="payments" [openingPaymentId]="openingPaymentId()" [actionsDisabled]="signedOut() || !online()" (pay)="openPayment($event)" (payCustom)="openCustomPayment($event)" /> } @else { <p class="mt-5 rounded-2xl bg-white p-5 text-slate-600 ring-1 ring-slate-200">Payment information is only available to the lead customer.</p> }
+        @if (currentTrip.payments; as payments) { @if (signedOut() && hasPayableItems(payments)) { <vt-sign-in-again action="make a payment" [brandName]="currentTrip.brand.name" [showHelp]="true" (help)="getNewTripLink()" /> }<app-payments-section [payments]="payments" [stage]="currentTrip.stage" [awaitingAcceptance]="currentTrip.stage === 'quote' && !currentTrip.quotation.accepted" [travellerCount]="currentTrip.summary.totalTravellers" [loyalty]="currentTrip.loyalty" [openingPaymentId]="openingPaymentId()" [actionsDisabled]="signedOut() || !online()" (accept)="goToAcceptance()" (pay)="openPayment($event)" (payCustom)="openCustomPayment($event)" /> } @else { <p class="mt-5 rounded-2xl bg-white p-5 text-slate-600 ring-1 ring-slate-200">Payment information is only available to the lead customer.</p> }
       } @else if (activeView() === 'documents') {
         <app-documents-section [documents]="currentTrip.documents" [statuses]="documentStatuses()" [downloadingId]="downloadingDocumentId()" [failure]="documentFailure()" (download)="downloadDocument($event)" />
       } @else if (activeView() === 'help') {
         <section class="vt-section vt-help-card vt-help-contact" aria-labelledby="help-title">
           <header class="vt-help-heading"><p class="vt-page-kicker vt-help-kicker">We’re here for you</p><h1 id="help-title" class="vt-page-title">Help</h1><p class="vt-page-description">Contact {{ currentTrip.support.companyName }}</p></header>
+          @if (currentTrip.agent; as agent) {
+            <article class="vt-agent-card" aria-label="Your travel expert">
+              <span class="vt-agent-card__avatar" aria-hidden="true">{{ (agent.name || agent.branchName || '?').charAt(0) }}</span>
+              <div class="vt-agent-card__body">
+                <strong>{{ agent.name || 'Your travel expert' }}</strong>
+                @if (agent.branchName) { <small>Your travel expert at {{ agent.branchName }}</small> }
+                <div class="vt-agent-card__links">
+                  @if (agent.branchPhone) { <a [href]="agent.branchPhone"><vt-icon name="phone" [size]="15" /> Call the branch</a> }
+                  @if (agent.email) { <a [href]="'mailto:' + agent.email"><vt-icon name="mail" [size]="15" /> {{ agent.email }}</a> }
+                  <button type="button" class="vt-link-button" (click)="messageAgent()"><vt-icon name="message" [size]="15" /> Message {{ agent.name?.split(' ')?.[0] || 'us' }}</button>
+                </div>
+              </div>
+            </article>
+          }
+          <form class="vt-callback" (submit)="requestCallback($event)">
+            <label for="callback-time"><span>Call me back</span>
+              <span class="vt-help-select"><select id="callback-time" [value]="callbackTime()" (change)="callbackTime.set($any($event.target).value)" [disabled]="callbackState() === 'sending'">
+                <option value="anytime">Any time</option><option value="morning">Morning (9am–12pm)</option><option value="afternoon">Afternoon (12–5pm)</option><option value="evening">Early evening (5–7pm)</option>
+              </select></span>
+            </label>
+            <button type="submit" class="vt-primary-action" [disabled]="callbackState() === 'sending' || callbackState() === 'sent' || !online() || signedOut()">{{ callbackState() === 'sending' ? 'Sending…' : callbackState() === 'sent' ? 'Request sent' : 'Request a call' }}</button>
+            @if (callbackState() === 'sent') { <p role="status" class="vt-callback__status">Thanks — we’ve asked {{ currentTrip.agent?.name?.split(' ')?.[0] || 'your travel expert' }} to call you.</p> }
+            @if (callbackState() === 'failed') { <p role="alert" class="vt-callback__status">We couldn’t send that. <button type="button" class="vt-link-button" (click)="requestCallback()">Try again</button></p> }
+          </form>
           <div class="vt-help-actions">
             @if (currentTrip.support.phone) {
               <a class="vt-contact-card" [href]="'tel:' + currentTrip.support.phone">
@@ -229,6 +274,9 @@
         <section class="vt-section vt-help-card vt-help-protection"><span class="vt-help-protection__icon"><vt-icon name="shield" [size]="24" /></span><div class="vt-help-protection__body"><h2>Financial protection</h2><p class="vt-help-intro">{{ currentTrip.protection.summary }}</p>@if (currentTrip.protection.holderName) { <p class="vt-help-protection__holder">Holder: {{ currentTrip.protection.holderName }}</p> }</div></section>
       } @else {
         <app-customer-account-section [signedOut]="signedOut()" (help)="getNewTripLink()" [account]="customerAccount()" [loading]="accountLoading()" [saving]="accountSaving()" [savedNotice]="accountNotice()" [openingTripId]="openingAccountTripId()" [error]="accountError()" [saveError]="accountSaveError()" (retry)="retryAccount()" (save)="saveCustomerPreferences($event)" (openTrip)="openCustomerAccountTrip($event)" [savedTripIds]="savedTripIds()" [brandName]="currentTrip.brand.name" (signOut)="signOutAccount()" (removeAll)="signOutDevice()" />
+        @if (!signedOut() && currentTrip.accessScope === 'primary_customer') {
+          <app-traveller-details-section [travellers]="travellerProfiles()" [loading]="travellersLoading()" [error]="travellersError()" [saving]="travellerSaving()" [savedId]="travellerSavedId()" [saveError]="travellerSaveError()" (save)="saveTravellerProfile($event)" (reload)="loadTravellerProfiles()" (contactAgent)="enquireAboutExtra('Please update the details for ' + $event + ': ')" />
+        }
       }
 
       <nav class="vt-nav" aria-label="Trip navigation">
@@ -332,3 +380,7 @@
     }
   </main>
 </div>
+@if (openVideo(); as video) { <vt-video-viewer [video]="video" (closed)="openVideo.set(null)" /> }
+@if (trip() && activeView() !== 'help' && !openVideo()) {
+  <button type="button" class="vt-message-fab" (click)="messageAgent()"><vt-icon name="message" [size]="18" /> Message {{ trip()?.agent?.name?.split(' ')?.[0] || 'us' }}</button>
+}

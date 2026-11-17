@@ -1,9 +1,11 @@
+import { maskEmail as sharedMaskEmail } from '@vision-trips/contracts';
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
-import type { CustomerAccount, CustomerAccountTrip, CustomerPreferences, OpenCustomerAccountTripResponse, UpdateCustomerPreferencesResponse } from '@vision-trips/contracts';
+import type { CustomerAccount, CustomerAccountTrip, CustomerLoyalty, LoyaltyTransaction, CustomerPreferences, OpenCustomerAccountTripResponse, UpdateCustomerPreferencesResponse } from '@vision-trips/contracts';
 import { createHmac } from 'node:crypto';
 import { AirtableService, type AirtableRecord } from '../airtable/airtable.service.js';
 import { SessionsService, type SessionPrincipal } from '../sessions/sessions.service.js';
-import { bookingFields, customerFields, firstAttachmentThumbnail, firstString, pick, strings, truthy } from '../trips/field-map.js';
+import { bookingFields, customerFields, dateString, firstAttachmentThumbnail, firstString, loyaltyTransactionFields, memberFields, moneyValue, pick, strings, truthy } from '../trips/field-map.js';
+import { points } from '../trips/trip-extras.js';
 import { resolveStage } from '../trips/stage.js';
 import { publicTripId, SNAPSHOT_CACHE_MS, TripsService } from '../trips/trips.service.js';
 import { accountBookings, accountTripGrant, customersTable, resolveCustomerIdentity, type AccountBooking } from './customer-identity.js';
@@ -26,8 +28,13 @@ export class CustomerAccountService {
     const identity = await resolveCustomerIdentity(this.airtable, principal);
     const bookings = await accountBookings(this.airtable, principal, identity);
     const preferences = accountPreferences(identity.root, identity.members);
+    const loyalty = await this.loyalty(principal, identity.root, bookings.map((booking) => booking.record)).catch((error: unknown) => {
+      // Missing or broken loyalty links give an empty state, never a failed account page.
+      this.logger.warn(`Loyalty could not be read: ${error instanceof Error ? error.message : 'unknown error'}`);
+      return null;
+    });
     return {
-      emailHint: maskEmail(identity.email), preferences,
+      emailHint: maskEmail(identity.email), preferences, loyalty, vip: truthy(pick(identity.root.fields, customerFields.vip)),
       airportOptions: [...new Set([...AIRPORTS, ...preferences.preferredAirports])].sort(), monthOptions: MONTHS,
       trips: bookings.map((booking) => this.trip(principal, booking.record)).sort(compareTrips),
     };
@@ -82,6 +89,45 @@ export class CustomerAccountService {
     return { snapshot, session: this.sessions.issue(accountTripGrant(principal, identity, target)) };
   }
 
+  /**
+   * The verified Customer's loyalty, only when the current booking's member has its scheme enabled. Transactions are
+   * read only through the verified Customer's own links in this base (never by email, never grouped duplicates), and
+   * a transaction whose own Customer link names someone else is dropped. Trip names come only from this account's
+   * bookings; nothing else is fetched to name them.
+   */
+  private async loyalty(principal: SessionPrincipal, root: AirtableRecord, accountRecords: AirtableRecord[]): Promise<CustomerLoyalty | null> {
+    const current = await this.airtable.record(principal.baseId, process.env.AIRTABLE_BOOKINGS_TABLE?.trim() || 'Bookings', principal.recordId);
+    const memberId = strings(pick(current.fields, bookingFields.member))[0];
+    if (!memberId) return null;
+    const member = await this.airtable.record(principal.baseId, 'Members', memberId);
+    if (!truthy(pick(member.fields, memberFields.loyaltyEnabled))) return null;
+    const ids = strings(pick(root.fields, customerFields.loyaltyTransactions)).filter((id) => /^rec[A-Za-z0-9]{14}$/.test(id)).slice(0, 100);
+    const records = ids.length ? await this.airtable.records(principal.baseId, process.env.AIRTABLE_LOYALTY_TABLE?.trim() || 'Loyalty Transactions', ids).catch(() => []) : [];
+    const tripNames = new Map(accountRecords.map((record) => [record.id, firstString(pick(record.fields, bookingFields.name)) || firstString(pick(record.fields, bookingFields.reference))]));
+    const transactions: LoyaltyTransaction[] = records.flatMap((record) => {
+      const owners = strings(pick(record.fields, loyaltyTransactionFields.customer));
+      if (owners.length && !owners.includes(root.id)) return [];
+      const type = transactionType(firstString(pick(record.fields, loyaltyTransactionFields.type)));
+      const value = points(pick(record.fields, loyaltyTransactionFields.points));
+      if (!type || value === null) return [];
+      const bookingId = strings(pick(record.fields, loyaltyTransactionFields.booking))[0];
+      return [{
+        id: createHmac('sha256', process.env.VISION_LINK_SECRET?.trim() || 'local').update(`loyalty:${principal.baseId}:${record.id}`).digest('base64url').slice(0, 18),
+        type, points: value, date: dateString(pick(record.fields, loyaltyTransactionFields.date)),
+        tripName: bookingId ? tripNames.get(bookingId) || null : null,
+        description: firstString(pick(record.fields, loyaltyTransactionFields.notes)).replace(/\s+/g, ' ').slice(0, 200) || null,
+      }];
+    }).sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
+    return {
+      available: points(pick(root.fields, customerFields.pointsAvailable)),
+      availableValue: moneyValue(pick(root.fields, customerFields.pointsValue)),
+      currency: 'GBP',
+      lifetime: points(pick(root.fields, customerFields.pointsLifetime)),
+      expiresAt: dateString(pick(root.fields, customerFields.pointsExpiry)),
+      transactions,
+    };
+  }
+
   private assertLead(principal: SessionPrincipal): void { if (principal.fellowTraveller) throw new ForbiddenException('Customer account settings are only available to the lead customer.'); }
   private trip(principal: SessionPrincipal, record: AirtableRecord): CustomerAccountTrip {
     const departure = date(pick(record.fields, bookingFields.departure)); const returns = date(pick(record.fields, bookingFields.return));
@@ -107,7 +153,7 @@ export function accountPreferences(root: AirtableRecord, members: AirtableRecord
 }
 function cleanList(value: unknown, maximum: number, allowed: string[], label: string): string[] { if (!Array.isArray(value)) throw new BadRequestException(`Choose valid ${label}.`); const clean = [...new Set(value.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean))]; if (clean.length > maximum || clean.some((item) => !allowed.includes(item))) throw new BadRequestException(`Choose valid ${label}.`); return clean; }
 function date(value: unknown): string | null { const text = firstString(value); return /^\d{4}-\d{2}-\d{2}/.test(text) ? text.slice(0, 10) : null; }
-function maskEmail(value: string): string { const [local = '', domain = ''] = value.split('@'); return local && domain ? `${local.slice(0, 2)}${'*'.repeat(Math.max(2, local.length - 2))}@${domain}` : ''; }
+function maskEmail(value: string): string { return sharedMaskEmail(value) ?? ''; }
 /**
  * The open trip first; then upcoming and in-progress trips (soonest first, undated last), quotations, and finally
  * past, closed or cancelled trips (most recent first).
@@ -123,4 +169,13 @@ function tripGroup(trip: CustomerAccountTrip): number {
   if (['home', 'past', 'closed', 'cancelled'].includes(trip.status)) return 3;
   if (trip.status === 'quote' || trip.status === 'quote_expired') return 2;
   return 1;
+}
+
+function transactionType(value: string): LoyaltyTransaction['type'] | null {
+  const text = value.trim().toLowerCase();
+  if (text.startsWith('earn')) return 'earn';
+  if (text.startsWith('redeem')) return 'redeem';
+  if (text.startsWith('adjust')) return 'adjustment';
+  if (text.startsWith('expir')) return 'expiry';
+  return null;
 }

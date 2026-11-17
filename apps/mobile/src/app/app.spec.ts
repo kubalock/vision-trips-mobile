@@ -639,6 +639,61 @@ describe('App', () => {
       expect(app.session()?.refreshToken).toBe('tab-b-refresh');
     });
 
+    it('keeps the itinerary when extra content (places, weather, AI) fails', async () => {
+      const { app, api } = setup();
+      const withItinerary = parseTripSnapshot({ ...(minimalTrip() as object), itinerary: [{ id: 'itm_1', kind: 'flight', title: 'London Heathrow to Lisbon', departureTerminal: 'T5' }] });
+      app.trip.set(withItinerary);
+      vi.mocked(api.externalContent).mockRejectedValueOnce(new Error('provider timeout'));
+      const view = app as unknown as { loadExternalContent: () => Promise<void>; externalContentFailed: () => boolean; trip: () => { itinerary: Array<{ title: string; departureTerminal?: string | null }> } };
+
+      await view.loadExternalContent();
+
+      expect(view.externalContentFailed()).toBe(true);
+      expect(view.trip().itinerary).toEqual([expect.objectContaining({ title: 'London Heathrow to Lisbon', departureTerminal: 'T5' })]);
+    });
+
+    describe('accepting a quotation', () => {
+      type Accepting = {
+        acceptanceName: { set: (v: string) => void }; acceptanceAgreed: { set: (v: boolean) => void };
+        acceptanceUseOtherEmail: { set: (v: boolean) => void }; acceptanceEmail: { set: (v: string) => void };
+        acceptanceReady: () => boolean; acceptQuotation: (event: Event) => Promise<void>;
+      };
+      const quote = () => parseTripSnapshot({ ...(minimalTrip() as object), stage: 'quote', quotation: { status: 'available', canAccept: true, requiredConfirmations: [], reviewSections: [{ id: 'package', title: 'Your trip', introduction: 'x', items: [], links: [] }] }, capabilities: { acceptQuotation: true } });
+      const response = { accepted: true as const, acceptedAt: '2026-11-17T10:00:00Z', receiptAvailable: true as const, paymentUrl: null, notifications: { customer: 'sent' as const, agent: 'sent' as const } };
+
+      it('needs only the name and the one agreement — no section has to be opened — and sends no email by default', async () => {
+        const { app, api } = setup();
+        const view = app as unknown as Accepting;
+        app.trip.set(quote());
+        vi.spyOn(api, 'refreshTrip').mockResolvedValue(quote());
+        const accept = vi.spyOn(api, 'acceptQuotation').mockResolvedValue(response);
+        view.acceptanceName.set('Alex Traveller');
+        expect(view.acceptanceReady()).toBe(false);
+        view.acceptanceAgreed.set(true);
+        expect(view.acceptanceReady()).toBe(true);
+
+        await view.acceptQuotation(new Event('submit'));
+
+        expect(accept).toHaveBeenCalledWith({ name: 'Alex Traveller', agreed: true, openedSections: [] }, expect.any(String), expect.any(String));
+      });
+
+      it('sends a different email only as the signer address, and only when it is valid', async () => {
+        const { app, api } = setup();
+        const view = app as unknown as Accepting;
+        app.trip.set(quote());
+        vi.spyOn(api, 'refreshTrip').mockResolvedValue(quote());
+        const accept = vi.spyOn(api, 'acceptQuotation').mockResolvedValue(response);
+        view.acceptanceName.set('Sam Signer'); view.acceptanceAgreed.set(true); view.acceptanceUseOtherEmail.set(true);
+        view.acceptanceEmail.set('nope');
+        expect(view.acceptanceReady()).toBe(false);
+        view.acceptanceEmail.set('sam@example.com');
+
+        await view.acceptQuotation(new Event('submit'));
+
+        expect(accept.mock.calls[0]?.[0]).toEqual({ name: 'Sam Signer', agreed: true, openedSections: [], signerEmail: 'sam@example.com' });
+      });
+    });
+
     describe('switching trips', () => {
       const future = () => new Date(Date.now() + 86_400_000).toISOString();
       const saved = (tripId: string) => ({ snapshot: { ...(minimalTrip() as object), tripId }, session: { accessToken: `${tripId}-a`, accessExpiresAt: future(), refreshToken: `${tripId}-r`, refreshExpiresAt: future() }, savedAt: '2026-11-01T00:00:00Z' });
@@ -647,6 +702,17 @@ describe('App', () => {
         online: { set: (v: boolean) => void };
         messageSent: { set: (v: boolean) => void; (): boolean };
         acceptanceComplete: { set: (v: boolean) => void; (): boolean };
+        acceptanceAgreed: { set: (v: boolean) => void; (): boolean };
+        acceptanceUseOtherEmail: { set: (v: boolean) => void; (): boolean };
+        acceptanceEmail: { set: (v: string) => void; (): string };
+        acceptanceEmailHint: { set: (v: string | null) => void; (): string | null };
+        acceptanceSectionsOpened: { set: (v: string[]) => void; (): string[] };
+        openVideo: { set: (v: unknown) => void; (): unknown };
+        callbackState: { set: (v: string) => void; (): string };
+        travellerProfiles: { set: (v: unknown[]) => void; (): unknown[] };
+        travellerSaving: { set: (v: string | null) => void; (): string | null };
+        travellerSaveError: { set: (v: string) => void; (): string };
+        customerMessage: { set: (v: string) => void; (): string };
         customerAccount: { set: (v: unknown) => void; (): unknown };
         relatedQuotations: { set: (v: unknown[]) => void; (): unknown[] };
         externalContent: () => unknown;
@@ -662,6 +728,9 @@ describe('App', () => {
         const view = app as unknown as Switching;
         app.trip.set({ ...(minimalTrip() as object), tripId: 'trip-A' });
         view.messageSent.set(true); view.acceptanceComplete.set(true); view.customerAccount.set({ preferences: {} });
+        view.acceptanceAgreed.set(true); view.acceptanceUseOtherEmail.set(true); view.acceptanceEmail.set('other@example.com'); view.acceptanceEmailHint.set('a•••x@example.com'); view.acceptanceSectionsOpened.set(['terms']);
+        view.openVideo.set({ kind: 'file', url: 'https://x/v.mp4' }); view.callbackState.set('sent'); view.customerMessage.set('draft about trip A');
+        view.travellerProfiles.set([{ travellerId: 'tvl_a' }]); view.travellerSaving.set('tvl_a'); view.travellerSaveError.set('bad');
         view.relatedQuotations.set([{ id: 'q' }]); view.paymentAwaitingReturn = true; view.paymentReturnState.set('unchanged');
         view.online.set(false); // Opening offline avoids network calls; the reset is the same.
 
@@ -670,6 +739,17 @@ describe('App', () => {
         expect((app as unknown as { trip: () => { tripId: string } }).trip().tripId).toBe('trip-B');
         expect(view.messageSent()).toBe(false);
         expect(view.acceptanceComplete()).toBe(false);
+        expect(view.acceptanceAgreed()).toBe(false);
+        expect(view.acceptanceUseOtherEmail()).toBe(false);
+        expect(view.acceptanceEmail()).toBe('');
+        expect(view.acceptanceEmailHint()).toBeNull();
+        expect(view.acceptanceSectionsOpened()).toEqual([]);
+        expect(view.openVideo()).toBeNull();
+        expect(view.callbackState()).toBe('idle');
+        expect(view.customerMessage()).toBe('');
+        expect(view.travellerProfiles()).toEqual([]);
+        expect(view.travellerSaving()).toBeNull();
+        expect(view.travellerSaveError()).toBe('');
         expect(view.customerAccount()).toBeNull();
         expect(view.relatedQuotations()).toEqual([]);
         expect(view.paymentAwaitingReturn).toBe(false);

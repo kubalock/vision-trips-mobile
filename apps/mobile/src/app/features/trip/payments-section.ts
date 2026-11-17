@@ -1,6 +1,11 @@
 import { CurrencyPipe } from '@angular/common';
 import { Component, computed, input, output, signal } from '@angular/core';
-import type { PaymentSummary } from '@vision-trips/contracts';
+import { formatPoints, type PaymentSummary, type TripLoyalty, type TripStage } from '@vision-trips/contracts';
+
+function formatDay(date: string): string {
+  const value = new Date(`${date}T00:00:00Z`);
+  return Number.isNaN(value.getTime()) ? date : new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(value);
+}
 import { EuropeanDatePipe } from '../../shared/european-date.pipe';
 
 @Component({
@@ -17,6 +22,7 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
         <div class="vt-payment-summary__total">
           <span>Total trip price</span>
           <strong [class.vt-money--unavailable]="payments().total === null">{{ money(payments().total, payments().currency) }}</strong>
+          @if (perPerson() !== null) { <small class="vt-payment-summary__pp">{{ money(perPerson(), payments().currency) }} per person</small> }
         </div>
         <div class="vt-payment-summary__stats">
           <div>
@@ -37,6 +43,16 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
         </div>
       </section>
 
+      @if (loyalty(); as points) {
+        <section class="vt-payment-card vt-loyalty-card" aria-labelledby="loyalty-title">
+          <h2 id="loyalty-title"><span aria-hidden="true">★</span> Loyalty points @if (points.vip) { <span class="vt-vip-pill">VIP</span> }</h2>
+          @if (earnedLine(); as line) { <p>{{ line }}</p> }
+          @if (points.available !== null && points.available > 0) {
+            <p>You have <strong>{{ pointsLabel(points.available) }}</strong>@if (points.availableValue !== null && points.availableValue > 0) { (worth {{ money(points.availableValue, points.currency) }}) } to put towards {{ stage() === 'quote' ? 'this trip' : 'your next trip' }}.</p>
+          }
+        </section>
+      }
+
       <section class="vt-payment-card vt-payment-schedule" aria-labelledby="payment-schedule-title">
         <header class="vt-payment-card__heading">
           <div>
@@ -50,11 +66,20 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
             <li class="vt-pay" [class.is-paid]="payment.status === 'paid'" [class.is-overdue]="payment.status === 'overdue'" [class.is-refund]="payment.status === 'refund'" [class.is-resort]="payment.status === 'local'">
               <div class="vt-pay__main">
                 <span class="vt-pay__label">{{ payment.label }}</span>
-                <strong [class.vt-money--unavailable]="payment.amount === null">{{ money(payment.amount, payment.currency) }}</strong>
+                @if (payment.kind === 'points') {
+                  <strong>★ {{ payment.points !== null && payment.points !== undefined ? pointsLabel(payment.points) : 'Points' }}</strong>
+                } @else {
+                  <strong [class.vt-money--unavailable]="payment.amount === null">{{ money(payment.amount, payment.currency) }}</strong>
+                }
                 @if (payment.dueDate) { <span class="vt-pay__date">Due {{ payment.dueDate | europeanDate }}</span> }
               </div>
-              @if (payment.canPay) {
+              @if (awaitingAcceptance() && isFirstOutstanding(payment.id)) {
+                <!-- A quotation is never paid directly: the deposit is taken at the end of the acceptance. -->
+                <button type="button" class="vt-primary-action vt-pay__action" [disabled]="actionsDisabled()" (click)="accept.emit()">Accept and pay deposit</button>
+              } @else if (payment.canPay && !awaitingAcceptance()) {
                 <button type="button" class="vt-primary-action vt-pay__action" [disabled]="openingPaymentId() !== null || actionsDisabled()" (click)="pay.emit(payment.id)">{{ openingPaymentId() === payment.id ? 'Opening…' : 'Pay now' }}</button>
+              } @else if (payment.kind === 'points') {
+                <span class="vt-pay__status vt-pay__status--paid">Loyalty points</span>
               } @else {
                 <span class="vt-pay__status" [class.vt-pay__status--paid]="payment.status === 'paid'" [class.vt-pay__status--overdue]="payment.status === 'overdue'">{{ statusLabel(payment.status) }}</span>
               }
@@ -65,7 +90,7 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
         </ul>
       </section>
 
-      @if (payments().customPayments.enabled) {
+      @if (payments().customPayments.enabled && !awaitingAcceptance() && stage() !== 'quote') {
         <form class="vt-payment-card vt-custom-payment" (submit)="submitCustom($event)">
           <header>
             <h2>Pay another amount</h2>
@@ -87,7 +112,35 @@ export class PaymentsSection {
   readonly payments = input.required<PaymentSummary>();
   readonly openingPaymentId = input<string | null>(null);
   readonly actionsDisabled = input(false);
+  readonly stage = input<TripStage | null>(null);
+  /** True on a quotation the customer can still accept: no payment is offered, only "Accept and pay deposit". */
+  readonly awaitingAcceptance = input(false);
+  readonly travellerCount = input(0);
+  readonly loyalty = input<TripLoyalty | null | undefined>(null);
+  /** Wording follows the state; a missing points figure shows no line rather than "0 points". */
+  protected readonly earnedLine = computed(() => {
+    const loyalty = this.loyalty();
+    if (!loyalty || loyalty.pointsEarned === null || loyalty.pointsEarned <= 0) return null;
+    const points = formatPoints(loyalty.pointsEarned);
+    switch (loyalty.state) {
+      case 'quote': return `Book with us and earn ${points}.`;
+      case 'awarded': return `You earned ${points} on this trip.`;
+      case 'post_return': return `This trip earns you ${points}, which will be credited shortly.`;
+      default: return `This trip earns you ${points}, credited after you return${loyalty.eligibleFrom ? ` on ${formatDay(loyalty.eligibleFrom)}` : ''}.`;
+    }
+  });
+  readonly accept = output<void>();
   readonly pay = output<string>();
+  /** The booking's own figure, otherwise the total shared out; only with more than one traveller, never a made-up 0. */
+  protected readonly perPerson = computed(() => {
+    const own = this.payments().perPerson;
+    if (this.travellerCount() < 2) return null;
+    if (own !== null && own !== undefined) return own;
+    const total = this.payments().total;
+    return total !== null && total > 0 ? Math.round(total / this.travellerCount() * 100) / 100 : null;
+  });
+  protected isFirstOutstanding(id: string): boolean { return this.payments().items.find((item) => item.status === 'outstanding' || item.status === 'overdue')?.id === id; }
+  protected pointsLabel(points: number): string { return formatPoints(points); }
   readonly payCustom = output<number>();
   protected readonly customAmount = signal('');
   protected readonly validCustom = computed(() => { const amount = Number(this.customAmount()); return Number.isFinite(amount) && amount >= 0.01 && amount <= this.payments().customPayments.maximum; });

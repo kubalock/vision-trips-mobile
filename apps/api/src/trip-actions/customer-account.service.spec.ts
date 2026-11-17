@@ -92,7 +92,7 @@ describe('CustomerAccountService identity', () => {
     const result = await account.account(principal());
     expect(result.trips.map((trip) => trip.name).sort()).toEqual(['Japan', 'Lisbon', 'Quote']);
     expect(result.trips.some((trip) => trip.name === 'Impostor trip')).toBe(false);
-    expect(result.emailHint).toBe('gr***@example.com');
+    expect(result.emailHint).toBe('g•••e@example.com');
     // Preferences come from Grace alone, not merged with the same-email or secondary-email records.
     expect(result.preferences).toEqual({ emailMarketing: true, smsMarketing: false, postalMarketing: false, preferredAirports: ['Bristol Airport'], preferredMonths: [] });
     expect(airtable.list).not.toHaveBeenCalled(); // No email search at all.
@@ -159,7 +159,7 @@ describe('CustomerAccountService identity', () => {
       await expect(account.account(principal())).rejects.toMatchObject({ response: { code: 'account_group_too_large' } });
       expect(airtable.list.mock.calls[0][2]).toMatchObject({ maxRecords: 21 });
       delete tables[BASE_A].Customers['recEXTRA000000018'];
-      await expect(account.account(principal())).resolves.toMatchObject({ emailHint: 'gr***@example.com' });
+      await expect(account.account(principal())).resolves.toMatchObject({ emailHint: 'g•••e@example.com' });
     });
 
     it('opens a duplicate’s trip as the verified Customer, recording the duplicate only as the booking owner', async () => {
@@ -321,6 +321,37 @@ describe('RelatedQuotationsService identity', () => {
     expect((await quotations.list(principal({ customerRecordId: null, assurance: 'legacy' }))).quotations).toEqual([]);
     expect(airtable.list).not.toHaveBeenCalled();
     expect(airtable.record).not.toHaveBeenCalled();
+  });
+});
+
+describe('RelatedQuotationsService rules (PHP 2.0 alignment)', () => {
+  beforeEach(() => { process.env.VISION_LINK_SECRET = 'test-secret-at-least-32-characters'; });
+  afterEach(() => { delete process.env.VISION_LINK_SECRET; });
+
+  it('lists only real, unexpired Quotation-status bookings of the verified Customer, at most 12, with nights and per person', async () => {
+    const tables = world();
+    const quoteIds = Array.from({ length: 15 }, (_, index) => `recQUOTEMANY${String(index).padStart(5, '0')}`);
+    tables[BASE_A].Customers[GRACE].Trips = [LISBON, 'recQUOTEEXPIRED01', 'recQUOTEBLANK0001', 'recQUOTEIMPOSTOR', ...quoteIds];
+    tables[BASE_A].Bookings['recQUOTEEXPIRED01'] = booking('Expired', [GRACE], { Status: 'Quotation', 'Quotation Expiry': '2020-01-01' });
+    tables[BASE_A].Bookings['recQUOTEBLANK0001'] = booking('Blank status', [GRACE], { Status: '' });
+    tables[BASE_A].Bookings['recQUOTEIMPOSTOR'] = booking('Not linked back', [IMPOSTOR], { Status: 'Quotation' });
+    quoteIds.forEach((id, index) => { tables[BASE_A].Bookings[id] = booking(`Option ${index}`, [GRACE], { Status: 'Quotation', 'Quotation Expiry': '2099-01-01', 'Departure Date': `2099-02-${String(index + 1).padStart(2, '0')}`, 'Return Date': `2099-03-${String(index + 1).padStart(2, '0')}`, 'Total Price': 3000, 'Total Passengers': 2 }); });
+    const { quotations, airtable } = setup(tables);
+    const list = (await quotations.list(principal())).quotations;
+    expect(list).toHaveLength(12);
+    expect(list.map((quote) => quote.name)).not.toEqual(expect.arrayContaining(['Expired', 'Blank status', 'Not linked back', 'Impostor trip']));
+    expect(list[0]).toMatchObject({ name: 'Option 0', nights: 28, perPerson: 1500 });
+    expect(basesTouched(airtable)).toEqual(new Set([BASE_A]));
+    expect(airtable.list).not.toHaveBeenCalled();
+  });
+
+  it('never shows branch A quotations to the same IDs in branch B', async () => {
+    const tables = world();
+    tables[BASE_B].Bookings[LISBON] = booking('Branch B quote', [GRACE], { Status: 'Quotation', 'Quotation Expiry': '2099-01-01' });
+    const { quotations, airtable } = setup(tables);
+    const list = await quotations.list(principal({ baseId: BASE_B }));
+    expect(list.quotations.map((quote) => quote.name)).toEqual(['Branch B quote']);
+    expect(basesTouched(airtable)).toEqual(new Set([BASE_B]));
   });
 });
 

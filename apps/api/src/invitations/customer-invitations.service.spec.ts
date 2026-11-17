@@ -79,11 +79,11 @@ describe('CustomerInvitationsService', () => {
       const { service, store, email, airtable } = setup();
       const result = await service.create(request());
 
-      expect(createCustomerInvitationResponseSchema.parse(result)).toMatchObject({ status: 'sent', emailSent: true, duplicate: false, auditRecorded: true, destinationHint: 'gr***@example.com', scope: 'primary_customer' });
+      expect(createCustomerInvitationResponseSchema.parse(result)).toMatchObject({ status: 'sent', emailSent: true, duplicate: false, auditRecorded: true, destinationHint: 'g•••e@example.com', scope: 'primary_customer' });
       expect(result.url).toMatch(/^https:\/\/trips\.example\/trip\/vt_[A-Za-z0-9_-]{32}$/);
       for (const secret of [BASE, BOOKING, CUSTOMER, 'grace', 'example.com']) expect(result.url).not.toContain(secret);
       expect(email.sendInvitation).toHaveBeenCalledWith(expect.anything(), result.url, expect.any(Number), result.invitationId);
-      expect(airtable.addComment).toHaveBeenCalledWith(BASE, 'Bookings', BOOKING, expect.stringContaining('Customer App invitation emailed to gr***@example.com'));
+      expect(airtable.addComment).toHaveBeenCalledWith(BASE, 'Bookings', BOOKING, expect.stringContaining('Customer App invitation emailed to g•••e@example.com'));
 
       const token = tokenOf(result.url);
       const database = (store as unknown as { database: { prepare(sql: string): { all(): unknown[] } } }).database;
@@ -185,7 +185,7 @@ describe('CustomerInvitationsService', () => {
       const state = await service.resolve(tokenOf(url), []);
 
       expect(invitationStateSchema.parse(state)).toEqual(state);
-      expect(state).toMatchObject({ status: 'pending', verification: 'email_otp', destinationHint: 'gr***@example.com', trustedDevice: false, brand: { name: 'Example Travel' } });
+      expect(state).toMatchObject({ status: 'pending', verification: 'email_otp', destinationHint: 'g•••e@example.com', trustedDevice: false, brand: { name: 'Example Travel' } });
       expect(Object.keys(state).sort()).toEqual(['brand', 'destinationHint', 'expiresAt', 'otp', 'scope', 'status', 'trustedDevice', 'verification']);
       expect(JSON.stringify(state)).not.toMatch(/Lisbon|grace@|rec[A-Z]|app[A-Z]/);
       expect(trips.snapshot).not.toHaveBeenCalled();

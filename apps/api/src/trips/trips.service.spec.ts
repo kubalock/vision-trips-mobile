@@ -126,7 +126,7 @@ describe('TripsService', () => {
     expect(snapshot.documents.find((document) => document.kind === 'guarantee')).toMatchObject({ title: 'Safe Seat Plan guarantee', downloadAction: 'guarantee' });
     expect(snapshot.documents.find((document) => document.kind === 'letter')).toMatchObject({ title: 'Welcome letter' });
     expect(snapshot.brand.profile.letterTemplates[0]).toMatchObject({ name: 'Welcome letter', subject: 'Welcome aboard', body: 'Hello {{first_name}},\n\nYour trip is {{trip_name}}.' });
-    expect(snapshot.schemaVersion).toBe(3);
+    expect(snapshot.schemaVersion).toBe(4);
     expect(snapshot.experience).toMatchObject({ overview: 'A hand-picked Mediterranean journey.', agentName: 'Jamie Agent' });
     expect(snapshot.support).toMatchObject({ phone: '020 7946 0123', email: 'help@example.com', emergencyPhone: '07700 900123' });
     expect(snapshot.support.whatsappUrl).toBeNull();

@@ -43,28 +43,75 @@ describe('generated documents', () => {
 });
 
 describe('quotation acceptance', () => {
-  it('records acceptance fields and an audit comment without changing booking status', async () => {
+  const setup = (overrides: { quotation?: object; customer?: object } = {}) => {
     const sessions = { validateAccess: vi.fn().mockReturnValue({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false, customerRecordId: 'recCUSTOMERAAAAAA', assurance: 'otp' }) };
     const trips = { invalidate: vi.fn(), snapshot: vi.fn().mockResolvedValue({
-      stage: 'quote', version: 'v1', summary: { reference: 'VT-1' }, support: { email: null }, payments: { items: [] }, quotation: { canAccept: true, requiredConfirmations: ['package', 'terms'] },
+      stage: 'quote', version: 'v1', summary: { reference: 'VT-1' }, support: { email: null }, payments: { items: [] },
+      quotation: { canAccept: true, requiredConfirmations: [], ...overrides.quotation },
     }) };
-    const airtable = { updateRecord: vi.fn().mockResolvedValue({}), addComment: vi.fn().mockResolvedValue(undefined), record: vi.fn().mockResolvedValue({ id: 'recCUSTOMERAAAAAA', fields: { 'Primary Email': 'Alex@Example.com' } }) };
-    const controller = new TripActionsController(sessions as never, trips as never, airtable as never, {} as never, { send: vi.fn().mockResolvedValue({ customer: "local_preview", agent: "not_configured" }) } as never, { create: vi.fn() } as never, { link: vi.fn(), depositLink: vi.fn().mockResolvedValue(null) } as never);
+    const airtable = { updateRecord: vi.fn().mockResolvedValue({}), addComment: vi.fn().mockResolvedValue(undefined), record: vi.fn().mockResolvedValue({ id: 'recCUSTOMERAAAAAA', fields: { 'Primary Email': 'Alex@Example.com', ...overrides.customer } }) };
+    const notifications = { send: vi.fn().mockResolvedValue({ customer: 'local_preview', agent: 'not_configured' }) };
+    const mint = { link: vi.fn(), depositLink: vi.fn().mockResolvedValue('https://secure.mintpayments.com/pay/deposit') };
+    const controller = new TripActionsController(sessions as never, trips as never, airtable as never, {} as never, notifications as never, { create: vi.fn() } as never, mint as never);
+    const request = { ip: '127.0.0.1', get: vi.fn().mockReturnValue('test-agent') } as never;
+    const evidence = () => JSON.parse(airtable.updateRecord.mock.calls[0][3]['Quotation Acceptance Evidence'] as string);
+    return { controller, airtable, trips, notifications, mint, request, evidence };
+  };
 
-    const result = await controller.acceptQuotation('Bearer token', {
-      name: 'Alex Traveller', email: 'alex@example.com', agreed: true,
-      confirmations: ['package', 'terms'],
-    }, { ip: '127.0.0.1', get: vi.fn().mockReturnValue('test-agent') } as never);
-
-    expect(result.accepted).toBe(true);
+  it('accepts without any review section being opened, using the verified email by default', async () => {
+    const { controller, airtable, trips, notifications, request, evidence } = setup();
+    const result = await controller.acceptQuotation('Bearer token', { name: 'Alex Traveller', agreed: true }, request);
+    expect(result).toMatchObject({ accepted: true, paymentUrl: 'https://secure.mintpayments.com/pay/deposit' });
     expect(airtable.updateRecord).toHaveBeenCalledWith('appABCDEFGHIJKLMN', 'Bookings', 'recABCDEFGHIJKLMN', expect.objectContaining({
-      'Quotation Accepted': true,
-      'Quotation Accepted By': 'Alex Traveller <alex@example.com>',
-      'Quotation Accepted IP': '127.0.0.1',
+      'Quotation Accepted': true, 'Quotation Accepted By': 'Alex Traveller <alex@example.com>', 'Quotation Accepted IP': '127.0.0.1',
     }));
     expect(airtable.updateRecord.mock.calls[0][3]).not.toHaveProperty('Status');
-    expect(airtable.updateRecord.mock.calls[0][3]['Quotation Acceptance Evidence']).toContain('"confirmations":["package","terms"]');
+    expect(evidence()).toMatchObject({ email: 'alex@example.com', openedSections: [], signedInAs: { signerIsVerifiedCustomer: true } });
     expect(airtable.addComment).toHaveBeenCalledOnce();
+    expect(airtable.addComment.mock.calls[0][3]).toContain('Sections opened (not required): none');
+    expect(trips.invalidate).toHaveBeenCalledWith('appABCDEFGHIJKLMN', 'recABCDEFGHIJKLMN');
+    expect(notifications.send).toHaveBeenCalledWith(expect.anything(), { name: 'Alex Traveller', email: 'alex@example.com' }, expect.any(String));
+  });
+
+  it('records opened sections as evidence, keeping only known section IDs', async () => {
+    const { controller, request, evidence } = setup();
+    await controller.acceptQuotation('Bearer token', { name: 'Alex Traveller', agreed: true, openedSections: ['terms', 'package', 'recEVIL' as never] }, request);
+    expect(evidence().openedSections).toEqual(['package', 'terms']);
+  });
+
+  it('still requires the explicit agreement and the full name', async () => {
+    const { controller, airtable, request } = setup();
+    await expect(controller.acceptQuotation('Bearer token', { name: 'Alex Traveller', agreed: false }, request)).rejects.toMatchObject({ status: 400 });
+    await expect(controller.acceptQuotation('Bearer token', { name: 'Alex Traveller' }, request)).rejects.toMatchObject({ status: 400 });
+    await expect(controller.acceptQuotation('Bearer token', { name: ' A ', agreed: true }, request)).rejects.toMatchObject({ status: 400 });
+    expect(airtable.updateRecord).not.toHaveBeenCalled();
+  });
+
+  it('treats a different email only as the declared signer: identity and lookups stay on the verified Customer', async () => {
+    const { controller, airtable, notifications, request, evidence } = setup();
+    await controller.acceptQuotation('Bearer token', { name: 'Sam Signer', agreed: true, signerEmail: 'Sam@Other.example' }, request);
+    // The only Customer read is the session's own record, in its own base.
+    expect(airtable.record.mock.calls).toEqual([['appABCDEFGHIJKLMN', 'Customers', 'recCUSTOMERAAAAAA']]);
+    expect(evidence()).toMatchObject({ email: 'sam@other.example', signedInAs: { signerIsVerifiedCustomer: false } });
+    expect(notifications.send).toHaveBeenCalledWith(expect.anything(), { name: 'Sam Signer', email: 'sam@other.example' }, expect.any(String));
+    await expect(controller.acceptQuotation('Bearer token', { name: 'Sam Signer', agreed: true, signerEmail: 'not an email' }, request)).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('still accepts v3 clients that send email and confirmations', async () => {
+    const { controller, request, evidence } = setup();
+    await controller.acceptQuotation('Bearer token', { name: 'Alex Traveller', email: 'alex@example.com', agreed: true, confirmations: ['package'] }, request);
+    expect(evidence()).toMatchObject({ email: 'alex@example.com', openedSections: ['package'] });
+  });
+
+  it('refuses a quotation that is no longer acceptable', async () => {
+    const { controller, airtable, request } = setup({ quotation: { canAccept: false } });
+    await expect(controller.acceptQuotation('Bearer token', { name: 'Alex Traveller', agreed: true }, request)).rejects.toMatchObject({ status: 409 });
+    expect(airtable.updateRecord).not.toHaveBeenCalled();
+  });
+
+  it('shows the verified email masked on the acceptance form', async () => {
+    const { controller } = setup({ customer: { 'Primary Email': 'dorota@yahoo.com' } });
+    await expect(controller.acceptanceContext('Bearer token')).resolves.toEqual({ emailHint: 'd•••a@yahoo.com' });
   });
 
   it('rejects acceptance by a fellow traveller before reading or writing Airtable', async () => {

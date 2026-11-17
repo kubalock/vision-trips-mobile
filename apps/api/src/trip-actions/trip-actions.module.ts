@@ -9,10 +9,11 @@ import { PdfDocumentService } from './pdf-document.service.js';
 import { MintPaymentsService } from './mint-payments.service.js';
 import { RelatedQuotationsService } from './related-quotations.service.js';
 import { CustomerAccountService } from './customer-account.service.js';
+import { TravellerProfilesService } from './traveller-profiles.service.js';
 
 @Module({
   imports: [SessionsModule, InvitationsModule],
   controllers: [TripActionsController],
-  providers: [TripsService, AirtableService, AcceptanceNotificationsService, PdfDocumentService, MintPaymentsService, RelatedQuotationsService, CustomerAccountService],
+  providers: [TripsService, AirtableService, AcceptanceNotificationsService, PdfDocumentService, MintPaymentsService, RelatedQuotationsService, CustomerAccountService, TravellerProfilesService],
 })
 export class TripActionsModule {}

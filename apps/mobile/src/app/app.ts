@@ -1,9 +1,9 @@
-import { Component, HostListener, OnDestroy, OnInit, PendingTasks, computed, effect, inject, isDevMode, signal } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, PendingTasks, computed, effect, inject, isDevMode, signal, viewChild } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import { Network } from '@capacitor/network';
-import type { CustomerAccount, CustomerEngagementEvent, CustomerMessageTopic, CustomerPreferences, ExternalTripContent, InvitationAuthorized, LinkExchangeResponse, MobileSession, PaymentStatusResponse, RelatedQuotationSummary, TripDocument, TripSnapshot, TripStage } from '@vision-trips/contracts';
+import type { TravellerProfile, TravellerProfileUpdate, CallbackRequest, TravellerSummary, TripVideo, TripExtra, QuotationAcceptanceRequest, QuotationReviewSectionId, CustomerAccount, CustomerEngagementEvent, CustomerMessageTopic, CustomerPreferences, ExternalTripContent, InvitationAuthorized, LinkExchangeResponse, MobileSession, PaymentStatusResponse, RelatedQuotationSummary, TripDocument, TripSnapshot, TripStage } from '@vision-trips/contracts';
 import { DocumentTooLargeError, isResponseFormatError, VisionApiService } from './core/api/vision-api.service';
 import { SavedTripsStore, type SavedTrip } from './core/storage/saved-trips.store';
 import { BrandAssetsStore } from './core/storage/brand-assets.store';
@@ -45,9 +45,12 @@ type TripRefreshState = 'idle' | 'refreshing' | 'fresh' | 'stale' | 'offline' | 
 type Appearance = 'light' | 'dark';
 type AppearancePreference = Appearance | 'system';
 
+import { TripContentSection } from './features/trip/trip-content-section';
+import { VideoViewer } from './shared/video-viewer';
+import { TravellerDetailsSection } from './features/account/traveller-details-section';
 @Component({
   selector: 'app-root',
-  imports: [BookingJourneySection, BrandSupportSection, CommunicationsSection, CustomerAccountSection, DestinationsSection, DocumentsSection, EuropeanDatePipe, ExtrasSection, ExternalContentSection, InvitationFlow, ItinerarySection, PaymentsSection, StageExperienceSection, VtIcon, VtLogoMark, VtSignInAgain],
+  imports: [BookingJourneySection, BrandSupportSection, CommunicationsSection, CustomerAccountSection, DestinationsSection, DocumentsSection, EuropeanDatePipe, ExtrasSection, ExternalContentSection, InvitationFlow, ItinerarySection, PaymentsSection, StageExperienceSection, TravellerDetailsSection, TripContentSection, VideoViewer, VtIcon, VtLogoMark, VtSignInAgain],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -84,10 +87,26 @@ export class App implements OnInit, OnDestroy {
   protected readonly savedInBrowser = !this.savedTrips.native;
   protected readonly activeView = signal<AppView>('home');
   protected readonly acceptanceName = signal('');
+  /** Optional declared signer/receipt address; empty means the verified account email. Never an identity. */
   protected readonly acceptanceEmail = signal('');
-  protected readonly acceptanceConfirmations = signal<string[]>([]);
-  protected readonly acceptanceSectionsOpened = signal<string[]>([]);
+  protected readonly acceptanceUseOtherEmail = signal(false);
+  protected readonly acceptanceAgreed = signal(false);
+  /** The verified customer's email, masked by the API (null until loaded or when it couldn't be read). */
+  protected readonly acceptanceEmailHint = signal<string | null>(null);
+  /** Review sections the customer opened: recorded as evidence, never required. */
+  protected readonly acceptanceSectionsOpened = signal<QuotationReviewSectionId[]>([]);
   protected readonly acceptanceComplete = signal(false);
+  /** The agent's video, open in the viewer (only after the customer taps Watch). */
+  protected readonly openVideo = signal<TripVideo | null>(null);
+  protected readonly travellerProfiles = signal<TravellerProfile[]>([]);
+  protected readonly travellersLoading = signal(false);
+  protected readonly travellersError = signal('');
+  protected readonly travellerSaving = signal<string | null>(null);
+  protected readonly travellerSavedId = signal<string | null>(null);
+  protected readonly travellerSaveError = signal('');
+  private readonly travellerDetails = viewChild(TravellerDetailsSection);
+  protected readonly callbackTime = signal<CallbackRequest['preferredTime']>('anytime');
+  protected readonly callbackState = signal<'idle' | 'sending' | 'sent' | 'failed'>('idle');
   protected readonly acceptanceNotice = signal('');
   protected readonly messageTopic = signal<CustomerMessageTopic>('itinerary');
   protected readonly customerMessage = signal('');
@@ -335,26 +354,25 @@ export class App implements OnInit, OnDestroy {
     this.acceptanceEmail.set((event.target as HTMLInputElement).value);
   }
 
-  protected toggleAcceptanceConfirmation(confirmation: string, event: Event): void {
-    const checked = (event.target as HTMLInputElement).checked;
-    this.acceptanceConfirmations.update((items) => checked ? [...items, confirmation] : items.filter((item) => item !== confirmation));
+  protected toggleAcceptanceAgreed(event: Event): void {
+    this.acceptanceAgreed.set((event.target as HTMLInputElement).checked);
   }
 
-  protected markAcceptanceSectionOpened(sectionId: string, event: Event): void {
-    const details = event.target as HTMLDetailsElement;
-    if (!details.open) return;
-    requestAnimationFrame(() => {
-      const body = details.querySelector<HTMLElement>('.vt-read__body');
-      if (body && body.scrollHeight <= body.clientHeight + 2) this.markAcceptanceSectionRead(sectionId);
-    });
+  protected toggleAcceptanceOtherEmail(): void {
+    this.acceptanceUseOtherEmail.update((value) => !value);
+    if (!this.acceptanceUseOtherEmail()) this.acceptanceEmail.set('');
   }
 
-  protected checkAcceptanceSectionScroll(sectionId: string, event: Event): void {
-    const body = event.target as HTMLElement;
-    if (body.scrollTop + body.clientHeight >= body.scrollHeight - 4) this.markAcceptanceSectionRead(sectionId);
+  /** Whether the acceptance form can be submitted: a name, the one agreement and (only if chosen) a valid address. */
+  protected acceptanceReady(): boolean {
+    const otherEmail = this.acceptanceEmail().trim();
+    const emailOk = !this.acceptanceUseOtherEmail() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(otherEmail);
+    return this.acceptanceName().trim().length >= 2 && this.acceptanceAgreed() && emailOk;
   }
 
-  private markAcceptanceSectionRead(sectionId: string): void {
+  /** Opening a review section is recorded (for the acceptance evidence); reading to the end is not required. */
+  protected markAcceptanceSectionOpened(sectionId: QuotationReviewSectionId, event: Event): void {
+    if (!(event.target as HTMLDetailsElement).open) return;
     this.acceptanceSectionsOpened.update((items) => items.includes(sectionId) ? items : [...items, sectionId]);
   }
 
@@ -367,7 +385,9 @@ export class App implements OnInit, OnDestroy {
     this.error.set('');
     const generation = this.tripGeneration;
     try {
-      const acceptance = { name: this.acceptanceName().trim(), email: this.acceptanceEmail().trim(), agreed: true as const, confirmations: this.acceptanceConfirmations() };
+      if (!this.acceptanceReady()) return;
+      const signerEmail = this.acceptanceUseOtherEmail() ? this.acceptanceEmail().trim() : '';
+      const acceptance: QuotationAcceptanceRequest = { name: this.acceptanceName().trim(), agreed: true, openedSections: this.acceptanceSectionsOpened(), ...(signerEmail ? { signerEmail } : {}) };
       // One key for every attempt, kept after an unanswered one, so a retry can't record the acceptance twice.
       const result = await this.operationKeys.run(`accept:${currentTrip.tripId}`, acceptance, (operationId) =>
         this.withSession(currentSession, (accessToken) => this.api.acceptQuotation(acceptance, accessToken, operationId)));
@@ -378,7 +398,7 @@ export class App implements OnInit, OnDestroy {
       this.acceptanceNotice.set(result.notifications.customer === 'sent' ? 'A confirmation email has been sent to you.' : result.notifications.customer === 'local_preview' ? 'Email delivery is in local preview mode.' : 'Your acceptance was recorded, but the confirmation email could not be sent.');
       this.trip.update((trip) => trip ? {
         ...trip,
-        quotation: { ...trip.quotation, canAccept: false },
+        quotation: { ...trip.quotation, canAccept: false, accepted: true },
         capabilities: { ...trip.capabilities, acceptQuotation: false },
       } : trip);
       await this.refreshTripAfterWrite();
@@ -755,6 +775,7 @@ export class App implements OnInit, OnDestroy {
     this.switchNotice.set(switchMessage(previous, response.snapshot, nextIdentity, takesOver));
     void this.loadExternalContent();
     void this.loadRelatedQuotations();
+    void this.loadAcceptanceContext();
     await this.loadBrandLogo(response.snapshot, true);
     await this.syncCustomerNotifications(null, response.snapshot, generation);
     await this.refreshDocumentStatuses(response.snapshot, generation);
@@ -767,6 +788,16 @@ export class App implements OnInit, OnDestroy {
   }
 
   protected dismissSwitchNotice(): void { this.switchNotice.set(''); }
+
+  /** "Accept and pay deposit" anywhere on a quotation opens the one acceptance form (which takes the deposit). */
+  protected goToAcceptance(): void {
+    this.activeView.set('home');
+    setTimeout(() => {
+      const form = document.getElementById('accept-quotation');
+      form?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.getElementById('acceptance-name')?.focus({ preventScroll: true });
+    });
+  }
 
   private focusMain(): void {
     requestAnimationFrame(() => document.querySelector<HTMLElement>('#main-content')?.focus({ preventScroll: true }));
@@ -805,7 +836,7 @@ export class App implements OnInit, OnDestroy {
     this.showTripLibrary.set(false);
     this.activeView.set(view);
     this.trackEngagement('section_opened', view);
-    if (view === 'account') void this.loadCustomerAccount();
+    if (view === 'account') { void this.loadCustomerAccount(); void this.loadTravellerProfiles(); }
     const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
     window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
     requestAnimationFrame(() => document.querySelector<HTMLElement>('#main-content')?.focus({ preventScroll: true }));
@@ -845,6 +876,10 @@ export class App implements OnInit, OnDestroy {
   }
 
   private handleAndroidBack(): void {
+    if (this.openVideo()) {
+      this.openVideo.set(null); // Removing the player stops playback.
+      return;
+    }
     if (this.showNotifications()) {
       this.showNotifications.set(false);
       return;
@@ -928,6 +963,40 @@ export class App implements OnInit, OnDestroy {
     this.switchNotice.set('All trips and data were removed from this device.');
   }
 
+  protected loadTravellerProfiles = async (): Promise<void> => {
+    const session = this.session();
+    if (!session || !this.online() || this.trip()?.accessScope !== 'primary_customer') return;
+    const generation = this.tripGeneration;
+    this.travellersLoading.set(true); this.travellersError.set('');
+    try {
+      const response = await this.withSession(session, (accessToken) => this.api.travellerProfiles(accessToken));
+      if (this.isCurrentTrip(generation)) this.travellerProfiles.set(response.travellers);
+    } catch (error) {
+      if (this.isCurrentTrip(generation)) this.travellersError.set(this.apiError(error, 'Traveller details couldn’t be loaded.'));
+    } finally {
+      if (this.isCurrentTrip(generation)) this.travellersLoading.set(false);
+    }
+  };
+
+  protected async saveTravellerProfile(change: { travellerId: string; update: TravellerProfileUpdate }): Promise<void> {
+    const session = this.session();
+    if (!session || !this.online() || this.travellerSaving()) return;
+    const generation = this.tripGeneration;
+    this.travellerSaving.set(change.travellerId); this.travellerSavedId.set(null); this.travellerSaveError.set('');
+    try {
+      const result = await this.operationKeys.run(`traveller:${change.travellerId}`, change.update, (operationId) =>
+        this.withSession(session, (accessToken) => this.api.updateTravellerProfile(change.travellerId, change.update, accessToken, operationId)));
+      if (!this.isCurrentTrip(generation)) return;
+      this.travellerProfiles.update((list) => list.map((item) => item.travellerId === result.traveller.travellerId ? result.traveller : item));
+      this.travellerSavedId.set(change.travellerId);
+      this.travellerDetails()?.reset();
+    } catch (error) {
+      if (this.isCurrentTrip(generation)) this.travellerSaveError.set(this.apiError(error, 'Your changes weren’t saved. Please check them and try again.'));
+    } finally {
+      if (this.isCurrentTrip(generation)) this.travellerSaving.set(null);
+    }
+  }
+
   protected retryAccount(): void { void this.loadCustomerAccount(); }
 
   private async loadCustomerAccount(): Promise<void> {
@@ -948,6 +1017,52 @@ export class App implements OnInit, OnDestroy {
 
   protected enquireAboutExtra(message: string): void { this.customerMessage.set(message); this.messageTopic.set('itinerary'); this.messageSent.set(false); this.selectView('help'); }
 
+  /** The quick way to reach the agent from anywhere: the message form under Help. */
+  protected messageAgent(): void {
+    this.trackEngagement('action_clicked', 'message_agent');
+    this.messageSent.set(false);
+    this.selectView('help');
+    setTimeout(() => document.getElementById('message-topic')?.focus());
+  }
+
+  /** "Call me back": the preferred time is validated by the API and lands on the booking for the agent. */
+  protected async requestCallback(event?: Event): Promise<void> {
+    event?.preventDefault();
+    const session = this.session();
+    if (!session || !this.online() || this.callbackState() === 'sending') return;
+    const generation = this.tripGeneration;
+    const input: CallbackRequest = { preferredTime: this.callbackTime() };
+    this.callbackState.set('sending');
+    try {
+      const tripId = this.trip()?.tripId ?? 'trip';
+      await this.operationKeys.run(`callback:${tripId}`, input, (operationId) => this.withSession(session, (accessToken) => this.api.requestCallback(input, accessToken, operationId)));
+      if (this.isCurrentTrip(generation)) this.callbackState.set('sent');
+    } catch {
+      if (this.isCurrentTrip(generation)) this.callbackState.set('failed');
+    }
+  }
+
+  /** Age, nationality and DOB (only when the API sent it) for "Who's travelling". */
+  protected travellerFacts(traveller: TravellerSummary): string {
+    return [traveller.age !== null && traveller.age !== undefined ? `Age ${traveller.age}` : '', traveller.dateOfBirth ? `Born ${traveller.dateOfBirth.split('-').reverse().join('/')}` : '', traveller.nationality ?? ''].filter(Boolean).join(' · ');
+  }
+
+  /** "Ask us instead": a message about that exact extra, ready to send from Help. */
+  protected askAboutExtra(extra: TripExtra): void {
+    this.trackEngagement('action_clicked', `extra_enquiry:${extra.id}`);
+    this.enquireAboutExtra(`I'd like to add "${extra.name}" to my trip. Could you tell me more about it?`);
+  }
+
+  /**
+   * "Book this": opens the member's affiliate link as given. Engagement records only the extra's opaque ID; no
+   * customer detail is ever added to the external URL.
+   */
+  protected async bookExtra(choice: { extra: TripExtra; url: string }): Promise<void> {
+    this.trackEngagement('action_clicked', `extra_affiliate:${choice.extra.id}`);
+    try { await this.externalPages.open(choice.url); }
+    catch { this.error.set('We couldn’t open that page. Ask your travel agent instead.'); }
+  }
+
   protected async openRelatedQuotation(comparisonId: string): Promise<void> {
     const currentSession = this.session(); if (!currentSession || this.openingRelatedId()) return;
     const generation = this.tripGeneration;
@@ -958,6 +1073,17 @@ export class App implements OnInit, OnDestroy {
       await this.acceptAuthorized({ status: 'authorized', exchangeId: 'related', expiresAt: response.session.refreshExpiresAt, snapshot: response.snapshot, session: response.session });
     } catch (error) { this.error.set(this.apiError(error, 'We could not open that quotation. Refresh and try again.')); }
     finally { this.openingRelatedId.set(null); }
+  }
+
+  /** The masked account email for the acceptance form; only for a quotation the lead customer can accept. */
+  private async loadAcceptanceContext(): Promise<void> {
+    const generation = this.tripGeneration;
+    const currentSession = this.session();
+    if (!currentSession || !this.online() || !this.trip()?.quotation.canAccept) return;
+    try {
+      const context = await this.withSession(currentSession, (accessToken) => this.api.quotationAcceptanceContext(accessToken));
+      if (this.isCurrentTrip(generation)) this.acceptanceEmailHint.set(context.emailHint);
+    } catch { /* Unverified sessions are asked to confirm by email first; the form then says "your account email". */ }
   }
 
   private async loadRelatedQuotations(): Promise<void> {
@@ -1101,9 +1227,14 @@ export class App implements OnInit, OnDestroy {
     this.activeView.set('home');
     this.acceptanceName.set('');
     this.acceptanceEmail.set('');
+    this.acceptanceUseOtherEmail.set(false);
+    this.acceptanceAgreed.set(false);
+    this.acceptanceEmailHint.set(null);
     this.acceptanceComplete.set(false);
-    this.acceptanceConfirmations.set([]);
     this.acceptanceSectionsOpened.set([]);
+    this.openVideo.set(null);
+    this.callbackTime.set('anytime');
+    this.callbackState.set('idle');
     this.acceptanceNotice.set('');
     this.customerMessage.set('');
     this.messageSent.set(false);
@@ -1119,6 +1250,7 @@ export class App implements OnInit, OnDestroy {
     this.externalContentFailed.set(false);
     this.relatedQuotations.set([]);
     this.customerAccount.set(null); this.accountLoading.set(false); this.accountSaving.set(false); this.accountNotice.set(''); this.openingAccountTripId.set(null);
+    this.travellerProfiles.set([]); this.travellersLoading.set(false); this.travellersError.set(''); this.travellerSaving.set(null); this.travellerSavedId.set(null); this.travellerSaveError.set('');
     if (this.externalContentTimer) clearTimeout(this.externalContentTimer);
     this.notifications.set([]);
     this.showNotifications.set(false);
@@ -1149,7 +1281,7 @@ export class App implements OnInit, OnDestroy {
     await this.loadBrandLogo(snapshot, false);
     if (!this.isCurrentTrip(generation)) return;
     await this.syncCustomerNotifications(null, snapshot, generation);
-    if (refresh && this.isCurrentTrip(generation)) { void this.loadExternalContent(); void this.loadRelatedQuotations(); }
+    if (refresh && this.isCurrentTrip(generation)) { void this.loadExternalContent(); void this.loadRelatedQuotations(); void this.loadAcceptanceContext(); }
     await this.refreshDocumentStatuses(snapshot, generation);
     if (refresh && this.isCurrentTrip(generation)) {
       const refreshing = this.refreshCurrentTrip(false);

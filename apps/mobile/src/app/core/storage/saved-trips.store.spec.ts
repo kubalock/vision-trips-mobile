@@ -90,9 +90,9 @@ describe('SavedTripsStore schema checks', () => {
 
     const [trip] = await store.all();
 
-    expect(trip.snapshot.schemaVersion).toBe(3);
+    expect(trip.snapshot.schemaVersion).toBe(4);
     expect(trip.snapshot.itinerary).toEqual([]);
-    expect(((await secure.get('trip:trp_old')) as { snapshot: { schemaVersion: number } }).snapshot.schemaVersion).toBe(3);
+    expect(((await secure.get('trip:trp_old')) as { snapshot: { schemaVersion: number } }).snapshot.schemaVersion).toBe(4);
   });
 
   it('removes saved trips this version cannot read and keeps the rest', async () => {

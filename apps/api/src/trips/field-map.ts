@@ -41,6 +41,20 @@ export const bookingFields = {
   currency: ['Currency'],
   totalIncludingResort: ['Total Customer Cost including Resort Payments'], nextDueAmount: ['Next Customer Payment Amount'], nextDueDate: ['Next Customer Payment Due Date'], balanceDueDate: ['balanceDueDate'],
   alternativeCurrency: ['Alternative Currency'], alternativeCurrencyType: ['Alternative Currency Type'], usdAmount: ['USD Amount'], eurAmount: ['EUR Amount'],
+  // Added with PHP plugin 2.0 (every field optional; older bases simply don't have them).
+  loyaltyPoints: ['Loyalty_Total Points'],
+  /** A checkbox: the points have been credited (not a number of points). */
+  loyaltyAwarded: ['Loyalty Points Awarded'],
+  loyaltyEnabled: ['Loyalty Enabled'],
+  loyaltyReturnDate: ['Eligible Loyalty Return Date'],
+  loyaltyTransactions: ['Loyalty Transactions'],
+  pricePerPerson: ['Cost Per Person', 'Price Per Person', 'Per Person Price'],
+  included: ["What's Included", 'What’s Included', 'Whats Included', 'Inclusions', 'Included'],
+  notIncluded: ['Not Included', "What's Not Included", 'What’s Not Included', 'Exclusions', 'Excluded'],
+  videoMessage: ['Video Message', 'Video Message URL', 'Personal Video'],
+  videoWalkthrough: ['Video Walkthrough'],
+  /** Collaborator fields ({ id: usr…, name, email }); the first one holding a collaborator is the agent. */
+  agentUser: ['Travel Agent', 'Agent', 'Booking Owner', 'Owner', 'Consultant', 'Assigned To', 'Created by', 'Created By'],
 } as const;
 
 export const brandFields = {
@@ -57,6 +71,7 @@ export const brandFields = {
   instagram: ['Social Media: Instagram'], facebook: ['Social Media: Facebook'], linkedin: ['Social Media: LinkedIn'], x: ['Social Media: X/Twitter'], trustpilot: ['Trustpilot Reviews URL'], googleReviews: ['Google Reviews URL'], privacy: ['Privacy Policy'], complaints: ['Complaints'],
   phone: ['Customer | Telephone', 'Telephone', 'Phone'], email: ['Customer | Email Address', 'Email'], website: ['Customer | Website', 'Website'],
   emergencyPhone: ['Customer | Emergency Telephone'], outOfHoursLink: ['Out of Hours Link'], outOfHoursEmail: ['Out of Hours Email'],
+  whyHeader: ['Why Choose... Header', 'Why Choose… Header'], whySubheader: ['Why Choose... Subheader', 'Why Choose… Subheader'],
   mapsLink: ['Google Maps Link'], teamPhoto: ['Team Photo'], footerImages: ['Footer'], footerContent: ['Footer Content'],
   image1: ['Image #1'], image2: ['Image #2'], image3: ['Image #3'], image4: ['Image #4'], image5: ['Image #5'],
   image6: ['Image #6'], image7: ['Image #7'], image8: ['Image #8'], image9: ['Image #9'], image10: ['Image #10'],
@@ -87,6 +102,8 @@ export const elementFields = {
   carMake: ['Car Make'], carModel: ['Car Model'], carRegistration: ['Car Registration'], carType: ['Car Type'], childSeats: ['Child Seats'],
   fromCode: ['Dep. IATA Code'], toCode: ['Arr. IATA Code'], iata: ['IATA', 'IATA Code'], package: ['Package'], termsUrl: ['Customers T&Cs'],
   confirmationReceived: ['Confirmation Received'], ticketsReceived: ['Tickets Received'],
+  departureTerminal: ['Departure Terminal', 'Dep. Terminal', 'Dep Terminal', 'Outbound Terminal', 'Terminal'],
+  arrivalTerminal: ['Arrival Terminal', 'Arr. Terminal', 'Arr Terminal', 'Inbound Terminal'],
 } as const;
 
 export const supplierFields = { name: ['Name', 'Supplier Name(s)'], logo: ['Logo'], terms: ['Legal Notices URL'] } as const;
@@ -103,7 +120,7 @@ export const locationFields = {
   travelAdvice: ['FCDO Travel Advice'], image: ['Featured Image'], latitude: ['Latitude'], longitude: ['Longitude'],
 } as const;
 export const cruisePortFields = { day: ['Day'], port: ['Port'], description: ['Port (SinGS)', 'Overview'], arrive: ['Arrive'], depart: ['Depart'] } as const;
-export const upsellFields = { name: ['Name', 'Title'], description: ['Further Information', 'Description'], image: ['Upsell Featured Image', 'Featured Image', 'Image'], supplier: ['Supplier'] } as const;
+export const upsellFields = { affiliate: ['Affiliate Link', 'Link', 'URL'], name: ['Name', 'Title'], description: ['Further Information', 'Description'], image: ['Upsell Featured Image', 'Featured Image', 'Image'], supplier: ['Supplier'] } as const;
 export const communicationFields = { type: ['Type'], subject: ['Custom Subject', 'Subject', 'Name'], content: ['Custom Content', 'Email Template'], date: ['Sent At', 'Scheduled For', 'Date'], sent: ['Sent'], status: ['Status'], selfOnly: ['Send To Self Only'] } as const;
 export const brandTemplateFields = { name: ['Template Name', 'Name'], type: ['Template Type', 'Type'], letter: ['Letter'], subject: ['Subject'] } as const;
 
@@ -111,22 +128,34 @@ export const paymentFields = {
   amount: ['Amount'], usdAmount: ['USD Amount'], eurAmount: ['EUR Amount'], currency: ['Mint: Currency', 'Currency'], type: ['Payment Type'], customerType: ['Customer Payment Type'],
   status: ['Status'], due: ['Date Due', 'Payment Due'], completed: ['Payment Complete', 'Date Complete', 'Receipt Date'],
   link: ['Payment Link URL', 'Payment Link', 'Payment URL'], showOnQuote: ["Show 'Pay Now' on Quotation", 'Show Pay Now on Quotation'],
-  method: ['Payment Method', 'Method'], reference: ['paymentReference', 'Receipt Number', 'Payment Reference'],
+  // "Method" is the lookup that reads e.g. "Loyalty Redemption"; "Payment Method" is the link, so Method comes first.
+  method: ['Method', 'Payment Method'], loyaltyTransactions: ['Loyalty Transactions'], reference: ['paymentReference', 'Receipt Number', 'Payment Reference'],
 } as const;
 
 export const personFields = {
   name: ['Full Name', 'Name'], first: ['First Name', 'Preferred Name'], last: ['Last Name'], ssr: ['Special Service Request'], meal: ['Meal Request'],
   nationality: ['Nationality'], passportExpiry: ['Expiry Date'], insurance: ['Travel Insurance'],
+  dateOfBirth: ['Date of Birth'], age: ['Age'],
+  passportNumber: ['Passport Number'], passportIssuingCountry: ['Issuing Country'], passportIssueDate: ['Issue Date'],
+  licenceNumber: ['Driving License Number', 'Driving Licence Number'], licenceExpiry: ['Driving License Expiry Date', 'Driving Licence Expiry Date'],
+  nextOfKinName: ['NOK Name', 'Next of Kin Name'], nextOfKinPhone: ['NOK Phone Number', 'Next of Kin Phone'],
+  airlineLoyalty: ['Airline Loyalty'], cruiseLoyalty: ['Cruise Loyalty'],
+  customers: ['Customers', 'Customer'],
 } as const;
 
 export const customerFields = {
   name: ['Full Name', 'Name'], first: ['First Name'], last: ['Last Name'],
-  primaryEmail: ['Primary Email'], secondaryEmail: ['Secondary Email'], trips: ['Trips'],
+  primaryEmail: ['Primary Email'], secondaryEmail: ['Secondary Email'], trips: ['Trips', 'Bookings', 'Quotations & Bookings'],
+  vip: ['VIP Status', 'VIP'], pointsAvailable: ['Available Points', 'New Points Total'], pointsLifetime: ['Lifetime Points'],
+  pointsExpiry: ['Points Expiry Date'], pointsValue: ['Loyalty Value (£)'], loyaltyTransactions: ['Loyalty Transactions'],
+  people: ['Customers [People]', 'People'],
   marketingEmail: ['Email Marketing'], marketingEmailUnsubscribe: ['Email Marketing Unsubscribe'],
   marketingSms: ['SMS Marketing'], marketingPost: ['Postal Marketing'],
   preferredAirports: ['Preferred Departure Airport(s)'], preferredMonths: ['Preferred Travel Month(s)'],
 } as const;
-export const memberFields = { company: ['Company Name'], proposition: ['Proposition'], tAtolEnabled: ['T-ATOL Enabled'], tAtolNumber: ['T-ATOL Number'], number: ['Members | Number', 'Member Number'] } as const;
+export const memberFields = { loyaltyEnabled: ['Loyalty Scheme Enabled'], company: ['Company Name'], proposition: ['Proposition'], tAtolEnabled: ['T-ATOL Enabled'], tAtolNumber: ['T-ATOL Number'], number: ['Members | Number', 'Member Number'] } as const;
+
+export const loyaltyTransactionFields = { type: ['Transaction Type'], points: ['Points'], date: ['Date'], notes: ['Notes'], booking: ['Booking'], customer: ['Customer', 'Customers'] } as const;
 
 export function pick(fields: Record<string, unknown>, candidates: readonly string[]): unknown {
   for (const name of candidates) {

@@ -14,7 +14,7 @@ describe('MintPaymentsService', () => {
     const brand = { id: 'recBRANDABCDEFGHI', fields: { 'Mint | API Key': 'mint-secret', 'Mint | Business Unit': 'unit-1', 'Mint | Custom Payment Methods': ['CARD'], 'Webhook URL': 'https://airtable.com/app/webhook' } };
     const payment = { id: paymentRecordId, fields: {} };
     const airtable = { record: vi.fn(async (_base: string, table: string) => table === 'Bookings' ? booking : brand), records: vi.fn().mockResolvedValue([payment]) };
-    const trips = { snapshot: vi.fn().mockResolvedValue({ tripId, summary: { reference: 'VT-1', returnDate: '2027-01-01' }, payments: { currency: 'GBP', items: [{ id: paymentId, label: 'Deposit', amount: 250, currency: 'GBP', canPay: true, status: 'outstanding', actionUrl: null }] } }) };
+    const trips = { snapshot: vi.fn().mockResolvedValue({ tripId, stage: 'confirmed', quotation: { accepted: false }, summary: { reference: 'VT-1', returnDate: '2027-01-01' }, payments: { currency: 'GBP', items: [{ id: paymentId, label: 'Deposit', amount: 250, currency: 'GBP', canPay: true, status: 'outstanding', actionUrl: null }] } }) };
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ payment_link: { id: 'plink-1', url: 'https://secure.mintpayments.com/pay/1' } }), { status: 200 }));
     const service = new MintPaymentsService(airtable as never, trips as never);
 
@@ -27,7 +27,7 @@ describe('MintPaymentsService', () => {
 
   it('returns a stored payment link without reading Mint settings from Airtable', async () => {
     const airtable = { record: vi.fn(), records: vi.fn() };
-    const trips = { snapshot: vi.fn().mockResolvedValue({ tripId: 'trp_public', payments: { currency: 'GBP', items: [{ id: 'pay_1', label: 'Balance', amount: 498, currency: 'GBP', canPay: true, status: 'outstanding', actionUrl: 'https://pay.example/balance' }] } }) };
+    const trips = { snapshot: vi.fn().mockResolvedValue({ tripId: 'trp_public', stage: 'countdown', quotation: { accepted: false }, payments: { currency: 'GBP', items: [{ id: 'pay_1', label: 'Balance', amount: 498, currency: 'GBP', canPay: true, status: 'outstanding', actionUrl: 'https://pay.example/balance' }] } }) };
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
     const service = new MintPaymentsService(airtable as never, trips as never);
 
@@ -35,5 +35,38 @@ describe('MintPaymentsService', () => {
     expect(airtable.record).not.toHaveBeenCalled();
     expect(airtable.records).not.toHaveBeenCalled();
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  describe('a quotation cannot bypass acceptance', () => {
+    const quote = (accepted: boolean) => ({
+      tripId: 'trp_public', stage: 'quote', quotation: { accepted }, summary: { reference: 'VT-1', returnDate: '2027-01-01' },
+      // Even a stale or crafted snapshot offering "Pay now" on the quote is refused by the stage check.
+      payments: { currency: 'GBP', items: [{ id: 'pay_1', label: 'Deposit', amount: 250, currency: 'GBP', canPay: true, status: 'outstanding', actionUrl: 'https://pay.example/deposit' }], customPayments: { enabled: true, minimum: 0.01, maximum: 5000 } },
+    });
+    const booking = { id: 'recBOOKINGABCDEFG', fields: { 'Brands & Branches': ['recBRANDABCDEFGHI'], 'Bookings [Payments]': [], 'Mint | Booking ID': 'BK.123' } };
+    const airtable = () => ({ record: vi.fn(async (_base: string, table: string) => table === 'Bookings' ? booking : { id: 'recBRANDABCDEFGHI', fields: { 'Mint | API Key': 'k', 'Mint | Business Unit': 'u', 'Webhook URL': 'https://airtable.com/hook' } }), records: vi.fn().mockResolvedValue([]) });
+
+    it('refuses a scheduled payment on an unaccepted quotation', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+      const service = new MintPaymentsService(airtable() as never, { snapshot: vi.fn().mockResolvedValue(quote(false)) } as never);
+      await expect(service.link('appABCDEFGHIJKLMN', booking.id, 'pay_1')).rejects.toMatchObject({ status: 403 });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('refuses a custom amount on a quotation, accepted or not', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+      for (const accepted of [false, true]) {
+        const service = new MintPaymentsService(airtable() as never, { snapshot: vi.fn().mockResolvedValue(quote(accepted)) } as never);
+        await expect(service.link('appABCDEFGHIJKLMN', booking.id, 'custom', 100)).rejects.toMatchObject({ status: 403 });
+      }
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('gives no deposit link before acceptance, and the deposit once accepted', async () => {
+      const unaccepted = new MintPaymentsService(airtable() as never, { snapshot: vi.fn().mockResolvedValue(quote(false)) } as never);
+      await expect(unaccepted.depositLink('appABCDEFGHIJKLMN', booking.id)).resolves.toBeNull();
+      const accepted = new MintPaymentsService(airtable() as never, { snapshot: vi.fn().mockResolvedValue(quote(true)) } as never);
+      await expect(accepted.link('appABCDEFGHIJKLMN', booking.id, 'pay_1')).resolves.toMatchObject({ url: 'https://pay.example/deposit' });
+    });
   });
 });

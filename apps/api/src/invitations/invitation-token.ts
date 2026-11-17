@@ -1,3 +1,4 @@
+import { maskEmail as sharedMaskEmail } from '@vision-trips/contracts';
 import { ServiceUnavailableException } from '@nestjs/common';
 import { INVITATION_TOKEN_PATTERN } from '@vision-trips/contracts';
 import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
@@ -53,9 +54,9 @@ export function hashDestination(baseId: string, customerRecordId: string, email:
   return createHmac('sha256', otpSecret()).update(`vision-invitation-destination:${baseId}:${customerRecordId}:${email.trim().toLowerCase()}`).digest('hex');
 }
 
+/** Shared with the app: first and last letter only, fixed-length mask (see @vision-trips/contracts). */
 export function maskEmail(email: string): string | null {
-  const [name, domain] = email.split('@');
-  return name && domain ? `${name.slice(0, 2)}${'*'.repeat(Math.max(2, name.length - 2))}@${domain}` : null;
+  return sharedMaskEmail(email);
 }
 
 function otpSecret(): string {

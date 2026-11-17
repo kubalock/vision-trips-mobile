@@ -27,7 +27,16 @@ export function withLastKnownGood(next: TripSnapshot, previous: TripSnapshot | n
   if (has('messages')) kept.communications = previous.communications;
   if (has('destinations')) kept.destinations = previous.destinations;
   if (has('itinerary_details')) kept.itinerary = withEarlierDetails(next.itinerary, previous.itinerary);
-  if (has('agent')) kept.protection = previous.protection;
+  if (has('agent')) {
+    kept.protection = previous.protection;
+    // The member record (which says whether its loyalty scheme is on) wasn't read: keep the earlier loyalty state.
+    kept.loyalty = previous.loyalty ?? null;
+  }
+  if (has('loyalty') && next.payments && previous.payments) {
+    // Points behind loyalty payments couldn't be read: keep the earlier figures rather than showing none.
+    const earlier = new Map(previous.payments.items.map((item) => [item.id, item.points]));
+    kept.payments = { ...(kept.payments ?? next.payments), items: (kept.payments ?? next.payments).items.map((item) => item.kind === 'points' && (item.points === null || item.points === undefined) ? { ...item, points: earlier.get(item.id) ?? null } : item) };
+  }
   if (has('letters')) kept.brand = { ...next.brand, profile: { ...next.brand.profile, letterTemplates: previous.brand.profile.letterTemplates } };
   if (has('brand')) {
     kept.brand = previous.brand;
@@ -107,7 +116,7 @@ function isBlank(value: unknown): boolean {
 
 const SECTION_LABELS: Record<TripSection, string> = {
   itinerary_details: 'some itinerary details', destinations: 'destination guides', extras: 'extras', messages: 'messages',
-  agent: 'your travel expert’s details', letters: 'letters', brand: 'your travel company’s details',
+  agent: 'your travel expert’s details', letters: 'letters', brand: 'your travel company’s details', loyalty: 'loyalty points',
 };
 
 /** "Some itinerary details and messages couldn’t be refreshed." — or null when the trip refreshed completely. */

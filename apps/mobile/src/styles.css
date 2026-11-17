@@ -1837,6 +1837,9 @@ body.vt .vt-app .vt-account-danger button:active { transform: scale(.97); }
 .vt-app .vt-accept-card__lead { margin: 0; color: var(--ink-2); font-size: .86rem; line-height: 1.55; }
 .vt-app .vt-accept-card__note { margin: 8px 0 0; color: var(--ink-2); font-size: .8rem; }
 .vt-app .vt-accept-card__legal { margin: 0; color: var(--ink-3); font-size: .78rem; line-height: 1.5; }
+.vt-app .vt-accept-card__email { margin: 0; color: var(--ink-2); font-size: .9rem; line-height: 1.5; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.vt-app .vt-link-button { min-height: 44px; padding: 0 4px; border: 0; background: none; color: var(--accent-action); font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
+.vt-app .vt-link-button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; border-radius: 4px; }
 .vt-app .vt-accept-progress { display: grid; gap: 8px; }
 .vt-app .vt-accept-progress__label { color: var(--vt-accent-text); font-size: .78rem; font-weight: 750; }
 .vt-app .vt-accept-progress__bar { display: block; height: 6px; overflow: hidden; border-radius: var(--r-pill); background: var(--surface-2); }
@@ -2020,3 +2023,89 @@ body.vt .vt-app .vt-account-danger__icon { width: 40px; height: 40px; }
 .vt-app .vt-sign-in-again { display: block; margin: 14px 0 0; }
 .vt-app .vt-sign-in-again + app-payments-section { display: block; margin-top: 14px; }
 .vt-app .vt-sign-in-again .vt-status-card { margin: 0; }
+
+/* --- PHP 2.0 parity: quotation content, videos, loyalty, travellers, agent, related quotes ------------------ */
+.vt-app .vt-video-card { display: grid; grid-template-columns: 72px 1fr auto; align-items: center; gap: 12px; margin: 14px 0; padding: 10px 12px; border: 1px solid var(--card-border, var(--line)); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-card); }
+.vt-app .vt-video-card__thumb { position: relative; display: grid; place-items: center; width: 72px; height: 48px; overflow: hidden; border-radius: var(--r-s); background: var(--tint); color: var(--vt-accent-text); }
+.vt-app .vt-video-card__thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.vt-app .vt-video-card__play { position: relative; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: color-mix(in srgb, var(--surface) 88%, transparent); }
+.vt-app .vt-video-card__title { margin: 0; color: var(--ink); font-size: .88rem; font-weight: 600; line-height: 1.35; }
+.vt-app .vt-video-card__watch, .vt-app .vt-quick-message button, .vt-app .vt-message-fab { min-height: 44px; padding: 0 16px; border: 0; border-radius: var(--r-pill); background: var(--accent-action); color: var(--accent-action-ink); font: inherit; font-weight: 700; cursor: pointer; }
+.vt-app .vt-quick-message { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin: 14px 0; padding: 12px 14px; border-radius: var(--r); background: var(--tint); color: var(--ink-2); }
+.vt-app .vt-quick-message p { margin: 0; }
+.vt-app .vt-quick-message button, .vt-app .vt-message-fab { display: inline-flex; align-items: center; gap: 8px; }
+.vt-app .vt-message-fab { position: fixed; right: max(16px, env(safe-area-inset-right)); bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 30; box-shadow: var(--shadow-card); }
+.vt-app .vt-inclusions { margin: 14px 0; padding: 4px 16px; border: 1px solid var(--card-border, var(--line)); border-radius: var(--r); background: var(--surface); }
+.vt-app .vt-inclusions summary { display: flex; align-items: center; justify-content: space-between; min-height: 48px; font-weight: 700; cursor: pointer; list-style: none; }
+.vt-app .vt-inclusions h3 { margin: 12px 0 6px; font-size: .9rem; }
+.vt-app .vt-inclusions__list { display: grid; gap: 6px; margin: 0 0 12px; padding: 0; list-style: none; color: var(--ink-2); font-size: .9rem; }
+.vt-app .vt-inclusions__list--in li { display: flex; gap: 8px; align-items: flex-start; }
+.vt-app .vt-inclusions__list--in vt-icon { color: var(--ok); flex: none; margin-top: 2px; }
+.vt-app .vt-inclusions__list--out li::before { content: '–'; margin-right: 8px; color: var(--ink-3); }
+.vt-app .vt-inclusions__note { margin: 0 0 12px; color: var(--ink-3); font-size: .78rem; }
+.vt-app .vt-accept-strip { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: 14px 0; padding: 14px 16px; border-radius: var(--r); background: var(--surface-2); }
+.vt-app .vt-accept-strip > div:first-child { display: grid; gap: 2px; }
+.vt-app .vt-accept-strip span, .vt-app .vt-accept-strip small { color: var(--ink-3); font-size: .78rem; }
+.vt-app .vt-accept-strip strong { font-size: 1.2rem; }
+.vt-app .vt-accept-strip__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.vt-app .vt-video-viewer { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); }
+.vt-app .vt-video-viewer__backdrop { position: absolute; inset: 0; border: 0; background: rgb(0 0 0 / .78); cursor: pointer; }
+.vt-app .vt-video-viewer__panel { position: relative; width: min(960px, 100%); }
+.vt-app .vt-video-viewer__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; color: #fff; }
+.vt-app .vt-video-viewer__header h2 { margin: 0; font-size: 1rem; }
+.vt-app .vt-video-viewer__close { display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 50%; background: rgb(255 255 255 / .16); color: #fff; cursor: pointer; }
+.vt-app .vt-video-viewer__media { display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: var(--r-s); background: #000; }
+.vt-app .vt-video-viewer__error { color: #fff; }
+.vt-app .vt-loyalty-card h2, .vt-app .vt-loyalty-account h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 1rem; }
+.vt-app .vt-loyalty-card p { margin: 4px 0; color: var(--ink-2); }
+.vt-app .vt-vip-pill { padding: 2px 10px; border-radius: var(--r-pill); background: #c8a24a; color: #1b1405; font-size: .72rem; font-weight: 800; letter-spacing: .04em; }
+.vt-app .vt-loyalty-account__stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 0; }
+.vt-app .vt-loyalty-account__stats dt { color: var(--ink-3); font-size: .75rem; }
+.vt-app .vt-loyalty-account__stats dd { margin: 0; font-weight: 700; }
+.vt-app .vt-loyalty-account__history summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 600; }
+.vt-app .vt-loyalty-account__history ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.vt-app .vt-loyalty-account__history li { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+.vt-app .vt-loyalty-account__history small { grid-column: 1 / -1; color: var(--ink-3); }
+.vt-app .vt-loyalty-tx { font-size: .75rem; font-weight: 700; color: var(--ink-2); }
+.vt-app .vt-loyalty-tx--redeem, .vt-app .vt-loyalty-tx--expiry { color: var(--warn); }
+.vt-app .vt-traveller { display: flex; gap: 10px; align-items: flex-start; }
+.vt-app .vt-traveller__body { display: grid; gap: 2px; }
+.vt-app .vt-traveller__body small { color: var(--ink-3); }
+.vt-app .vt-traveller__lead { margin-left: 8px; padding: 1px 8px; border-radius: var(--r-pill); background: var(--tint); color: var(--vt-accent-text); font-size: .7rem; font-weight: 700; }
+.vt-app .vt-traveller__warning { display: flex; gap: 6px; margin: 4px 0; color: var(--warn); font-size: .8rem; }
+.vt-app .vt-travellers-card__actions { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 8px; }
+.vt-app .vt-agent-card { display: flex; gap: 12px; align-items: flex-start; margin: 0 0 14px; padding: 14px; border-radius: var(--r); background: var(--surface-2); }
+.vt-app .vt-agent-card__avatar { display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 50%; background: var(--vt-accent); color: #fff; font-weight: 800; font-size: 1.1rem; }
+.vt-app .vt-agent-card__body { display: grid; gap: 2px; min-width: 0; }
+.vt-app .vt-agent-card__body small { color: var(--ink-3); }
+.vt-app .vt-agent-card__links { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; }
+.vt-app .vt-agent-card__links a { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; color: var(--accent-action); font-weight: 600; overflow-wrap: anywhere; }
+.vt-app .vt-callback { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin: 0 0 14px; }
+.vt-app .vt-callback label { display: grid; gap: 4px; flex: 1 1 200px; font-weight: 600; }
+.vt-app .vt-callback__status { flex-basis: 100%; margin: 0; color: var(--ink-2); }
+.vt-app .vt-upsell-card__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
+.vt-app .vt-upsell-card__actions button { margin-top: 0; min-height: 44px; }
+.vt-app .vt-upsell-card__book { background: var(--accent-action) !important; color: var(--accent-action-ink) !important; border-color: transparent !important; }
+.vt-app .vt-quotation-grid--pair { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.vt-app .vt-quotation-rows { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.vt-app .vt-quotation-row { display: grid; grid-template-columns: 2fr 1.5fr 1fr auto; align-items: center; gap: 8px 12px; padding: 12px; border: 1px solid var(--line); border-radius: var(--r-s); background: var(--surface); }
+.vt-app .vt-quotation-row.is-current { border-color: var(--vt-accent); }
+.vt-app .vt-quotation-row__name { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.vt-app .vt-quotation-row__price { display: grid; text-align: right; }
+.vt-app .vt-quotation-row__price small { color: var(--ink-3); }
+.vt-app .vt-quotation-row .vt-quotation-card__action { min-height: 44px; }
+@media (max-width: 640px) {
+  .vt-app .vt-quotation-row { grid-template-columns: 1fr auto; }
+  .vt-app .vt-quotation-row__price { text-align: left; }
+}
+.vt-app .vt-traveller-details fieldset { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin: 12px 0; padding: 0; border: 0; }
+.vt-app .vt-traveller-details legend { margin-bottom: 6px; font-weight: 700; }
+.vt-app .vt-traveller-details label { display: grid; gap: 4px; font-size: .85rem; }
+.vt-app .vt-traveller-details input { min-height: 44px; padding: 0 12px; border: 1px solid var(--line-2); border-radius: var(--r-s); background: var(--surface); color: var(--ink); font: inherit; }
+.vt-app .vt-traveller-edit { border-top: 1px solid var(--line); padding: 4px 0; }
+.vt-app .vt-traveller-edit summary { display: grid; min-height: 52px; align-content: center; cursor: pointer; }
+.vt-app .vt-traveller-edit summary small, .vt-app .vt-traveller-edit__readonly { color: var(--ink-3); font-size: .82rem; }
+.vt-app .vt-traveller-edit__status { margin: 8px 0 0; }
+.vt-app .vt-payment-summary__pp { display: block; color: var(--ink-3); font-size: .8rem; }
+.vt-app .vt-el__codes { letter-spacing: .02em; }
+.vt-app .vt-show-more { min-height: 44px; margin-top: 8px; padding: 0 16px; border: 1px solid var(--line-2); border-radius: var(--r-pill); background: var(--surface); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; }

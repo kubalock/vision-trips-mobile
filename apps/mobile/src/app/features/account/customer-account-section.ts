@@ -1,13 +1,14 @@
 import { Component, computed, effect, input, linkedSignal, output, untracked } from '@angular/core';
-import type { CustomerAccount, CustomerAccountTrip, CustomerPreferences } from '@vision-trips/contracts';
+import { formatPoints, type LoyaltyTransactionType, type CustomerAccount, type CustomerAccountTrip, type CustomerPreferences } from '@vision-trips/contracts';
 import { stageLabel, tripDateRange } from '../../shared/trip-format';
 import { NgTemplateOutlet } from '@angular/common';
 import { VtIcon } from '../../shared/lucide-icon';
 import { VtSignInAgain } from '../../shared/sign-in-again';
+import { EuropeanDatePipe } from '../../shared/european-date.pipe';
 
 @Component({
   selector: 'app-customer-account-section',
-  imports: [NgTemplateOutlet, VtIcon, VtSignInAgain],
+  imports: [EuropeanDatePipe, NgTemplateOutlet, VtIcon, VtSignInAgain],
   template: `
     <ng-template #signOutControls>
         <section class="vt-account-danger" aria-labelledby="account-signout-title">
@@ -47,6 +48,28 @@ import { VtSignInAgain } from '../../shared/sign-in-again';
           <h1 id="account-title">Account and preferences</h1>
         </header>
 
+        @if (data.vip || data.loyalty) {
+          <section class="vt-account-card vt-loyalty-account" aria-labelledby="account-loyalty-title">
+            <h2 id="account-loyalty-title"><span aria-hidden="true">★</span> Loyalty @if (data.vip) { <span class="vt-vip-pill">VIP</span> }</h2>
+            @if (data.loyalty; as loyalty) {
+              <dl class="vt-loyalty-account__stats">
+                <div><dt>Available</dt><dd>{{ loyalty.available !== null ? points(loyalty.available) : 'Ask your travel agent' }}@if (loyalty.availableValue !== null && loyalty.availableValue > 0) { <small> · worth {{ money(loyalty.availableValue, loyalty.currency) }}</small> }</dd></div>
+                @if (loyalty.expiresAt) { <div><dt>Expire on</dt><dd>{{ loyalty.expiresAt | europeanDate }}</dd></div> }
+                @if (loyalty.lifetime !== null) { <div><dt>Lifetime</dt><dd>{{ points(loyalty.lifetime) }}</dd></div> }
+              </dl>
+              @if (loyalty.transactions.length) {
+                <details class="vt-loyalty-account__history">
+                  <summary>Points history ({{ loyalty.transactions.length }})</summary>
+                  <ul role="list">
+                    @for (tx of loyalty.transactions; track tx.id) {
+                      <li><span class="vt-loyalty-tx vt-loyalty-tx--{{ tx.type }}">{{ txLabel(tx.type) }}</span><strong>{{ tx.points > 0 ? '+' : '' }}{{ points(tx.points) }}</strong><small>{{ tx.date ? (tx.date | europeanDate) : '' }}{{ tx.tripName ? ' · ' + tx.tripName : '' }}{{ tx.description ? ' · ' + tx.description : '' }}</small></li>
+                    }
+                  </ul>
+                </details>
+              } @else { <p class="vt-account-intro">No points activity yet.</p> }
+            }
+          </section>
+        }
         <section class="vt-account-card" aria-labelledby="account-trips-title">
           <header class="vt-account-card__header">
             <span class="vt-account-card__icon"><vt-icon name="briefcase" [size]="21" /></span>
@@ -242,6 +265,9 @@ export class CustomerAccountSection {
     if (draft && this.dirty() && !this.saving()) this.save.emit(structuredClone(draft));
   }
   private edit(change: (draft: CustomerPreferences) => CustomerPreferences): void { this.draft.update((draft) => draft ? change(draft) : draft); }
+  protected points(value: number): string { return formatPoints(value); }
+  protected txLabel(type: LoyaltyTransactionType): string { return { earn: 'Earned', redeem: 'Redeemed', adjustment: 'Adjustment', expiry: 'Expired' }[type]; }
+  protected money(amount: number, currency: string): string { try { return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(amount); } catch { return `${amount.toFixed(2)} ${currency}`; } }
 }
 
 function samePreferences(a: CustomerPreferences, b: CustomerPreferences): boolean {

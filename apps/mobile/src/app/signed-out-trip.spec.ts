@@ -66,7 +66,7 @@ describe('signed-out saved trip', () => {
   it('replaces quotation acceptance with the note', async () => {
     const { element, text } = await render('quote', { quotation: { status: 'available', canAccept: true, requiredConfirmations: [], reviewSections: [] } });
     expect(element.querySelector('.vt-accept-form')).toBeNull();
-    expect(text()).toContain('To review and accept this quotation');
+    expect(text()).toContain('To accept this quotation');
   });
 
   it('shows the note on Account, keeping the device sign-out controls', async () => {

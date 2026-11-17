@@ -20,7 +20,10 @@ export interface AcceptanceEvidence {
   ip: string;
   userAgent: string;
   snapshotVersion: string;
+  /** v3 acceptances: the sections the customer confirmed. Empty since v4. */
   confirmations: string[];
+  /** v4: review sections the customer opened (recorded, never required). */
+  openedSections?: string[];
   reference: string;
   /** Absent on acceptances recorded before it was added. */
   signedInAs?: SignedInAs;

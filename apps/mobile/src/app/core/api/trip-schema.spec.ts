@@ -60,7 +60,7 @@ describe('trip snapshot schema', () => {
   });
 
   it('rejects schema versions it does not support', () => {
-    for (const schemaVersion of [4, 0, undefined, '3']) {
+    for (const schemaVersion of [5, 0, undefined, '3']) {
       expect(() => parseTripSnapshot(minimal({ schemaVersion }))).toThrow(expect.objectContaining({ reason: 'unsupported_version' }));
     }
   });
@@ -69,7 +69,7 @@ describe('trip snapshot schema', () => {
     const { snapshot, migrated } = decodeTripSnapshot(minimal({ schemaVersion: 1, freshness: { status: 'fresh', sourceUpdatedAt: '2026-01-01T00:00:00Z', nextRefreshAfter: '2030-01-01T00:00:00Z' } }));
 
     expect(migrated).toBe(true);
-    expect(snapshot.schemaVersion).toBe(3);
+    expect(snapshot.schemaVersion).toBe(4);
     expect(snapshot.freshness).toEqual({ status: 'stale', sourceUpdatedAt: '2026-01-01T00:00:00Z', nextRefreshAfter: null });
     expect(snapshot.quotation.reviewSections).toEqual([]);
   });
@@ -97,5 +97,48 @@ describe('extra trip content schema', () => {
 
   it('rejects a payload that is not an object', () => {
     expect(() => parseExternalContent('oops')).toThrow(TripDataError);
+  });
+});
+
+describe('cached v3 snapshots (before loyalty, travellers, terminals and quotation content)', () => {
+  const v3Quote = () => minimal({
+    schemaVersion: 3, stage: 'quote',
+    freshness: { status: 'fresh', sourceUpdatedAt: '2026-01-01T00:00:00Z', nextRefreshAfter: '2030-01-01T00:00:00Z' },
+    quotation: { status: 'available', expiresAt: null, canAccept: true, requiredConfirmations: ['package', 'terms'], reviewSections: [] },
+    payments: { currency: 'GBP', total: 1000, paid: 0, balance: 1000, totalIncludingResort: null, nextDueAmount: null, nextDueDate: null, balanceDueDate: null, alternativeCurrency: null,
+      items: [{ id: 'pay_1', label: 'Deposit', amount: 250, currency: 'GBP', status: 'outstanding', dueDate: null, completedDate: null, canPay: true, actionUrl: 'https://pay.example/legacy' }],
+      customPayments: { enabled: true, minimum: 0.01, maximum: 1000 } },
+    capabilities: { acceptQuotation: true, makePayment: true, shareWithTraveller: true, sendMessage: true },
+  });
+
+  it('upgrades without crashing, fills new optional fields without inventing numbers, and keeps it fresh', () => {
+    const { snapshot, migrated } = decodeTripSnapshot(v3Quote());
+    expect(migrated).toBe(true);
+    expect(snapshot.schemaVersion).toBe(4);
+    expect(snapshot.freshness.status).toBe('fresh');
+    expect(snapshot.loyalty).toBeNull();
+    expect(snapshot.agent).toBeNull();
+    expect(snapshot.content).toEqual({ included: [], notIncluded: [], includedSource: 'none', videoMessage: null, walkthrough: null });
+    expect(snapshot.payments?.perPerson).toBeNull();
+    expect(snapshot.payments?.items[0]?.points).toBeNull();
+  });
+
+  it('removes any direct payment a cached quotation still offered', () => {
+    const { snapshot } = decodeTripSnapshot(v3Quote());
+    expect(snapshot.payments?.items[0]).toMatchObject({ canPay: false, actionUrl: null });
+    expect(snapshot.payments?.customPayments.enabled).toBe(false);
+    expect(snapshot.capabilities.makePayment).toBe(false);
+    expect(snapshot.quotation.requiredConfirmations).toEqual([]);
+  });
+
+  it('drops non-https video and affiliate links', () => {
+    const snapshot = parseTripSnapshot(minimal({
+      schemaVersion: 4,
+      extras: [{ id: 'x1', name: 'Spa', description: null, imageUrl: null, supplierName: null, affiliateUrl: 'javascript:alert(1)' }],
+      content: { included: [{ text: 'Flights' }], notIncluded: [], includedSource: 'booking', videoMessage: { kind: 'file', url: 'http://example.com/a.mp4', mimeType: 'video/mp4', posterUrl: null, title: 'Hi' }, walkthrough: null },
+    }));
+    expect(snapshot.extras[0]?.affiliateUrl).toBeNull();
+    expect(snapshot.content?.videoMessage).toBeNull();
+    expect(snapshot.content?.included).toEqual([{ text: 'Flights' }]);
   });
 });

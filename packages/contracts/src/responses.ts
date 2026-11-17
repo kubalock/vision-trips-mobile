@@ -39,6 +39,8 @@ export const quotationAcceptanceResponseSchema = z.object({
   }),
 });
 
+export const quotationAcceptanceContextSchema = z.object({ emailHint: z.nullable(text) });
+
 export const customerMessageResponseSchema = z.object({ sent: z.literal(true), sentAt: isoDateTime });
 export const customerEngagementResponseSchema = z.object({ accepted: z.literal(true) });
 
@@ -53,7 +55,7 @@ export const fellowTravellerLinkResponseSchema = z.object({ url: webUrl, expires
 export const relatedQuotationsResponseSchema = z.object({
   quotations: z.array(z.object({
     comparisonId: nonEmpty, reference: text, name: text, departureDate: optDate, returnDate: optDate,
-    durationDays: z.nullable(z.number()), total: amount, currency, heroImageUrl: optUrlText,
+    durationDays: z.nullable(z.number()), nights: z.optional(z.nullable(z.number())), total: amount, perPerson: z.optional(z.nullable(amount)), currency, heroImageUrl: optUrlText,
     status: z.enum(['available', 'expired']), current: z.boolean(),
   })),
 });
@@ -63,13 +65,32 @@ export const customerPreferencesSchema = z.object({
   preferredAirports: z.array(text), preferredMonths: z.array(text),
 });
 
+const loyaltyNumber = z.nullable(z.number().check(z.refine(Number.isFinite, 'Expected a finite number.')));
+/** Loyalty is enrichment: an unreadable block becomes null instead of failing the whole account. */
+export const customerLoyaltySchema = z.object({
+  available: loyaltyNumber, availableValue: loyaltyNumber, currency, lifetime: loyaltyNumber, expiresAt: optDate,
+  transactions: z.array(z.object({ id: nonEmpty, type: z.enum(['earn', 'redeem', 'adjustment', 'expiry']), points: amount, date: optDate, tripName: z.nullable(text), description: z.nullable(text) })),
+});
+
 export const customerAccountSchema = z.object({
   emailHint: text, preferences: customerPreferencesSchema, airportOptions: z.array(text), monthOptions: z.array(text),
+  loyalty: z.optional(z.catch(z.nullable(customerLoyaltySchema), null)), vip: z.optional(z.boolean()),
   trips: z.array(z.object({
     accountTripId: nonEmpty, tripId: nonEmpty, reference: text, name: text, departureDate: optDate, returnDate: optDate,
     status: z.enum(tripStages), heroImageUrl: optUrlText, current: z.boolean(),
   })),
 });
+
+export const travellerProfileSchema = z.object({
+  travellerId: z.string().check(z.regex(/^tvl_[A-Za-z0-9_-]{22}$/)), name: text, dateOfBirth: optDate,
+  passport: z.object({ numberHint: z.nullable(text), nationality: z.nullable(text), issuingCountry: z.nullable(text), issueDate: optDate, expiryDate: optDate }),
+  drivingLicence: z.object({ numberHint: z.nullable(text), expiryDate: optDate }),
+  nextOfKin: z.object({ name: z.nullable(text), phone: z.nullable(text) }),
+  airlineLoyalty: z.nullable(text), cruiseLoyalty: z.nullable(text),
+});
+export const travellerProfilesResponseSchema = z.object({ travellers: z.array(travellerProfileSchema) });
+export const travellerProfileUpdateResponseSchema = z.object({ saved: z.literal(true), traveller: travellerProfileSchema });
+export const callbackResponseSchema = z.object({ sent: z.literal(true), sentAt: isoDateTime });
 
 export const updateCustomerPreferencesResponseSchema = z.object({
   saved: z.literal(true), updatedRecords: z.number().check(z.int(), z.nonnegative()), preferences: customerPreferencesSchema,
