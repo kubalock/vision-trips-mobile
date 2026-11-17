@@ -36,7 +36,7 @@ export const TRAVELLER_FIELDS: ReadonlyArray<{ key: EditableKey; label: string; 
       @else if (!travellers().length) { <p class="vt-account-intro">No travellers are saved on your account yet. Your travel agent can add them.</p> }
       @for (traveller of travellers(); track traveller.travellerId) {
         <details class="vt-traveller-edit" [open]="editing() === traveller.travellerId" (toggle)="toggle(traveller.travellerId, $event)">
-          <summary><strong>{{ traveller.name }}</strong><small>{{ summary(traveller) }}</small></summary>
+          <summary><strong>{{ traveller.name }}</strong><small>{{ summary(traveller) }}</small><vt-icon class="vt-traveller-edit__chevron" name="chevron-down" [size]="20" /></summary>
           <p class="vt-traveller-edit__readonly">Name{{ traveller.dateOfBirth ? ' and date of birth (' + (traveller.dateOfBirth | europeanDate) + ')' : '' }} can only be changed by your travel agent, because they appear on every booking. <button type="button" class="vt-link-button" (click)="contactAgent.emit(traveller.name)">Ask for a change</button></p>
           <form (submit)="submit($event, traveller)">
             @for (group of groups; track group.id) {

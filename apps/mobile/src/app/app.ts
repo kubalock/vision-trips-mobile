@@ -193,6 +193,8 @@ export class App implements OnInit, OnDestroy {
       '--vt-accent': palette.accent, '--vt-accent-text': palette.accentText, '--vt-accent-text-dark': palette.accentText,
       '--accent-action': palette.action, '--accent-action-ink': palette.actionInk, '--accent-ink': palette.actionInk,
       '--tint': palette.tint, '--tint-2': palette.tint2, '--link': palette.accentText,
+      // Status pills and the current journey step: the brand's tint, so brand-coloured text never sits on the default teal.
+      '--accent-status-bg': palette.tint,
       '--vt-accent-2': theme?.secondaryColor || '#115e59',
     };
   });

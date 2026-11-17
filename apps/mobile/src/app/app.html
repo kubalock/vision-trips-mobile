@@ -218,17 +218,17 @@
                 @if (agent.branchName) { <small>Your travel expert at {{ agent.branchName }}</small> }
                 <div class="vt-agent-card__links">
                   @if (agent.branchPhone) { <a [href]="agent.branchPhone"><vt-icon name="phone" [size]="15" /> Call the branch</a> }
-                  @if (agent.email) { <a [href]="'mailto:' + agent.email"><vt-icon name="mail" [size]="15" /> {{ agent.email }}</a> }
+                  @if (agent.email) { <a [href]="'mailto:' + agent.email"><vt-icon name="mail" [size]="15" /> <span class="vt-email">{{ agent.email.split('@')[0] }}@<wbr>{{ agent.email.split('@').slice(1).join('@') }}</span></a> }
                   <button type="button" class="vt-link-button" (click)="messageAgent()"><vt-icon name="message" [size]="15" /> Message {{ agent.name?.split(' ')?.[0] || 'us' }}</button>
                 </div>
               </div>
             </article>
           }
           <form class="vt-callback" (submit)="requestCallback($event)">
-            <label for="callback-time"><span>Call me back</span>
+            <label class="vt-help-field" for="callback-time"><span>Call me back</span>
               <span class="vt-help-select"><select id="callback-time" [value]="callbackTime()" (change)="callbackTime.set($any($event.target).value)" [disabled]="callbackState() === 'sending'">
                 <option value="anytime">Any time</option><option value="morning">Morning (9am–12pm)</option><option value="afternoon">Afternoon (12–5pm)</option><option value="evening">Early evening (5–7pm)</option>
-              </select></span>
+              </select><vt-icon name="chevron-down" /></span>
             </label>
             <button type="submit" class="vt-primary-action" [disabled]="callbackState() === 'sending' || callbackState() === 'sent' || !online() || signedOut()">{{ callbackState() === 'sending' ? 'Sending…' : callbackState() === 'sent' ? 'Request sent' : 'Request a call' }}</button>
             @if (callbackState() === 'sent') { <p role="status" class="vt-callback__status">Thanks — we’ve asked {{ currentTrip.agent?.name?.split(' ')?.[0] || 'your travel expert' }} to call you.</p> }
@@ -244,7 +244,7 @@
             @if (currentTrip.support.email) {
               <a class="vt-contact-card" [href]="'mailto:' + currentTrip.support.email">
                 <span class="vt-contact-card__icon"><vt-icon name="mail" [size]="22" /></span>
-                <span class="vt-contact-card__copy"><strong>Email us</strong><span>{{ currentTrip.support.email }}</span></span><span class="vt-contact-card__arrow"><vt-icon name="chevron-right" /></span>
+                <span class="vt-contact-card__copy"><strong>Email us</strong><span class="vt-email">{{ currentTrip.support.email.split('@')[0] }}@<wbr>{{ currentTrip.support.email.split('@').slice(1).join('@') }}</span></span><span class="vt-contact-card__arrow"><vt-icon name="chevron-right" /></span>
               </a>
             }
             @if (currentTrip.support.whatsappUrl) {
@@ -274,10 +274,11 @@
         }
         <section class="vt-section vt-help-card vt-help-protection"><span class="vt-help-protection__icon"><vt-icon name="shield" [size]="24" /></span><div class="vt-help-protection__body"><h2>Financial protection</h2><p class="vt-help-intro">{{ currentTrip.protection.summary }}</p>@if (currentTrip.protection.holderName) { <p class="vt-help-protection__holder">Holder: {{ currentTrip.protection.holderName }}</p> }</div></section>
       } @else {
-        <app-customer-account-section [signedOut]="signedOut()" (help)="getNewTripLink()" [account]="customerAccount()" [loading]="accountLoading()" [saving]="accountSaving()" [savedNotice]="accountNotice()" [openingTripId]="openingAccountTripId()" [error]="accountError()" [saveError]="accountSaveError()" (retry)="retryAccount()" (save)="saveCustomerPreferences($event)" (openTrip)="openCustomerAccountTrip($event)" [savedTripIds]="savedTripIds()" [brandName]="currentTrip.brand.name" (signOut)="signOutAccount()" (removeAll)="signOutDevice()" />
+        <app-customer-account-section [signedOut]="signedOut()" (help)="getNewTripLink()" [account]="customerAccount()" [loading]="accountLoading()" [saving]="accountSaving()" [savedNotice]="accountNotice()" [openingTripId]="openingAccountTripId()" [error]="accountError()" [saveError]="accountSaveError()" (retry)="retryAccount()" (save)="saveCustomerPreferences($event)" (openTrip)="openCustomerAccountTrip($event)" [savedTripIds]="savedTripIds()" [brandName]="currentTrip.brand.name" (signOut)="signOutAccount()" (removeAll)="signOutDevice()">
         @if (!signedOut() && currentTrip.accessScope === 'primary_customer') {
           <app-traveller-details-section [travellers]="travellerProfiles()" [loading]="travellersLoading()" [error]="travellersError()" [saving]="travellerSaving()" [savedId]="travellerSavedId()" [saveError]="travellerSaveError()" (save)="saveTravellerProfile($event)" (reload)="loadTravellerProfiles()" (contactAgent)="enquireAboutExtra('Please update the details for ' + $event + ': ')" />
         }
+        </app-customer-account-section>
       }
 
       <nav class="vt-nav" aria-label="Trip navigation">

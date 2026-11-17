@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import type { ItineraryItem } from '@vision-trips/contracts';
 import { calendarDate, formatEuropeanDate } from '../../shared/european-date.pipe';
-import { ItinerarySection } from './itinerary-section';
+import { ItinerarySection, noteBlocks } from './itinerary-section';
 
 const item = (id: string, startDate: string | null, extra: Partial<ItineraryItem> = {}): ItineraryItem => ({
   id, startDate, startTime: null, typeLabel: 'Hotel', title: `Item ${id}`, images: [], details: [], rooms: [], cabins: [], passengers: [], cruisePorts: [],
@@ -116,5 +116,37 @@ describe('calendarDate', () => {
   it('keeps the pipe from showing a rolled-over date', () => {
     expect(formatEuropeanDate('2026-02-30')).toBe('2026-02-30');
     expect(formatEuropeanDate('2026-02-28')).toBe('28/02/2026');
+  });
+});
+
+describe('ItinerarySection day order and wording', () => {
+  it('puts timed items first, then untimed ones in travel order', () => {
+    const day = '2027-03-01';
+    const groups = grouped([
+      item('tip', day, { kind: 'misc', typeLabel: 'Misc' }),
+      item('hotel', day, { kind: 'stay', typeLabel: 'Accommodation' }),
+      item('transfer', day, { kind: 'transfer', typeLabel: 'Transfer' }),
+      item('flight', day, { kind: 'flight', typeLabel: 'Flight', startTime: '10:20' }),
+    ]);
+    expect(groups[0].items.map((entry) => entry.item.id)).toEqual(['flight', 'transfer', 'hotel', 'tip']);
+  });
+
+  it('shows the catch-all "Misc" category as "Good to know"', () => {
+    const [group] = grouped([item('tip', '2027-03-01', { kind: 'misc', typeLabel: 'Misc' })]);
+    expect(group.items[0].typeLabel).toBe('Good to know');
+  });
+
+  it('hides the route line when the title already names both ends', () => {
+    const [group] = grouped([
+      item('a', '2027-03-01', { title: 'London Heathrow Airport to Prague Airport', from: 'London Heathrow Airport', to: 'Prague Airport' }),
+      item('b', '2027-03-01', { title: 'Airport transfer', from: 'Prague Airport', to: 'Hotel' }),
+    ]);
+    expect(group.items.map((entry) => entry.showRoute)).toEqual([false, true]);
+  });
+
+  it('splits " - " runs in notes into points, and leaves ordinary dashes alone', () => {
+    expect(noteBlocks('Pack warm. - Thu: about 8-11C. - Fri: dry.')).toEqual({ intro: 'Pack warm.', points: ['Thu: about 8-11C.', 'Fri: dry.'] });
+    expect(noteBlocks('Lunch - a quick one - near the castle.')).toEqual({ intro: 'Lunch - a quick one - near the castle.', points: [] });
+    expect(noteBlocks('  ')).toBeNull();
   });
 });

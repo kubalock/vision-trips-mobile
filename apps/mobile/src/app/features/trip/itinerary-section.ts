@@ -13,7 +13,13 @@ interface DayGroup {
   date: string;
   dateLabel: string;
   dayLabel: string;
-  items: Array<{ item: ItineraryItem; showTypeLabel: boolean; passengerLines: string[] }>;
+  items: Array<{ item: ItineraryItem; typeLabel: string; showTypeLabel: boolean; showRoute: boolean; notes: NoteBlocks | null; passengerLines: string[] }>;
+}
+
+/** Agent notes split into an opening paragraph and the " - " bullet points that often follow it. */
+export interface NoteBlocks {
+  intro: string;
+  points: string[];
 }
 
 @Component({
@@ -40,16 +46,16 @@ interface DayGroup {
                     @if (item.images.length) { <app-photo-gallery [photos]="item.images" [limit]="4" /> }
                     <div class="vt-el__row">
                       <div class="vt-el__main">
-                        <div>@if (entry.showTypeLabel) { <p class="vt-el__kind">{{ item.typeLabel }}</p> }<h3 class="vt-el__title">{{ item.title }}</h3></div>
+                        <div>@if (entry.showTypeLabel) { <p class="vt-el__kind">{{ entry.typeLabel }}</p> }<h3 class="vt-el__title">{{ item.title }}</h3></div>
                         @if (item.startTime) { <time class="vt-chip">{{ item.startTime }}</time> }
                       </div>
-                      @if (item.from || item.to) { <p class="vt-el__route flex items-center gap-1">{{ item.from }}@if (item.to) { <vt-icon name="arrow-right" [size]="15" /> {{ item.to }} }</p> }
+                      @if (entry.showRoute) { <p class="vt-el__route flex items-center gap-1">{{ item.from }}@if (item.to) { <vt-icon name="arrow-right" [size]="15" /> {{ item.to }} }</p> }
                       @if (item.kind === 'flight' && flightCodes(item); as codes) { <p class="vt-el__meta vt-el__codes">{{ codes }}</p> }
                       @if (item.carrier || item.flightNumber) { <p class="vt-el__meta">{{ item.carrier }} {{ item.flightNumber }}</p> }
                       @if (item.address) { <p class="vt-el__meta">{{ item.address }}</p> }
                       @if (item.details.length) {
                         <dl class="vt-itinerary-meta">
-                          @for (detail of item.details; track $index) { <div><dt>{{ detail.label }}</dt><dd>{{ detail.value }}</dd></div> }
+                          @for (detail of item.details; track $index) { <div [class.is-long]="detail.value.length > 32"><dt>{{ detail.label }}</dt><dd [attr.aria-label]="detailStars(detail) ? detail.value + ' stars' : null">{{ detailStars(detail) || detail.value }}</dd></div> }
                         </dl>
                       }
                       @for (room of item.rooms; track $index) {
@@ -74,7 +80,7 @@ interface DayGroup {
                       }
                       @if (item.supplier || item.reference) { <dl class="vt-itinerary-reference">@if (item.supplier) { <div><dt>Supplier</dt><dd>{{ item.supplier.name }}</dd></div> }@if (item.reference) { <div><dt>Booking reference</dt><dd>{{ item.reference }}</dd></div> }</dl> }
                       @if (item.emergencyContact; as emergency) { <a class="mt-4 flex items-center justify-between rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-900" [href]="telephoneLink(emergency.phone)"><span>{{ emergency.name }}</span><span>{{ emergency.phone }}</span></a> }
-                      @if (item.notes) { <p class="vt-itinerary-notes">{{ item.notes }}</p> }
+                      @if (entry.notes; as notes) { <div class="vt-itinerary-notes">@if (notes.intro) { <p>{{ notes.intro }}</p> }@if (notes.points.length) { <ul>@for (point of notes.points; track $index) { <li>{{ point }}</li> }</ul> }</div> }
                     </div>
                   </li>
                 }
@@ -120,6 +126,12 @@ export class ItinerarySection {
     this.opened.update((keys) => new Set(keys).add(key));
   }
 
+  /** A 1–5 hotel rating reads as stars ("★★★★"); anything else is shown as given. */
+  protected detailStars(detail: { label: string; value: string }): string | null {
+    const stars = /rating|stars/i.test(detail.label) ? Number(detail.value.trim()) : NaN;
+    return Number.isInteger(stars) && stars >= 1 && stars <= 5 ? '★'.repeat(stars) : null;
+  }
+
   telephoneLink(phone: string): string { return `tel:${phone.replace(/[^0-9+]/g, '')}`; }
   /**
    * The line beneath the airport names: codes and terminals as booked ("LHR T5 → PFO T1"). Terminals come from the
@@ -135,7 +147,8 @@ export class ItinerarySection {
 export function groupByDay(items: ItineraryItem[]): DayGroup[] {
   // A start date that is not a real calendar date is treated as not yet confirmed rather than breaking the view.
   const dated = items.map((item) => ({ item, date: calendarDate(item.startDate) ? item.startDate : null }));
-  dated.sort((a, b) => `${a.date ?? '9999'}${a.item.startTime ?? ''}`.localeCompare(`${b.date ?? '9999'}${b.item.startTime ?? ''}`));
+  // Within a day: timed items by time, then untimed ones in travel order (arrive, check in, then plans and tips).
+  dated.sort((a, b) => (a.date ?? '9999').localeCompare(b.date ?? '9999') || dayOrder(a.item).localeCompare(dayOrder(b.item)));
   const groups = new Map<string, ItineraryItem[]>();
   for (const { item, date } of dated) {
     const key = date ?? TO_BE_CONFIRMED;
@@ -147,7 +160,10 @@ export function groupByDay(items: ItineraryItem[]): DayGroup[] {
     date,
     dateLabel: dateLabel(date),
     dayLabel: firstDate && date !== TO_BE_CONFIRMED ? `Day ${daysBetween(firstDate, date) + 1}` : 'Trip plan',
-    items: groupItems.map((item) => ({ item, showTypeLabel: showTypeLabel(item), passengerLines: item.passengers.map(passengerLine) })),
+    items: groupItems.map((item) => {
+      const typeLabel = customerTypeLabel(item);
+      return { item, typeLabel, showTypeLabel: typeLabel.trim().toLocaleLowerCase() !== item.title.trim().toLocaleLowerCase(), showRoute: showRoute(item), notes: noteBlocks(item.notes), passengerLines: item.passengers.map(passengerLine) };
+    }),
   }));
 }
 
@@ -164,7 +180,32 @@ function localToday(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
-function showTypeLabel(item: ItineraryItem): boolean { return item.typeLabel.trim().toLocaleLowerCase() !== item.title.trim().toLocaleLowerCase(); }
+/** Untimed items follow the timed ones; among themselves, in the order a traveller meets them. */
+const UNTIMED_ORDER: Record<ItineraryItem['kind'], number> = { flight: 0, train: 1, transfer: 2, carhire: 3, parking: 4, stay: 5, cruise: 6, attraction: 7, misc: 8 };
+function dayOrder(item: ItineraryItem): string {
+  return item.startTime ? `0${item.startTime}` : `1${UNTIMED_ORDER[item.kind] ?? 9}`;
+}
+
+/** The supplier's category, except the catch-all "Misc", which customers see as "Good to know". */
+export function customerTypeLabel(item: ItineraryItem): string {
+  return item.kind === 'misc' && /^\s*misc(ellaneous)?\s*$/i.test(item.typeLabel) ? 'Good to know' : item.typeLabel;
+}
+
+/** The "A → B" line, unless the title already names both ends ("London Heathrow Airport to Václav Havel Airport Prague"). */
+function showRoute(item: ItineraryItem): boolean {
+  if (!item.from && !item.to) return false;
+  const title = item.title.toLocaleLowerCase();
+  return !(item.from && item.to && title.includes(item.from.toLocaleLowerCase()) && title.includes(item.to.toLocaleLowerCase()));
+}
+
+/** Splits " - First point. - Second point." runs (two or more) into a list; other notes stay as one paragraph. */
+export function noteBlocks(notes: string | null | undefined): NoteBlocks | null {
+  const text = notes?.trim();
+  if (!text) return null;
+  const parts = text.split(/\s+-\s+(?=[A-Z0-9£€$])/);
+  if (parts.length < 3) return { intro: text, points: [] };
+  return { intro: parts[0].replace(/^-\s*/, '').trim(), points: parts.slice(1).map((part) => part.trim()).filter(Boolean) };
+}
 
 function passengerLine(passenger: ItineraryItem['passengers'][number]): string {
   return [passenger.travelClass, passenger.seat ? `Seat ${passenger.seat}` : null, passenger.cabinBaggage, passenger.checkedBaggage, passenger.meal, passenger.assistance].filter(Boolean).join(' · ');

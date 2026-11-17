@@ -7,7 +7,7 @@ export type BrandTheme = 'light' | 'dark';
 
 export interface BrandPalette {
   accent: string;      // borders, focus rings, icons: >= 3:1 against the surface
-  accentText: string;  // links and accent-coloured text: >= 4.5:1 against the surface
+  accentText: string;  // links and accent-coloured text: >= 4.5:1 against the surface and both tints
   action: string;      // primary button background
   actionInk: string;   // text on primary buttons: >= 4.5:1 against `action`
   tint: string;
@@ -23,7 +23,10 @@ export function brandPalette(brandColor: string | null | undefined, theme: Brand
   const brand = normalizeHex(brandColor) ?? DEFAULT_BRAND;
   const towards = theme === 'light' ? '#000000' : '#ffffff';
   const accent = adjustUntil(brand, towards, (color) => contrast(color, surface) >= 3);
-  const accentText = adjustUntil(brand, towards, (color) => contrast(color, surface) >= 4.5);
+  const tint = mix(accent, surface, theme === 'light' ? 0.09 : 0.14);
+  const tint2 = mix(accent, surface, theme === 'light' ? 0.16 : 0.24);
+  // Accent text also sits on its own tints (status pills, the current journey step), so it must pass there too.
+  const accentText = adjustUntil(brand, towards, (color) => [surface, tint, tint2].every((background) => contrast(color, background) >= 4.5));
   // Dark theme: like the default teal (#43B7A7 on near-black ink), buttons use a light version of the brand with dark text.
   // Dark theme buttons: the brand's own hue made light enough for dark text (lightening in HSL keeps it vivid; mixing
   // with white would turn a navy or deep green into a flat grey that reads as disabled). A brand with almost no colour
@@ -32,8 +35,7 @@ export function brandPalette(brandColor: string | null | undefined, theme: Brand
   const actionInk = theme === 'dark' ? DARK_INK : contrast(action, '#ffffff') >= 4.5 ? '#ffffff' : contrast(action, DARK_INK) >= contrast(action, '#ffffff') ? DARK_INK : '#ffffff';
   return {
     accent, accentText, action, actionInk,
-    tint: mix(accent, surface, theme === 'light' ? 0.09 : 0.14),
-    tint2: mix(accent, surface, theme === 'light' ? 0.16 : 0.24),
+    tint, tint2,
   };
 }
 

@@ -488,7 +488,8 @@ button { font: inherit; }
 .vt-app .vt-destination-fold summary::-webkit-details-marker, .vt-app .vt-destination-map summary::-webkit-details-marker { display: none; }
 .vt-app .vt-destination-fold summary vt-icon:last-child, .vt-app .vt-destination-map summary > vt-icon { display: grid; place-items: center; align-self: center; color: var(--vt-accent-text); transition: transform .2s ease; }
 .vt-app .vt-destination-fold[open] summary vt-icon:last-child, .vt-app .vt-destination-map[open] summary > vt-icon { transform: rotate(180deg); }
-.vt-app .vt-destination-fold__content { max-height: 320px; overflow-y: auto; padding: 16px; border-top: 1px solid var(--line); overscroll-behavior: contain; scrollbar-gutter: stable; }
+/* Opens to its full height: a scroll box inside the page traps scrolling on a phone. */
+.vt-app .vt-destination-fold__content { padding: 16px; border-top: 1px solid var(--line); }
 .vt-app .vt-destination-fold ul { display: grid; gap: 11px; margin: 0; padding: 0 0 0 18px; color: var(--ink-2); font-size: .78rem; line-height: 1.55; }
 .vt-app .vt-destination-fold li::marker { color: var(--vt-accent-text); }
 .vt-app .vt-destination-fold li strong { display: block; color: var(--ink); font-size: .8rem; }
@@ -682,8 +683,12 @@ button { font: inherit; }
 .vt-app .vt-main--itinerary .vt-chip { flex: 0 0 auto; margin: 0; padding: 5px 9px; border-radius: var(--r-pill); background: var(--tint); color: var(--vt-accent-text); font-size: .72rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; }
 .vt-app .vt-main--itinerary :is(.vt-el__route, .vt-el__meta) { margin: 9px 0 0; color: var(--ink-2); font-size: .8rem; line-height: 1.5; }
 .vt-app .vt-main--itinerary .vt-el__route { color: var(--ink); font-weight: 700; }
-.vt-app .vt-itinerary-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin: 14px 0 0; }
-.vt-app .vt-itinerary-meta > div { min-width: 0; padding: 10px 11px; border: 1px solid var(--line); border-radius: var(--r-s); background: var(--surface); }
+/* Short facts ("Rating ★★★★", "Direction Outbound") sit inline under the title rather than in boxes of their own. */
+.vt-app .vt-itinerary-meta { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 10px 0 0; }
+.vt-app .vt-itinerary-meta > div { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.vt-app .vt-itinerary-meta dd { margin: 0; }
+/* Sentences (pick-up instructions) take the full width, label above, instead of a narrow second column. */
+.vt-app .vt-itinerary-meta > div.is-long { display: grid; flex-basis: 100%; gap: 2px; }
 .vt-app :is(.vt-itinerary-meta, .vt-itinerary-detail, .vt-itinerary-reference) dt { color: var(--ink-3); font-size: .66rem; font-weight: 750; letter-spacing: .04em; line-height: 1.35; text-transform: uppercase; }
 .vt-app :is(.vt-itinerary-meta, .vt-itinerary-detail, .vt-itinerary-reference) dd { min-width: 0; margin: 3px 0 0; overflow-wrap: anywhere; color: var(--ink); font-size: .78rem; font-weight: 700; line-height: 1.45; }
 .vt-app .vt-itinerary-detail { margin-top: 14px; padding: 13px; border: 1px solid var(--line); border-radius: var(--r-s); background: var(--surface); }
@@ -710,10 +715,13 @@ button { font: inherit; }
 .vt-app .vt-cruise-timeline__description { margin: 5px 0 0; color: var(--ink-2); font-size: .74rem; line-height: 1.55; }
 .vt-app .vt-itinerary-reference { display: flex; flex-wrap: wrap; gap: 10px 20px; margin: 14px 0 0; padding-top: 13px; border-top: 1px solid var(--line); }
 .vt-app .vt-itinerary-reference > div { min-width: min(100%, 130px); }
-.vt-app .vt-itinerary-notes { margin: 14px 0 0; padding-top: 13px; border-top: 1px solid var(--line); color: var(--ink-2); font-size: .78rem; line-height: 1.6; white-space: pre-line; }
+.vt-app .vt-itinerary-notes { display: grid; gap: 8px; margin: 14px 0 0; padding-top: 13px; border-top: 1px solid var(--line); color: var(--ink-2); font-size: .82rem; line-height: 1.6; }
+.vt-app .vt-itinerary-notes p { margin: 0; white-space: pre-line; }
+.vt-app .vt-itinerary-notes ul { display: grid; gap: 6px; margin: 0; padding-left: 18px; list-style: disc; }
+.vt-app .vt-itinerary-notes li::marker { color: var(--vt-accent-text); }
 :root[data-theme="dark"] .vt-app .vt-main--itinerary .vt-day-card { border-color: var(--card-border); box-shadow: var(--shadow-card); }
 :root[data-theme="dark"] .vt-app .vt-main--itinerary .vt-el,
-:root[data-theme="dark"] .vt-app :is(.vt-itinerary-meta > div, .vt-itinerary-detail, .vt-itinerary-disclosure) { border-color: var(--card-border); }
+:root[data-theme="dark"] .vt-app :is(.vt-itinerary-detail, .vt-itinerary-disclosure) { border-color: var(--card-border); }
 :root[data-theme="dark"] .vt-app .vt-main--itinerary :is(.vt-day__n, .vt-chip, .vt-itinerary-disclosure summary em) { background: rgba(115, 208, 194, .14); color: #8de3d5; }
 
 /* Payments-specific totals and transaction hierarchy. */
@@ -757,6 +765,9 @@ button { font: inherit; }
 .vt-app .vt-pay__main .vt-pay__label { color: var(--ink-2); font-size: .8rem; font-weight: 700; }
 .vt-app .vt-pay__main strong { color: var(--ink); font-size: 1.06rem; font-variant-numeric: tabular-nums; }
 .vt-app .vt-pay__date { color: var(--ink-3); font-size: .72rem; font-weight: 600; }
+.vt-app .vt-pay__date.is-overdue { color: var(--bad); font-weight: 750; }
+.vt-app .vt-pay__date.is-today { color: var(--warn, var(--ink)); font-weight: 750; }
+:root[data-theme="dark"] .vt-app .vt-main--payments .vt-pay.is-overdue { border-color: color-mix(in srgb, var(--bad) 45%, transparent); background: color-mix(in srgb, var(--bad) 10%, var(--surface)); }
 .vt-app .vt-pay__status { display: inline-flex; align-items: center; justify-content: center; min-height: 30px; padding: 7px 11px; border-radius: var(--r-pill); background: color-mix(in srgb, var(--ink-3) 10%, var(--surface)); color: var(--ink-2); font-size: .68rem; font-weight: 800; line-height: 1; text-transform: uppercase; white-space: nowrap; }
 .vt-app .vt-pay__status--paid { background: color-mix(in srgb, var(--ok) 13%, var(--surface)); color: var(--ok); }
 .vt-app .vt-pay__status--overdue { background: color-mix(in srgb, var(--bad) 12%, var(--surface)); color: var(--bad); }
@@ -785,7 +796,7 @@ button { font: inherit; }
   .vt-app .vt-pay__status { align-self: flex-start; }
 }
 :root[data-theme="dark"] .vt-app .vt-payment-card,
-:root[data-theme="dark"] .vt-app .vt-main--payments .vt-pay { border-color: rgba(255, 255, 255, .07); box-shadow: var(--shadow-card); }
+:root[data-theme="dark"] .vt-app .vt-main--payments .vt-pay:not(.is-overdue, .is-paid) { border-color: rgba(255, 255, 255, .07); box-shadow: var(--shadow-card); }
 :root[data-theme="dark"] .vt-app .vt-custom-payment__field { border-color: rgba(255, 255, 255, .18); background: color-mix(in srgb, var(--surface-2) 78%, #000); box-shadow: var(--shadow-card-sm); }
 :root[data-theme="dark"] .vt-app .vt-custom-payment__field > span { border-right-color: rgba(255, 255, 255, .14); background: rgba(255, 255, 255, .025); color: var(--ink); }
 :root[data-theme="dark"] .vt-app .vt-custom-payment__field:focus-within { border-color: color-mix(in srgb, var(--vt-accent) 75%, white); background: var(--surface-2); box-shadow: 0 0 0 3px color-mix(in srgb, var(--vt-accent) 24%, transparent); }
@@ -882,7 +893,7 @@ button { font: inherit; }
 .vt-app .vt-contact-card__copy { display: grid; gap: 2px; min-width: 0; flex: 1; }
 .vt-app .vt-contact-card__copy strong { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; font-size: .97rem; }
 .vt-app .vt-contact-card__copy strong small { display: inline-flex; align-items: center; flex: 0 0 auto; min-height: 22px; padding: 3px 8px; border-radius: var(--r-pill); background: color-mix(in srgb, var(--bad) 12%, var(--surface)); color: var(--bad); font-size: .68rem; line-height: 1; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
-.vt-app .vt-contact-card__copy > span { overflow: hidden; color: var(--ink-2); font-size: .86rem; overflow-wrap: anywhere; }
+.vt-app .vt-contact-card__copy > span { overflow: hidden; color: var(--ink-2); font-size: .86rem; overflow-wrap: break-word; }
 .vt-app .vt-contact-card__arrow { display: grid; place-items: center; align-self: center; flex: 0 0 auto; width: 24px; height: 24px; color: var(--ink-3); line-height: 0; }
 .vt-app .vt-contact-card__arrow > vt-icon { width: 20px; height: 20px; }
 .vt-app .vt-contact-card--whatsapp { border-color: color-mix(in srgb, var(--ok) 20%, transparent); }
@@ -1223,7 +1234,7 @@ button { font: inherit; }
 @media (max-width: 480px) {
   .vt-app main:is(.vt-main--home, .vt-main--itinerary, .vt-main--payments, .vt-main--documents, .vt-main--help) { --vt-flat-gutter: 12px; }
   .vt-app .vt-main--itinerary .vt-day__head { align-items: flex-start; flex-direction: column; gap: 7px; }
-  .vt-app .vt-main--itinerary :is(.vt-itinerary-meta, .vt-itinerary-detail dl) { grid-template-columns: 1fr; }
+  .vt-app .vt-main--itinerary .vt-itinerary-detail dl { grid-template-columns: 1fr; }
 }
 
 /* Final mobile/tablet type contract: component and utility styles cannot re-expand text. */
@@ -1285,12 +1296,12 @@ button { font: inherit; }
 .vt-app,
 .vt-app * { font-family: var(--vt-font-family); }
 
-body.vt .vt-app { font-size: 14px; line-height: 20px; font-weight: 400; }
-body.vt .vt-app h1 { font-size: 24px; line-height: 32px; font-weight: 700; }
-body.vt .vt-app h2 { font-size: 20px; line-height: 24px; font-weight: 600; }
-body.vt .vt-app :is(h3, h4, .vt-h3, .vt-h4) { font-size: 16px; line-height: 22px; font-weight: 600; }
-body.vt .vt-app :is(p, li, dd, dt, label, input, select, textarea) { font-size: 14px; line-height: 20px; font-weight: 400; }
-body.vt .vt-app :is(button, .vt-btn) { font-size: 14px; line-height: 20px; font-weight: 600; }
+body.vt .vt-app { font-size: 0.875rem; line-height: 1.25rem; font-weight: 400; }
+body.vt .vt-app h1 { font-size: 1.5rem; line-height: 2rem; font-weight: 700; }
+body.vt .vt-app h2 { font-size: 1.25rem; line-height: 1.5rem; font-weight: 600; }
+body.vt .vt-app :is(h3, h4, .vt-h3, .vt-h4) { font-size: 1rem; line-height: 1.375rem; font-weight: 600; }
+body.vt .vt-app :is(p, li, dd, dt, label, input, select, textarea) { font-size: 0.875rem; line-height: 1.25rem; font-weight: 400; }
+body.vt .vt-app :is(button, .vt-btn) { font-size: 0.875rem; line-height: 1.25rem; font-weight: 600; }
 
 body.vt .vt-app :is(
   .vt-page-kicker, .vt-hero__kicker, .vt-countdown-card__kicker,
@@ -1299,8 +1310,8 @@ body.vt .vt-app :is(
   .vt-day__n, .vt-payments__kicker, .vt-documents__kicker,
   .vt-help-kicker, .vt-trip-library__kicker, .text-xs.uppercase
 ) {
-  font-size: 12px;
-  line-height: 16px;
+  font-size: 0.75rem;
+  line-height: 1rem;
   font-weight: 600;
   letter-spacing: .05em;
   text-transform: uppercase;
@@ -1310,19 +1321,19 @@ body.vt .vt-app :is(
   .vt-booking-journey-card__header, .vt-lower-section__header,
   .vt-payment-card__heading, .vt-doc-group__heading, .vt-help-card,
   .vt-trip-group__heading
-) h2 { font-size: 18px; line-height: 24px; font-weight: 600; }
+) h2 { font-size: 1.125rem; line-height: 1.5rem; font-weight: 600; }
 
 body.vt .vt-app :is(
   .vt-tailor-card, .vt-destination-card, .vt-upsell-card, .vt-update-card,
   .vt-itinerary-detail, .vt-saved-trip, .vt-contact-card, .vt-doc-button,
   .vt-pay
-) :is(h3, h4, strong) { font-size: 16px; line-height: 22px; font-weight: 600; }
+) :is(h3, h4, strong) { font-size: 1rem; line-height: 1.375rem; font-weight: 600; }
 
 body.vt .vt-app :is(
   .vt-status, .vt-doc-badge, .vt-pay__status, .vt-saved-trip__status,
   .vt-update-card__status, .vt-account-status, .vt-trip-group__heading > span,
   .vt-chip, .vt-btn
-) { font-size: 14px; line-height: 20px; font-weight: 600; }
+) { font-size: 0.875rem; line-height: 1.25rem; font-weight: 600; }
 
 /* One primary-action shape and rhythm across every view. */
 body.vt .vt-app :is(
@@ -1338,8 +1349,8 @@ body.vt .vt-app :is(
   padding: 0 18px;
   border-radius: var(--r-pill);
   font-family: var(--vt-font-family);
-  font-size: 14px;
-  line-height: 20px;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -1398,7 +1409,7 @@ body.vt .vt-app .vt-saved-trip__icon-button--danger:hover {
 }
 
 /* Bottom navigation remains metadata-sized rather than adopting CTA sizing. */
-body.vt .vt-app .vt-nav button { font-size: 12px; line-height: 16px; font-weight: 600; }
+body.vt .vt-app .vt-nav button { font-size: 0.75rem; line-height: 1rem; font-weight: 600; }
 
 /* Preferences: compact chips, clear month states and a deliberate destructive action. */
 body.vt .vt-app .vt-selected-airport {
@@ -1412,8 +1423,8 @@ body.vt .vt-app .vt-selected-airport {
   background: var(--surface-2);
   color: var(--ink);
   font-family: var(--vt-font-family);
-  font-size: 12px;
-  line-height: 16px;
+  font-size: 0.75rem;
+  line-height: 1rem;
   font-weight: 600;
 }
 body.vt .vt-app .vt-selected-airport button {
@@ -1450,8 +1461,8 @@ body.vt .vt-app .vt-month-chip {
   color: var(--ink);
   box-shadow: 0 2px 6px rgba(20, 22, 24, .05);
   font-family: var(--vt-font-family);
-  font-size: 12px;
-  line-height: 16px;
+  font-size: 0.75rem;
+  line-height: 1rem;
   font-weight: 600;
 }
 body.vt .vt-app .vt-month-chip:hover { border-color: color-mix(in srgb, var(--vt-accent) 38%, var(--line)); background: var(--surface); }
@@ -1478,8 +1489,8 @@ body.vt .vt-app .vt-account-danger button {
   background: color-mix(in srgb, var(--bad) 78%, #7f1d1d);
   color: #fff;
   font-family: var(--vt-font-family);
-  font-size: 14px;
-  line-height: 20px;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
   font-weight: 600;
   box-shadow: 0 5px 14px color-mix(in srgb, var(--bad) 24%, transparent);
 }
@@ -1516,6 +1527,10 @@ body.vt .vt-app .vt-account-danger button:active { transform: scale(.97); }
   border-color: color-mix(in srgb, var(--bad) 30%, var(--line));
   background: color-mix(in srgb, var(--bad) 8%, var(--surface));
 }
+/* Dark theme's --bad is a light red; white text needs a deeper red behind it (about 6:1). */
+:root[data-theme="dark"] body.vt .vt-app .vt-account-danger button { border-color: color-mix(in srgb, var(--bad) 55%, #5f1712); background: color-mix(in srgb, var(--bad) 45%, #7f1d1d); }
+:root[data-theme="dark"] body.vt .vt-app .vt-account-danger button:hover { background: color-mix(in srgb, var(--bad) 35%, #7f1d1d); }
+:root[data-theme="dark"] .vt-app .vt-trip-status-card__refresh:not(:disabled) { border-color: var(--line-2); color: var(--ink); }
 
 /* Trip-level error message: a toast fixed above the bottom navigation so it is visible at any scroll position. */
 .vt-app .vt-trip-error { position: fixed; left: var(--sp-4); right: var(--sp-4); bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + var(--sp-3)); z-index: 60; display: flex; align-items: flex-start; gap: var(--sp-3); max-width: 520px; margin: 0 auto; padding: var(--sp-3) var(--sp-3) var(--sp-3) var(--sp-3); border: 1px solid var(--card-border); border-radius: var(--r); background: var(--surface); color: var(--ink); box-shadow: var(--shadow-raised); animation: vt-toast-in .22s ease-out; }
@@ -1603,26 +1618,26 @@ body.vt .vt-app .vt-account-danger button:active { transform: scale(.97); }
 .vt-app .vt-quotation-compare__eyebrow {
   margin: 0;
   color: var(--vt-accent-text);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: .05em;
-  line-height: 16px;
+  line-height: 1rem;
   text-transform: uppercase;
 }
 .vt-app .vt-quotation-compare__header h2 {
   margin: 0;
   color: var(--ink);
-  font-size: 20px;
+  font-size: 1.25rem;
   font-weight: 700;
-  line-height: 24px;
+  line-height: 1.5rem;
 }
 .vt-app .vt-quotation-compare__intro {
   max-width: 62ch;
   margin: 2px 0 0;
   color: var(--ink-2);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 400;
-  line-height: 20px;
+  line-height: 1.25rem;
 }
 .vt-app .vt-quotation-grid {
   display: grid;
@@ -1664,26 +1679,26 @@ body.vt .vt-app .vt-account-danger button:active { transform: scale(.97); }
   border-radius: var(--r-pill, 999px);
   background: var(--accent-status-bg, var(--tint));
   color: var(--vt-accent-text);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: .05em;
-  line-height: 16px;
+  line-height: 1rem;
   text-transform: uppercase;
 }
 .vt-app .vt-quotation-card__header { display: grid; gap: 3px; }
 .vt-app .vt-quotation-card__header h3 {
   margin: 0;
   color: var(--ink);
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 600;
-  line-height: 22px;
+  line-height: 1.375rem;
 }
 .vt-app .vt-quotation-card__header p {
   margin: 0;
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 400;
-  line-height: 16px;
+  line-height: 1rem;
   overflow-wrap: anywhere;
 }
 .vt-app .vt-quotation-card__meta {
@@ -1705,22 +1720,22 @@ body.vt .vt-app .vt-account-danger button:active { transform: scale(.97); }
 }
 .vt-app .vt-quotation-card__meta dt {
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
-  line-height: 16px;
+  line-height: 1rem;
 }
 .vt-app .vt-quotation-card__meta dd {
   min-width: 0;
   margin: 0;
   color: var(--ink);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 400;
-  line-height: 20px;
+  line-height: 1.25rem;
   text-align: right;
   overflow-wrap: anywhere;
 }
-.vt-app .vt-quotation-card__meta dd span { color: var(--ink-2); font-size: 12px; font-weight: 400; white-space: normal; }
-.vt-app .vt-quotation-card__total dd { color: var(--vt-accent-text); font-size: 16px; font-weight: 400; }
+.vt-app .vt-quotation-card__meta dd span { color: var(--ink-2); font-size: 0.75rem; font-weight: 400; white-space: normal; }
+.vt-app .vt-quotation-card__total dd { color: var(--vt-accent-text); font-size: 1rem; font-weight: 400; }
 .vt-app .vt-quotation-card__action {
   display: inline-flex;
   align-items: center;
@@ -1734,9 +1749,9 @@ body.vt .vt-app .vt-account-danger button:active { transform: scale(.97); }
   border-radius: var(--r-pill, 999px);
   background: var(--accent-action);
   color: var(--accent-action-ink);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
-  line-height: 20px;
+  line-height: 1.25rem;
   cursor: pointer;
   transition: filter .16s ease, transform .12s ease;
 }
@@ -1887,7 +1902,8 @@ body.vt .vt-app .vt-account-danger button:active { transform: scale(.97); }
 .vt-app .vt-accept-card__submit { border: 1px solid var(--accent-action); background: var(--accent-action); color: var(--accent-action-ink); box-shadow: 0 8px 20px color-mix(in srgb, var(--accent-action) 22%, transparent); }
 .vt-app .vt-accept-card__submit:hover:not(:disabled) { filter: brightness(.9); }
 .vt-app .vt-accept-card__submit:active:not(:disabled) { filter: brightness(.82); transform: scale(.98); }
-.vt-app .vt-accept-card__submit:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
+/* Disabled reads as "not yet" (flat, outlined, readable text) rather than fading into the card. */
+.vt-app .vt-accept-card__submit:disabled { border-color: var(--line-2); background: var(--surface-2); color: var(--ink-2); opacity: 1; cursor: not-allowed; box-shadow: none; }
 .vt-app .vt-accept-card__secondary { border: 1px solid color-mix(in srgb, var(--vt-accent) 28%, transparent); background: var(--tint); color: var(--vt-accent-text); }
 .vt-app .vt-accept-done { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 14px; }
 .vt-app .vt-accept-done__icon { display: grid; place-items: center; width: 46px; height: 46px; border-radius: var(--r-s); background: color-mix(in srgb, var(--ok) 14%, var(--surface)); color: var(--ok); }
@@ -1968,7 +1984,7 @@ body.vt .vt-app .vt-returned-card { padding: 16px; }
 .vt-app .vt-account-trip__topline > div { min-width: 0; }
 .vt-app .vt-account-trip__ref { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .vt-app .vt-account-trip__current { display: inline-flex; align-items: center; gap: 6px; margin: auto 0 0; padding-top: 12px; color: var(--vt-accent-text); font-size: .85rem; font-weight: 650; }
-body.vt .vt-app .vt-account-kicker { font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: .05em; }
+body.vt .vt-app .vt-account-kicker { font-size: 0.75rem; line-height: 1rem; font-weight: 600; letter-spacing: .05em; }
 @media (min-width: 700px) and (max-width: 999px) {
   .vt-app .vt-channel-grid { grid-template-columns: minmax(0, 1fr); }
 }
@@ -1979,9 +1995,9 @@ body.vt .vt-app .vt-account-kicker { font-size: 12px; line-height: 16px; font-we
 
 /* Sign-out cards use the same scale as the other Account controls (the global 20px h2 / 14px p rules outrank the
    card's own sizes otherwise). */
-body.vt .vt-app .vt-account-danger h2 { margin: 1px 0 0; font-size: 15px; line-height: 20px; font-weight: 650; }
-body.vt .vt-app .vt-account-danger p { margin: 4px 0 0; font-size: 13px; line-height: 18px; }
-body.vt .vt-app .vt-account-danger button { height: 40px; min-height: 40px; padding: 0 16px; font-size: 13px; }
+body.vt .vt-app .vt-account-danger h2 { margin: 1px 0 0; font-size: 0.9375rem; line-height: 1.25rem; font-weight: 650; }
+body.vt .vt-app .vt-account-danger p { margin: 4px 0 0; font-size: 0.8125rem; line-height: 1.125rem; }
+body.vt .vt-app .vt-account-danger button { height: 40px; min-height: 40px; padding: 0 16px; font-size: 0.8125rem; }
 body.vt .vt-app .vt-account-danger__icon { width: 40px; height: 40px; }
 
 /* Notifications: a panel under the bell, over the current screen. It sits in the sticky header, so it stays in reach
@@ -2084,9 +2100,13 @@ body.vt .vt-app .vt-account-danger__icon { width: 40px; height: 40px; }
 .vt-app .vt-agent-card__body { display: grid; gap: 2px; min-width: 0; }
 .vt-app .vt-agent-card__body small { color: var(--ink-3); }
 .vt-app .vt-agent-card__links { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; }
-.vt-app .vt-agent-card__links a { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; color: var(--accent-action); font-weight: 600; overflow-wrap: anywhere; }
-.vt-app .vt-callback { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin: 0 0 14px; }
-.vt-app .vt-callback label { display: grid; gap: 4px; flex: 1 1 200px; font-weight: 600; }
+.vt-app .vt-agent-card__links a { display: inline-flex; align-items: center; gap: 6px; min-width: 0; min-height: 44px; color: var(--accent-action); font-weight: 600; }
+/* Email addresses break after the "@" (a <wbr>), never mid-word; only a part longer than the line breaks further. */
+.vt-app .vt-email { min-width: 0; overflow-wrap: break-word; }
+.vt-app .vt-callback { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin: 14px 0; padding: 14px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface-2); }
+.vt-app .vt-callback label { flex: 1 1 200px; }
+.vt-app .vt-callback .vt-help-field select { background: var(--surface); }
+.vt-app .vt-callback .vt-primary-action { min-height: 48px; }
 .vt-app .vt-callback__status { flex-basis: 100%; margin: 0; color: var(--ink-2); }
 .vt-app .vt-upsell-card__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
 .vt-app .vt-upsell-card__actions button { margin-top: 0; min-height: 44px; }
@@ -2108,7 +2128,11 @@ body.vt .vt-app .vt-account-danger__icon { width: 40px; height: 40px; }
 .vt-app .vt-traveller-details label { display: grid; gap: 4px; font-size: .85rem; }
 .vt-app .vt-traveller-details input { min-height: 44px; padding: 0 12px; border: 1px solid var(--line-2); border-radius: var(--r-s); background: var(--surface); color: var(--ink); font: inherit; }
 .vt-app .vt-traveller-edit { border-top: 1px solid var(--line); padding: 4px 0; }
-.vt-app .vt-traveller-edit summary { display: grid; min-height: 52px; align-content: center; cursor: pointer; }
+.vt-app .vt-traveller-edit summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; min-height: 52px; align-content: center; cursor: pointer; list-style: none; }
+.vt-app .vt-traveller-edit summary::-webkit-details-marker { display: none; }
+.vt-app .vt-traveller-edit summary > :not(vt-icon) { grid-column: 1; }
+.vt-app .vt-traveller-edit__chevron { grid-column: 2; grid-row: 1 / span 2; align-self: center; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--surface-2); color: var(--ink-2); transition: transform .18s ease; }
+.vt-app .vt-traveller-edit[open] .vt-traveller-edit__chevron { transform: rotate(180deg); }
 .vt-app .vt-traveller-edit summary small, .vt-app .vt-traveller-edit__readonly { color: var(--ink-3); font-size: .82rem; }
 .vt-app .vt-traveller-edit__status { margin: 8px 0 0; }
 .vt-app .vt-payment-summary__pp { display: block; color: var(--ink-3); font-size: .8rem; }

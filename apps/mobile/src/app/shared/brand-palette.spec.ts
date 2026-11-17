@@ -37,6 +37,14 @@ describe('brandPalette', () => {
     expect(gg - Math.max(gr, gb)).toBeGreaterThan(40);
   });
 
+  it('keeps accent text readable on its own tints (status pills, current step)', () => {
+    for (const theme of ['light', 'dark'] as const) for (const brand of ['#00122c', '#0F766E', '#FFE14D', '#777777']) {
+      const palette = brandPalette(brand, theme);
+      expect(contrast(palette.accentText, palette.tint)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(palette.accentText, palette.tint2)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it('gives a colourless brand a near-white dark-mode button', () => {
     expect(brandPalette('#111111', 'dark').action).toBe('#f2f1ec');
     expect(brandPalette('#777777', 'dark').actionInk).toBe('#111111');

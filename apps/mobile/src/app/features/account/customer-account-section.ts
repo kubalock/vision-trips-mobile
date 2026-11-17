@@ -22,6 +22,8 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
           <button type="button" (click)="removeAll.emit()">Remove all data</button>
         </section>
     </ng-template>
+    <!-- The page's own extra sections (traveller details) sit above the sign-out controls, whichever state is shown. -->
+    <ng-template #pageExtras><ng-content /></ng-template>
     <!-- Signed out: account details need a session, but signing out and removing data from this device still work. -->
     @if (signedOut()) {
       <section class="vt-section vt-account-page">
@@ -38,6 +40,7 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
           <h1>Account and preferences</h1>
         </header>
         <div class="vt-account-card"><p class="vt-account-muted">Loading your account…</p></div>
+        <ng-container [ngTemplateOutlet]="pageExtras" />
       </section>
     }
     @else if (account(); as data) {
@@ -204,6 +207,7 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
           </section>
         </form>
 
+        <ng-container [ngTemplateOutlet]="pageExtras" />
         <ng-container [ngTemplateOutlet]="signOutControls" />
       </section>
     } @else {

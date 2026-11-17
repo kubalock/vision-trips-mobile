@@ -71,7 +71,10 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
                 } @else {
                   <strong [class.vt-money--unavailable]="payment.amount === null">{{ money(payment.amount, payment.currency) }}</strong>
                 }
-                @if (payment.dueDate) { <span class="vt-pay__date">Due {{ payment.dueDate | europeanDate }}</span> }
+                @if (payment.dueDate) {
+                  @let due = dueState(payment);
+                  <span class="vt-pay__date" [class.is-overdue]="due === 'overdue'" [class.is-today]="due === 'today'">{{ due === 'overdue' ? 'Overdue · was due' : due === 'today' ? 'Due today ·' : 'Due' }} {{ payment.dueDate | europeanDate }}</span>
+                }
               </div>
               @if (awaitingAcceptance() && isFirstOutstanding(payment.id)) {
                 <!-- A quotation is never paid directly: the deposit is taken at the end of the acceptance. -->
@@ -153,6 +156,14 @@ export class PaymentsSection {
   protected money(amount: number | null, currency: string): string {
     if (amount === null) return 'Unavailable';
     try { return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(amount); } catch { return `${amount.toFixed(2)} ${currency}`; }
+  }
+  /** Overdue as the booking says; "today" for anything still owed on its due date (local calendar day). */
+  protected dueState(payment: PaymentSummary['items'][number]): 'overdue' | 'today' | null {
+    if (payment.status === 'overdue') return 'overdue';
+    if (payment.status !== 'outstanding' || !payment.dueDate) return null;
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    return payment.dueDate.slice(0, 10) === today ? 'today' : null;
   }
   protected statusLabel(status: PaymentSummary['items'][number]['status']): string { return status === 'local' ? 'Pay locally' : status; }
   protected updateCustom(event: Event): void { this.customAmount.set((event.target as HTMLInputElement).value); }
