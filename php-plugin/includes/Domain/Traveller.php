@@ -21,6 +21,7 @@ final class Traveller
     public bool $isInfant = false;
     public ?DateTimeImmutable $passportExpiry = null;
     public string $nationality = '';
+    public string $passportNumber = '';
     /** @var string[] */
     public array $ssr = [];
     /** @var string[] */
@@ -47,6 +48,8 @@ final class Traveller
         $t->age = is_numeric(Arr::first($age)) ? (int) Arr::first($age) : ($t->dob ? (int) $t->dob->diff(Dates::now())->y : null);
         $t->isInfant = $t->age !== null && $t->age < 2;
         $t->passportExpiry = Dates::parse($p('passport_expiry'));
+        $t->passportNumber = strtoupper(Str::clean($p('passport_number')));
+
         $t->nationality = Str::clean($p('nationality'));
         $t->ssr = Arr::strings($p('ssr'));
         $t->meals = Arr::strings($p('meal'));

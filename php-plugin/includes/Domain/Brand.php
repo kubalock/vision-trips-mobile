@@ -70,6 +70,10 @@ final class Brand
 
     // Member legal
     public string $memberCompany = '';
+    /** The TTNG loyalty scheme is switched on for this member. */
+    public bool $loyaltyEnabled = false;
+    public string $whyHeader = '';
+    public string $whySubheader = '';
     public string $memberNumber = '';
     public string $memberRegNo = '';
     public string $memberVatNo = '';
@@ -172,6 +176,9 @@ final class Brand
         $b->proposition = Str::clean($p('proposition')) ?: Str::clean($pm('proposition'));
 
         $b->memberCompany = Str::clean($pm('company'));
+        $b->loyaltyEnabled = Arr::truthy($pm('loyalty_enabled'));
+        $b->whyHeader = Str::clean($p('why_header'));
+        $b->whySubheader = Str::clean($p('why_subheader'));
         $b->memberNumber = Str::clean($pm('number'));
         $b->memberRegNo = Str::clean($pm('reg_no'));
         $b->memberVatNo = Arr::truthy($pm('vat_registered')) || Str::clean($pm('vat_no')) !== '' ? Str::clean($pm('vat_no')) : '';
@@ -253,7 +260,11 @@ final class Brand
     private static function firstImage(mixed $value): string
     {
         $imgs = Arr::images($value);
-        return $imgs[0]['url'] ?? '';
+        if (!$imgs) {
+            return '';
+        }
+        // Member logos and photos are served from a local copy once the background job has fetched them
+        return \VisionTrips\Support\Assets::image($imgs[0]['url'], $imgs[0]['id'] ?? '');
     }
 
     private static function firstFile(mixed $value): string

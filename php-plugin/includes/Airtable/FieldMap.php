@@ -54,8 +54,20 @@ final class FieldMap
     }
 
     /** Fields that must never reach a customer, even if ticked in Field Studio (money, margins, internal finance). */
+    /** Fields that must never reach a customer, whatever Field Studio says. */
+    public const NEVER_SHOW = ['booking uploads [external]', 'booking uploads', 'uploads [external]', 'internal notes', 'internal uploads'];
+
+    public static function isNeverShown(string $name): bool
+    {
+        $n = strtolower(trim($name));
+        return in_array($n, self::NEVER_SHOW, true) || str_contains($n, 'uploads [external]');
+    }
+
     public static function isFinancial(string $name, string $type = ''): bool
     {
+        if (self::isNeverShown($name)) {
+            return true; // treated exactly like a financial field: locked everywhere
+        }
         $n = Arr::normKey($name);
         if (in_array(strtolower($type), ['currency', 'percent'], true)) {
             return true;

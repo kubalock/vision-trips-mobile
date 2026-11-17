@@ -31,6 +31,7 @@ final class Http
         $ms = (int) round((microtime(true) - $started) * 1000);
         $label = self::label($url);
         Provenance::request($method, $label, $result['status'], $ms, $result['ok'], $result['error']);
+        Metrics::fromRequest($url);
         if (!$result['ok']) {
             Log::warning('HTTP ' . $method . ' failed', ['endpoint' => $label, 'status' => $result['status'], 'error' => $result['error'], 'ms' => $ms]);
         }
@@ -79,7 +80,7 @@ final class Http
             'method'  => strtoupper($method),
             'headers' => $headers,
             'timeout' => $timeout,
-            'body'    => $payload === null ? null : wp_json_encode($payload),
+            'body'    => $payload === null ? null : wp_json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE),
             'sslverify' => true,
         ]);
         $result = self::normalise($resp);
@@ -130,11 +131,16 @@ final class Http
                 foreach ($results as $key => $r) {
                     self::record('GET', $requests[$key]['url'], $r, $started);
                 }
-                // Retry failures sequentially (handles 429 bursts from Airtable).
-                foreach ($results as $key => $r) {
-                    if (!$r['ok'] && in_array($r['status'], [0, 429, 500, 502, 503], true)) {
-                        usleep(300000);
-                        $results[$key] = self::getJson($requests[$key]['url'], $requests[$key]['headers'] ?? [], $timeout, 1);
+                // Retry failures sequentially with backoff (handles 429 bursts from Airtable on big bookings).
+                foreach ([500000, 1200000, 2500000] as $pause) {
+                    $again = array_keys(array_filter($results, static fn ($r) => !$r['ok'] && in_array($r['status'], [0, 429, 500, 502, 503, 504], true)));
+                    if (!$again) {
+                        break;
+                    }
+                    usleep($pause);
+                    foreach ($again as $key) {
+                        $results[$key] = self::getJson($requests[$key]['url'], $requests[$key]['headers'] ?? [], $timeout, 0);
+                        usleep(220000); // stay under 5 requests/second while recovering
                     }
                 }
                 return $results;

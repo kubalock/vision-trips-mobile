@@ -99,6 +99,7 @@ final class Email
             $h .= '<a href="' . $e($brand->privacyUrl) . '" style="color:#6B7178;">Privacy policy</a> · ';
         }
         $h .= 'You are receiving this because you have a trip or quotation with ' . $e($brand->name) . '.';
+        $h .= '<br><span style="color:#9AA0A6;font-size:11px;">Powered by Vision from The Travel Network Group</span>';
         $h .= '</td></tr></table></td></tr></table></body></html>';
         return $h;
     }

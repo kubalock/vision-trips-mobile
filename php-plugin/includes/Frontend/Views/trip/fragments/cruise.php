@@ -20,6 +20,11 @@ if (!$cards) {
       <h3 class="vt-h3"><?= e($ship['name'] ?? $e->ship ?: $e->title) ?></h3>
     <?php endif; ?>
     <div class="vt-cruise__body">
+      <?php $vid = \VisionTrips\Integrations\Widgety::videoEmbed((string) ($ship['video'] ?? '')); if ($vid): ?>
+        <div class="vt-video" data-video="<?= e($vid['src']) ?>" data-video-kind="<?= e($vid['kind']) ?>" style="<?= !empty($ship['cover']) ? '--vt-video-poster:url(\'' . e($ship['cover']) . '\')' : '' ?>">
+          <button type="button" class="vt-video__play" aria-label="Play the ship film"><?= icon('play') ?><span>Watch the ship film</span></button>
+        </div>
+      <?php endif; ?>
       <?php if (!empty($ship['teaser'])): ?><div class="vt-cruise__teaser vt-longtext"><?= raw(str_contains((string) $ship['teaser'], '<') ? (string) $ship['teaser'] : \VisionTrips\Support\Str::richText((string) $ship['teaser'])) ?></div><?php endif; ?>
       <?php if (!empty($holiday['description'])): ?><div class="vt-longtext"><?= raw($holiday['description']) ?></div><?php endif; ?>
       <?php if ($days): ?>
@@ -47,11 +52,11 @@ if (!$cards) {
           <summary><span><?= e($title) ?></span><span class="vt-more__count"><?= e(count($items)) ?></span><?= icon('chevron') ?></summary>
           <div class="vt-shipsec">
             <?php foreach ($items as $it): ?>
-              <div class="vt-shipsec__item">
+              <details class="vt-shipsec__item">
+                <summary><strong><?= e($it['name']) ?></strong><?= icon('chevron') ?></summary>
                 <?php if ($it['images']): ?><div class="vt-gallery" data-gallery><?php foreach (array_slice($it['images'], 0, 6) as $img): ?><a href="<?= e($img) ?>" data-lightbox><img src="<?= e($img) ?>" alt="<?= e($it['name']) ?>" loading="lazy"></a><?php endforeach; ?></div><?php endif; ?>
-                <strong><?= e($it['name']) ?></strong>
                 <?php if ($it['text'] !== ''): ?><div class="vt-longtext"><?= raw($it['text']) ?></div><?php endif; ?>
-              </div>
+              </details>
             <?php endforeach; ?>
           </div>
         </details>

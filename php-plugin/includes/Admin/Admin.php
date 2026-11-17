@@ -52,7 +52,7 @@ final class Admin
 
     private function tabs(): array
     {
-        return ['status' => 'Status', 'connections' => 'Connections', 'fields' => 'Field Studio', 'security' => 'Security', 'experience' => 'Experience', 'themes' => 'Themes', 'legal' => 'Legal', 'engagement' => 'Engagement', 'tools' => 'Tools & logs', 'changelog' => 'Changelog'];
+        return ['status' => 'Status', 'connections' => 'Connections', 'fields' => 'Field Studio', 'security' => 'Security', 'experience' => 'Experience', 'themes' => 'Themes', 'legal' => 'Legal', 'engagement' => 'Engagement', 'costs' => 'API usage & costs', 'tools' => 'Tools & logs', 'changelog' => 'Changelog'];
     }
 
     public function page(): void
@@ -162,7 +162,7 @@ final class Admin
         $this->secret('airtable_pat', 'Personal access token (active)', 'Scopes: data.records:read, data.records:write (for quotation acceptance), schema.bases:read. Access to every member base.');
         $this->secret('airtable_pat_standby', 'Standby token (for rotation)', 'Add the new token here, test it, then click Rotate. The old token becomes standby so you can revoke it later. If the active token is rejected (401/403) the plugin fails over to standby automatically.');
         $this->text('airtable_reference_base', 'Reference base ID', 'A base to read the Vision schema from (Field Studio). Any member base built from the Vision template works.');
-        $this->number('cache_ttl_booking', 'Booking cache (seconds)', 'How long a loaded booking is reused before Airtable is asked again. 60 keeps pages instant while changes in Vision appear within a minute.');
+        $this->number('cache_ttl_booking', 'Section reuse window (seconds)', 'Every page view fetches the booking fresh from Vision. The fetched copy is reused only by that view\'s own section requests (stays, destinations, flights…) for this long, so a page does not fetch three Airtable waves five times over.');
         echo '<p>' . $this->actionButton('rotate_pat', 'Rotate tokens') . ' ' . $this->actionButton('test_airtable', 'Test active token') . '</p></div>';
 
         echo '<div class="vt-card"><h2>Widgety</h2>';
@@ -272,6 +272,7 @@ final class Admin
         $this->number('session_days', 'Remember a verified device for (days)');
         $this->number('max_challenge_attempts', 'Wrong answers allowed per 15 minutes');
         $this->checkbox('show_dob', 'Show dates of birth on verified sessions');
+        $this->checkbox('ideas_enabled', 'Also show generated ideas (fly in more comfort, a better room…) alongside the upsells you add in Vision', 'Off by default: Make it even better shows only the upsells selected on the booking, each with its image.');
         $this->checkbox('sw_enabled', 'Offline copy of trip pages (service worker)', 'Caches the trip page and assets on the customer\'s phone so it opens without signal. Leave off until the site is stable; visit Settings → Permalinks after enabling.');
         $this->checkbox('csp_enabled', 'Send a strict Content-Security-Policy on trip pages', 'Only enable when the site URL and the plugin URL share the same scheme and host; otherwise the browser will refuse to load the plugin\'s own CSS and JS. Check the browser console after enabling.');
         echo '</div><div class="vt-card"><h2>Keys</h2>';
@@ -285,16 +286,37 @@ final class Admin
     private function tabExperience(): void
     {
         $this->formOpen('experience');
+        echo '<div class="vt-card"><h2>Front page</h2><p>With no other pages on this site, the plugin serves the front page: a way in for customers who do not have their link to hand, and the place a search for the domain lands. Neutral by design — the member\'s brand takes over when a trip opens.</p>';
+        $this->checkbox('homepage_enabled', 'Serve the site\'s front page');
+        $this->checkbox('homepage_find_enabled', 'Include "Find my trip" (booking reference + email → one-time code). Off = a holding page that points customers to their link.');
+        echo '<p class="description">Find my trip identifies the member from the booking reference (the X0333 in NWG-X0333-…) and checks the email belongs to a customer of that member: one member, one customer, nothing to enumerate. Members whose trips have been opened on this site are known automatically; for the rest, point at the TTNG directory below.</p>';
+        $this->text('member_directory_base', 'TTNG member directory base (optional)', 'The Airtable base listing every member with their Vision base id');
+        $this->text('member_directory_table', 'Directory table');
+        $this->text('member_directory_code', 'Member code field');
+        $this->text('member_directory_base_field', 'Vision base id field');
+        $this->text('homepage_name', 'Name shown', 'Blank = the WordPress site title');
+        $this->text('homepage_title', 'Headline');
+        $this->textarea('homepage_intro', 'Introduction');
+        $this->text('homepage_logo', 'Logo image URL', 'Optional; upload it to the Media Library and paste the URL');
+        $this->text('homepage_accent', 'Colour (hex)');
+        $this->text('homepage_email', 'Contact email shown in the footer');
+        $this->text('homepage_phone', 'Contact phone shown in the footer');
+        echo '</div>';
         echo '<div class="vt-card"><h2>Modules</h2><p>Switch parts of the trip page on or off for every member. New modules ship off; turn them on when you have seen them on staging.</p><div class="vt-modules">';
         foreach (Settings::MODULES as $key => [$label, $desc]) {
             echo '<label class="vt-module"><input type="hidden" name="modules[' . esc_attr($key) . ']" value="0"><input type="checkbox" name="modules[' . esc_attr($key) . ']" value="1"' . checked(Settings::module($key), true, false) . '> <strong>' . esc_html($label) . '</strong><span class="description">' . esc_html($desc) . '</span></label>';
         }
         echo '</div></div>';
+        $this->conciergeSettings();
         echo '<div class="vt-grid"><div class="vt-card"><h2>Quotations</h2>';
         $this->checkbox('quote_accept_enabled', 'Customers can accept a quotation online (forced read of names, important information, protection and terms, then straight to the deposit)');
         $this->checkbox('hide_suppliers_on_quotation', 'Hide supplier names and references while a booking is a quotation');
         $this->number('quote_default_validity_days', 'Treat quotations as fresh for (days) when no Quotation Expiry is set');
         $this->textarea('quote_accept_fields', 'Write back to Vision (Bookings) on acceptance', 'One per line: Field Name|type. Types: checkbox, datetime, text, email, ip, log. Create these fields in the Vision template first; missing fields fail safely and are logged.');
+        echo '</div><div class="vt-card"><h2>Comments in Vision</h2>';
+        $this->checkbox('view_comments', 'Write comments on the Bookings record (page views, document opens, questions, acceptance, concierge Q&A)');
+        $this->checkbox('mention_agent', 'Tag the booking\'s agent in those comments so they get the notification', 'Uses the first collaborator field found on the booking: Travel Agent, Agent, Booking Owner, Owner, Consultant, Assigned To, Created by.');
+        $this->checkbox('mention_agent_views', 'Also tag them on every page view');
         $this->checkbox('quote_accept_require_writeback', 'Block acceptance if the write-back fails');
         $this->checkbox('quote_notify_agent', 'Email the brand inbox when a quotation is accepted');
         echo '</div><div class="vt-card"><h2>Bookings</h2>';
@@ -308,6 +330,16 @@ final class Admin
         $this->text('portal_page_slug', 'Portal URL slug');
         echo '</div></div>';
         $this->formClose();
+    }
+
+    private function conciergeSettings(): void
+    {
+        echo '<div class="vt-card"><h2>Trip concierge</h2><p>Customers ask questions on their trip page. Answers come only from the booking information the customer can already see, plus stable general knowledge; prices, changes, refunds, visas and anything uncertain are handed to the member as a message, and the customer is told so. Every exchange is written to the Bookings record as a comment. Switch on under Modules.</p>';
+        $this->text('chat_model', 'Model', 'claude-sonnet-5-5 (recommended for rule-following); claude-haiku-5-5 is cheaper.');
+        $this->checkbox('chat_research', 'Allow up to two web searches per question (for general "is there a pharmacy near the hotel" questions) — adds cost');
+        $this->number('chat_booking_cap', 'Questions per booking per day');
+        $this->number('chat_daily_cap', 'Questions site-wide per day (beyond this, everything goes to the member)');
+        echo '</div>';
     }
 
     private function tabThemes(): void
@@ -343,6 +375,22 @@ final class Admin
         echo '<tr><td>Acceptances started → completed</td><td><strong>' . (int) $sum['accept_start'] . ' → ' . (int) $sum['accept_complete'] . '</strong>' . ($sum['accept_start'] ? ' (' . round(100 * $sum['accept_complete'] / max(1, $sum['accept_start'])) . '%)' : '') . '</td></tr>';
         echo '<tr><td>Pay now taps</td><td><strong>' . (int) $sum['pay'] . '</strong></td></tr>';
         echo '</tbody></table>';
+        $cc = \VisionTrips\Support\Events::counts();
+        $chat = ['booking' => 0, 'general' => 0, 'research' => 0, 'handoff' => 0, 'none' => 0];
+        foreach ($cc as $k => $v) {
+            if (str_starts_with($k, 'chat_ask|')) {
+                $d = substr($k, 9);
+                $chat[$d] = (int) ($chat[$d] ?? 0) + (int) $v;
+            }
+        }
+        $asked = array_sum($chat);
+        echo '<h3>Trip concierge</h3><table class="widefat striped"><tbody>';
+        echo '<tr><td>Questions asked</td><td><strong>' . $asked . '</strong></td></tr>';
+        echo '<tr><td>Answered from the booking</td><td><strong>' . (int) $chat['booking'] . '</strong></td></tr>';
+        echo '<tr><td>Answered from general knowledge</td><td><strong>' . (int) $chat['general'] . '</strong></td></tr>';
+        echo '<tr><td>Answered with research</td><td><strong>' . (int) $chat['research'] . '</strong></td></tr>';
+        echo '<tr><td>Passed to the member</td><td><strong>' . ((int) $chat['handoff'] + (int) $chat['none']) . '</strong>' . ($asked ? ' (' . round(100 * ((int) $chat['handoff'] + (int) $chat['none']) / $asked) . '%)' : '') . '</td></tr>';
+        echo '</tbody></table><p class="description">Every question and answer is on the booking\'s comments in Vision; self-service rate = questions not passed to the member.</p>';
         echo '<h3>What customers ask to add</h3><table class="widefat striped"><tbody>';
         foreach (array_slice($sum['asks'], 0, 15, true) as $k => $n) {
             echo '<tr><td>' . esc_html($k) . '</td><td><strong>' . (int) $n . '</strong></td></tr>';
@@ -368,6 +416,50 @@ final class Admin
         $this->formOpen('engagement');
         echo '<div class="vt-card"><h2>Settings</h2>';
         $this->text('events_table', 'Vision table for engagement rows (optional)', 'Create a table in the Vision template with: Booking (link to Bookings), Event, Detail, Stage, When (date/time), Device. Leave blank to keep data in WordPress only.');
+        echo '</div>';
+        $this->formClose();
+    }
+
+    private function tabCosts(): void
+    {
+        $fx = (float) Settings::get('cost_fx_gbp', 0.79);
+        $windows = ['Today' => 1, 'Last 7 days' => 7, 'Last 30 days' => 30];
+        $data = [];
+        foreach ($windows as $label => $d) {
+            $data[$label] = \VisionTrips\Support\Metrics::window($d);
+        }
+        echo '<div class="vt-card"><h2>API calls and estimated cost</h2><p>Every outbound call is counted at the HTTP layer. Costs are estimates from the unit prices below (APIs bill in USD); the GBP figure uses the rate you set. Google Places photos are downloaded once per place and served from this site, so photo cost is per place per fortnight, not per view.</p>';
+        echo '<table class="widefat striped"><thead><tr><th>Provider</th>';
+        foreach ($windows as $label => $d) {
+            echo '<th>' . esc_html($label) . '</th><th>Est. cost</th>';
+        }
+        echo '</tr></thead><tbody>';
+        foreach (\VisionTrips\Support\Metrics::PROVIDERS as $key => $name) {
+            echo '<tr><td>' . esc_html($name) . '</td>';
+            foreach ($windows as $label => $d) {
+                $w = $data[$label];
+                $n = $key === 'anthropic' ? (int) ($w['counts']['anthropic'] ?? 0) : (int) ($w['counts'][$key] ?? 0);
+                $detail = $key === 'anthropic' ? ' <span class="description">' . number_format($w['tokens']['in']) . ' in · ' . number_format($w['tokens']['out']) . ' out · ' . (int) $w['tokens']['search'] . ' searches</span>' : '';
+                echo '<td>' . number_format($n) . $detail . '</td><td>$' . number_format($w['cost_usd'][$key], 2) . '</td>';
+            }
+            echo '</tr>';
+        }
+        echo '<tr><td><strong>Total</strong></td>';
+        foreach ($windows as $label => $d) {
+            $t = $data[$label]['total_usd'];
+            echo '<td></td><td><strong>$' . number_format($t, 2) . '</strong> <span class="description">≈ £' . number_format($t * $fx, 2) . '</span></td>';
+        }
+        echo '</tr></tbody></table>';
+        echo '<p>' . $this->actionButton('clear_metrics', 'Reset counters') . '</p></div>';
+        $this->formOpen('costs');
+        echo '<div class="vt-card"><h2>Unit prices (USD)</h2><p>Check these against your contracts; they drive the estimates only.</p>';
+        $prices = \VisionTrips\Support\Metrics::prices();
+        $labels = ['places_search' => 'Google Places text search (per call)', 'places_photo' => 'Google Places photo (per download)', 'aerodatabox' => 'AeroDataBox (per call)', 'aviationstack' => 'AviationStack (per call)', 'anthropic_in' => 'AI input (per million tokens)', 'anthropic_out' => 'AI output (per million tokens)', 'anthropic_search' => 'AI web search (per search)', 'widgety' => 'Widgety (per call)', 'openmeteo' => 'Open-Meteo (per call)', 'airtable' => 'Airtable (per call)'];
+        foreach ($labels as $k => $label) {
+            echo '<p><label><span class="vt-label">' . esc_html($label) . '</span><input type="number" step="0.0001" min="0" name="prices[' . esc_attr($k) . ']" value="' . esc_attr((string) $prices[$k]) . '"></label></p>';
+        }
+        echo '<p><label><span class="vt-label">USD → GBP rate</span><input type="number" step="0.01" min="0" name="s[cost_fx_gbp]" value="' . esc_attr((string) $fx) . '"></label></p>';
+        $this->checkbox('places_cache_photos', 'Download Google Places photos once per place and serve them from this site (recommended — the biggest single saving)');
         echo '</div>';
         $this->formClose();
     }
@@ -552,6 +644,16 @@ final class Admin
             }
             Settings::set('modules', $modules);
         }
+        if ($tab === 'costs' && isset($_POST['prices'])) {
+            $prices = [];
+            foreach ((array) wp_unslash($_POST['prices']) as $k => $v) {
+                $k = sanitize_key((string) $k);
+                if (array_key_exists($k, \VisionTrips\Support\Metrics::DEFAULT_PRICES) && is_numeric($v)) {
+                    $prices[$k] = (float) $v;
+                }
+            }
+            Settings::set('cost_prices', $prices);
+        }
         if ($tab === 'legal') {
             $defaults = require VISION_TRIPS_DIR . 'config/legal.php';
             $custom = [];
@@ -608,6 +710,10 @@ final class Admin
                 $w = new Widgety();
                 $ship = $w->configured() ? $w->ship('', 'Queen Mary 2') : null;
                 $notice = $ship && empty($ship['missing']) ? 'Widgety OK — ship lookup returned "' . ($ship['name'] ?? '') . '".' : 'Error: Widgety lookup failed. Check credentials, Accept header and paths.';
+                break;
+            case 'clear_metrics':
+                \VisionTrips\Support\Metrics::clear();
+                $notice = 'Counters reset.';
                 break;
             case 'clear_events':
                 \VisionTrips\Support\Events::clear();

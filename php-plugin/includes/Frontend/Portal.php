@@ -36,11 +36,31 @@ final class Portal
             return;
         }
         $base = isset($_GET['m']) ? preg_replace('/[^A-Za-z0-9]/', '', (string) $_GET['m']) : '';
-        if (!preg_match('/^app[A-Za-z0-9]{14}$/', $base)) {
-            echo View::render('states/plain', ['title' => 'Which travel company?', 'message' => 'Please use the "My trips" link on your travel company\'s website or in an email from them.', 'status' => 400]);
-            return;
-        }
         $client = new Client();
+        if (!preg_match('/^app[A-Za-z0-9]{14}$/', $base)) {
+            // No member given (the site's own front page): the booking reference names the member (NWG-X0333-…), and the
+            // email must belong to a customer of that member. Nothing else is searched, so nothing can be enumerated.
+            $email = strtolower(sanitize_email((string) wp_unslash($_GET['email'] ?? '')));
+            $ref = strtoupper(sanitize_text_field((string) wp_unslash($_GET['ref'] ?? '')));
+            $base = '';
+            if ($email !== '' && $ref !== '' && $client->configured() && RateLimit::hit('portal-find|' . RateLimit::ip(), 10, HOUR_IN_SECONDS)) {
+                $candidate = Router::baseForMemberCode(Router::memberCodeFromRef($ref));
+                if ($candidate !== '') {
+                    try {
+                        $repo0 = new BookingRepository($client);
+                        if ($repo0->findByEmail($candidate, $email) || $repo0->findCustomers($candidate, $email)) {
+                            $base = $candidate;
+                        }
+                    } catch (\Throwable $e) {
+                        $base = '';
+                    }
+                }
+            }
+            if ($base === '') {
+                wp_safe_redirect(add_query_arg(['notfound' => '1', 'ref' => rawurlencode($ref), 'email' => rawurlencode($email)], home_url('/')), 302);
+                exit;
+            }
+        }
         if (!$client->configured()) {
             echo View::render('states/plain', ['title' => 'Not configured', 'message' => 'This site is not connected to Vision yet.', 'status' => 503]);
             return;
@@ -48,8 +68,9 @@ final class Portal
         $repo = new BookingRepository($client);
         $brand = $this->brandForBase($client, $base);
         $self = add_query_arg('m', $base, home_url('/' . trim((string) Settings::get('portal_page_slug', 'my-trips'), '/') . '/'));
+        $prefill = isset($_GET['email']) ? strtolower(sanitize_email((string) wp_unslash($_GET['email']))) : '';
         $vars = [
-            'brand' => $brand, 'base' => $base, 'step' => 'email', 'error' => '', 'notice' => '', 'email' => '', 'trips' => [], 'prefs' => null,
+            'brand' => $brand, 'base' => $base, 'step' => 'email', 'error' => '', 'notice' => '', 'email' => $prefill, 'trips' => [], 'fieldErrors' => [], 'loyalty' => null, 'people' => [], 'airlines' => [], 'cruiseLines' => [], 'prefs' => null,
             'airports' => [], 'months' => self::MONTHS, 'nonce' => wp_create_nonce('vt_portal_' . $base), 'self' => $self,
             'accent' => $brand->colour !== '' ? $brand->colour : '#1F4F6E', 'theme' => 'default', 'spec' => Theme::spec('default'),
             'fontsUrl' => Theme::fontsUrl('default', $brand->fontDisplay, $brand->fontBody), 'displayFont' => $brand->fontDisplay !== '' ? $brand->fontDisplay : 'Fraunces', 'bodyFont' => $brand->fontBody !== '' ? $brand->fontBody : 'Instrument Sans',
@@ -98,6 +119,33 @@ final class Portal
                     $vars['step'] = 'code';
                     $vars['error'] = 'That code is not right or has expired.';
                 }
+            } elseif ($action === 'person' && $session !== '') {
+                if (!RateLimit::hit('account|' . $session, 20, HOUR_IN_SECONDS)) {
+                    $vars['error'] = 'Too many changes in a short time — please try again later.';
+                } else {
+                    $acct = new \VisionTrips\Airtable\AccountRepository($client, $repo);
+                    $input = [];
+                    foreach (\VisionTrips\Airtable\AccountRepository::EDITABLE as $k) {
+                        if (isset($_POST[$k])) {
+                            $input[$k] = sanitize_text_field((string) wp_unslash($_POST[$k]));
+                        }
+                    }
+                    $r = $acct->updatePerson($base, $session, sanitize_text_field((string) wp_unslash($_POST['person'] ?? '')), $input);
+                    $vars['notice'] = $r['ok'] ? 'Saved, thank you.' : '';
+                    $vars['error'] = $r['ok'] ? '' : implode(' ', $r['errors']);
+                    $vars['fieldErrors'] = $r['errors'];
+                }
+                $view = 'account';
+            } elseif ($action === 'programme' && $session !== '') {
+                if (!RateLimit::hit('account|' . $session, 20, HOUR_IN_SECONDS)) {
+                    $vars['error'] = 'Too many changes in a short time — please try again later.';
+                } else {
+                    $acct = new \VisionTrips\Airtable\AccountRepository($client, $repo);
+                    $r = $acct->saveProgramme($base, $session, sanitize_text_field((string) wp_unslash($_POST['person'] ?? '')), sanitize_key((string) ($_POST['kind'] ?? 'airline')), sanitize_text_field((string) wp_unslash($_POST['programme'] ?? '')), sanitize_text_field((string) wp_unslash($_POST['operator'] ?? '')), sanitize_text_field((string) wp_unslash($_POST['number'] ?? '')), sanitize_text_field((string) wp_unslash($_POST['tier'] ?? '')));
+                    $vars['notice'] = $r['ok'] ? 'Saved, thank you.' : '';
+                    $vars['error'] = $r['error'];
+                }
+                $view = 'account';
             } elseif ($action === 'prefs' && $session !== '') {
                 $airports = array_values(array_intersect($repo->customerOptions($base, 'pref_airports', self::AIRPORTS), array_map('sanitize_text_field', (array) wp_unslash($_POST['airports'] ?? []))));
                 $months = array_values(array_intersect(self::MONTHS, array_map('sanitize_text_field', (array) wp_unslash($_POST['months'] ?? []))));
@@ -111,7 +159,17 @@ final class Portal
 
         if ($session !== '') {
             $vars['email'] = $session;
-            if ($view === 'prefs') {
+            if ($view === 'loyalty') {
+                $acct = new \VisionTrips\Airtable\AccountRepository($client, $repo);
+                $vars['step'] = 'loyalty';
+                $vars['loyalty'] = $acct->loyalty($base, $session, $brand->loyaltyEnabled);
+            } elseif ($view === 'account') {
+                $acct = new \VisionTrips\Airtable\AccountRepository($client, $repo);
+                $vars['step'] = 'account';
+                $vars['people'] = $acct->people($base, $session);
+                $vars['airlines'] = $acct->operators($base, 'airline');
+                $vars['cruiseLines'] = $acct->operators($base, 'cruise');
+            } elseif ($view === 'prefs') {
                 $vars['step'] = 'prefs';
                 $vars['prefs'] = $repo->preferences($base, $session);
                 $vars['airports'] = $repo->customerOptions($base, 'pref_airports', self::AIRPORTS);

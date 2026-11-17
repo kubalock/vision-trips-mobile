@@ -13,7 +13,7 @@ $collapsed = in_array($trip->stage, [\VisionTrips\Domain\Stage::HOME, \VisionTri
   <?php if (!$days): ?>
     <p class="vt-empty">Your itinerary will appear here as soon as it's confirmed.</p>
   <?php else: ?>
-    <div class="vt-days<?= $collapsed ? ' is-collapsed' : '' ?>">
+    <div class="vt-days<?= $collapsed ? ' is-collapsed' : '' ?>" data-reveal-after="5" data-reveal-noun="days">
       <?php foreach ($days as $d): ?>
         <div class="vt-day">
           <div class="vt-day__head">
@@ -29,5 +29,8 @@ $collapsed = in_array($trip->stage, [\VisionTrips\Domain\Stage::HOME, \VisionTri
       <?php endforeach; ?>
     </div>
     <?php if ($collapsed): ?><button type="button" class="vt-btn vt-btn--ghost" data-expand-days>Show full itinerary</button><?php endif; ?>
+  <?php endif; ?>
+  <?php if (!empty($routeMap)): ?>
+    <details class="vt-map vt-map--route"><summary><?= icon('pin') ?> <span>Your route on a map</span><?= icon('chevron') ?></summary><div class="vt-map__frame"><iframe title="Your route" loading="lazy" referrerpolicy="no-referrer-when-downgrade" sandbox="allow-scripts allow-same-origin allow-popups" src="<?= e($routeMap) ?>"></iframe></div></details>
   <?php endif; ?>
 </section>

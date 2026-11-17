@@ -35,16 +35,21 @@ $sections = [
         <button type="button" class="vt-iconbtn" data-close-accept aria-label="Close"><?= icon('close') ?></button>
       </header>
       <div class="vt-modal__body">
-        <p class="vt-modal__intro">Open each section and scroll to the end. The accept button unlocks when all five are read.</p>
+        <p class="vt-modal__intro">Before you accept, here is the key information for this booking. Tap a section to read it.</p>
         <?php foreach ($sections as $key => $s): ?>
           <details class="vt-read" data-read="<?= e($key) ?>">
             <summary><span class="vt-read__tick" aria-hidden="true"><?= icon('check') ?></span><span><?= e($s['title']) ?></span><?= icon('chevron', 'vt-read__chev') ?></summary>
-            <div class="vt-read__body" data-read-scroll><?= raw($s['html']) ?><p class="vt-read__end">End of section.</p></div>
+            <div class="vt-read__body" data-read-scroll><?= raw($s['html']) ?></div>
           </details>
         <?php endforeach; ?>
         <div class="vt-accept__fields">
           <label class="vt-field"><span>Your full name</span><input type="text" name="name" autocomplete="name" required value="<?= e($trip->lead ? $trip->lead->name : '') ?>"></label>
-          <label class="vt-field"><span>Email address</span><input type="email" name="email" autocomplete="email" required value="<?= e($verified ? $trip->customerEmail : '') ?>"></label>
+          <?php if ($trip->customerEmail !== ''): ?>
+            <p class="vt-ask__to" data-ask-known><button type="button" class="vt-link vt-small" data-ask-change>Send the confirmation to a different email address?</button></p>
+            <label class="vt-field" data-ask-emailfield hidden><span>Email address</span><input type="email" name="email" autocomplete="email" required value="<?= e($trip->customerEmail) ?>"></label>
+          <?php else: ?>
+            <label class="vt-field"><span>Email address</span><input type="email" name="email" autocomplete="email" required value=""></label>
+          <?php endif; ?>
           <label class="vt-checkbox"><input type="checkbox" name="agreed" required><span>I confirm the names and details are correct and I accept the booking terms on behalf of everyone travelling. I understand <?= e($brand->memberCompany ?: $brand->name) ?> will take the deposit to secure the booking.</span></label>
         </div>
         <p class="vt-accept__error" data-accept-error role="alert" hidden></p>

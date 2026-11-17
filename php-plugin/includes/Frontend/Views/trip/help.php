@@ -22,19 +22,36 @@ if ($brand->phone !== '' && preg_match('/^(\+44|0)7/', preg_replace('/\s+/', '',
 <section class="vt-section" id="help" aria-labelledby="help-h">
   <h2 class="vt-h2" id="help-h">Talk to <?= e($brand->name) ?></h2>
   <div class="vt-help">
+    <?php if ($trip->agentName !== ''): ?>
+    <div class="vt-agent">
+      <span class="vt-agent__avatar" aria-hidden="true"><?= e(mb_strtoupper(mb_substr($trip->agentName, 0, 1))) ?></span>
+      <div class="vt-agent__body">
+        <strong><?= e($trip->agentName) ?></strong>
+        <span>Your travel expert at <?= e($brand->name) ?></span>
+        <span class="vt-agent__links"><?php if ($brand->phone !== ''): ?><a href="<?= e(tel($brand->phone)) ?>"><?= e($brand->phone) ?></a><?php endif; ?><?php if ($trip->agentEmail !== ''): ?><a href="mailto:<?= e($trip->agentEmail) ?>?subject=<?= e(rawurlencode($trip->ref . ' – ' . $trip->name)) ?>"><?= e($trip->agentEmail) ?></a><?php endif; ?></span>
+      </div>
+      <a class="vt-btn vt-btn--primary vt-btn--sm" href="<?= $trip->isQuote() ? '#ask-top' : '#help' ?>" data-ask>Message <?= e(\VisionTrips\Support\Str::firstName($trip->agentName)) ?></a>
+    </div>
+    <?php endif; ?>
     <div class="vt-help__actions">
       <?php if ($brand->phone !== ''): ?><a class="vt-btn vt-btn--ghost" href="<?= e(tel($brand->phone)) ?>"><?= icon('phone') ?> <?= e($brand->phone) ?></a><?php endif; ?>
       <?php if ($brand->email !== ''): ?><a class="vt-btn vt-btn--ghost" href="mailto:<?= e($brand->email) ?>?subject=<?= e(rawurlencode($trip->ref . ' – ' . $trip->name)) ?>"><?= icon('mail') ?> Email us</a><?php endif; ?>
       <?php if ($wa !== ''): ?><a class="vt-btn vt-btn--ghost" href="<?= e($wa) ?>" target="_blank" rel="noopener"><?= icon('whatsapp') ?> WhatsApp</a><?php endif; ?>
+      <?php if ($brand->email !== '' && empty($traveller)): ?><button type="button" class="vt-btn vt-btn--ghost" data-callback-open><?= icon('phone') ?> Call me back</button><?php endif; ?>
     </div>
-    <?php if ($brand->email !== ''): ?>
-      <form class="vt-ask" data-ask-form>
-        <label class="vt-field"><span>Send a quick message about this trip</span><textarea name="message" rows="3" maxlength="2000" placeholder="Ask a question, request a change or tell us what you'd like to add…" required></textarea></label>
-        <label class="vt-field"><span>Your email, so we can reply</span><input type="email" name="email" autocomplete="email" value="<?= e($verified ? $trip->customerEmail : '') ?>"></label>
-        <button type="submit" class="vt-btn vt-btn--primary vt-btn--sm">Send message</button>
-        <p class="vt-ask__status" role="status" hidden></p>
-      </form>
+    <?php if ($brand->email !== '' && empty($traveller)): ?>
+    <form class="vt-callback" data-callback hidden>
+      <p class="vt-callback__lead">When suits you? We'll call <?= $trip->customerPhone !== '' ? 'the number ending ' . e(substr((string) preg_replace('/\D/', '', $trip->customerPhone), -3)) : 'you' ?>.</p>
+      <div class="vt-callback__row">
+        <label class="vt-field"><span>Best time</span><select name="slot"><option>As soon as possible</option><option>This morning</option><option>This afternoon</option><option>Tomorrow morning</option><option>Tomorrow afternoon</option><option>Later this week</option></select></label>
+        <?php if ($trip->customerPhone === ''): ?><label class="vt-field"><span>Your number</span><input type="tel" name="phone" autocomplete="tel" required></label><?php endif; ?>
+        <label class="vt-field"><span>About (optional)</span><input type="text" name="topic" maxlength="120" placeholder="e.g. the room, dates, adding insurance"></label>
+      </div>
+      <div class="vt-ask__row"><button type="submit" class="vt-btn vt-btn--primary vt-btn--sm">Request a call</button><button type="button" class="vt-link vt-small" data-callback-close>Cancel</button></div>
+      <p class="vt-ask__status" role="status" hidden></p>
+    </form>
     <?php endif; ?>
+    <?php if ($brand->email !== '' && \VisionTrips\Settings::module('message')): ?><?= partial('trip/ask', get_defined_vars() + ['compact' => false]) ?><?php endif; ?>
     <?php if ($ooh !== '' || $oohLink !== '' || $oohEmail !== ''): ?>
       <div class="vt-help__ooh">
         <strong>Out of hours, while you're travelling</strong>

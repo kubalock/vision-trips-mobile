@@ -147,7 +147,7 @@ final class Ai
             . "the brochure description of {$subject} for {$audience}. Tone: {$register}. Length: 80–120 words in one or two paragraphs. Do not invent inclusions.\n\n"
             . "Facts:\n" . ($lines ? implode("\n", $lines) : "- Name: {$name}") . "\n"
             . ($ctxLines ? "\nTrip context:\n" . implode("\n", $ctxLines) . "\n" : '')
-            . "\nReply with the finished copy inside <copy></copy> and nothing else.";
+            . "\nReply with the finished copy inside <copy></copy>. Then, if this is a hotel or ship, add inside <facts></facts> a JSON array of up to 8 short facility labels you are sure of (e.g. [\"Outdoor pool\",\"Spa\",\"All inclusive\",\"Beachfront\",\"Adults only\",\"Family rooms\",\"Free Wi-Fi\",\"Kids' club\"]), each 1–3 words; nothing else.";
         $prompt .= self::editorNote($cacheId);
         $text = '';
         for ($attempt = 1; $attempt <= 2; $attempt++) {
@@ -157,6 +157,7 @@ final class Ai
                 return '';
             }
             $text = self::extractCopy($res['data']);
+            $facts = self::extractFacts($res['data']);
             $why = self::brochureProblem($text);
             if ($why === '') {
                 break;
@@ -176,6 +177,9 @@ final class Ai
             return '';
         }
         Cache::set('ai', $cacheId, $text, 90 * DAY_IN_SECONDS); // brochure copy: reused by every booking for three months
+        if (!empty($facts)) {
+            Cache::set('ai', $cacheId . '|facts', $facts, 90 * DAY_IN_SECONDS);
+        }
         return $text;
     }
 
@@ -220,6 +224,8 @@ final class Ai
                 $res = Http::sendJson('POST', self::ENDPOINT, $body, ['x-api-key' => $this->key, 'anthropic-version' => '2023-06-01'], $timeout);
             }
             if ($res['ok']) {
+                $u = (array) ($res['data']['usage'] ?? []);
+                \VisionTrips\Support\Metrics::hit('anthropic', 0, ['anthropic_in' => (int) ($u['input_tokens'] ?? 0), 'anthropic_out' => (int) ($u['output_tokens'] ?? 0), 'anthropic_search' => (int) ($u['server_tool_use']['web_search_requests'] ?? 0)]);
                 if ($model !== $this->model) {
                     Log::warning('AI model fell back', ['from' => $this->model, 'to' => $model]);
                 }
@@ -298,12 +304,59 @@ final class Ai
     }
 
     /** "Barceló Corralejo Bay - Adults Only", "Barcelo Corralejo Bay" and "BARCELO CORRALEJO BAY " are the same entity. */
+    /** Cached facility labels for a place (written alongside the brochure copy). @return string[] */
+    public function placeFacts(string $name, string $location, array $context = []): array
+    {
+        $f = Cache::get('ai', $this->placeCacheId($name, $location, '', $context) . '|facts');
+        return is_array($f) ? array_values(array_filter($f, 'is_string')) : [];
+    }
+
     public static function entityKey(string $s): string
     {
         $s = strtolower(function_exists('remove_accents') ? remove_accents($s) : $s);
         $s = (string) preg_replace('/\s*[-–—(].*$/', '', $s); // drop " - Adults Only", " (All Inclusive)"
         $s = (string) preg_replace('/[^a-z0-9]+/', ' ', $s);
         return trim($s);
+    }
+
+    /**
+     * The optional <facts> block: a JSON array of short labels, or a JSON object of short values. Every value is a
+     * plain string of at most 40 characters; anything else is dropped. @return array<int|string,string>
+     */
+    public static function extractFacts($data): array
+    {
+        $all = '';
+        foreach ((array) ($data['content'] ?? []) as $block) {
+            if (($block['type'] ?? '') === 'text') {
+                $all .= (string) $block['text'] . "\n";
+            }
+        }
+        if (!preg_match_all('/<facts>(.*?)<\/facts>/is', $all, $m) || !$m[1]) {
+            return [];
+        }
+        $json = json_decode(trim((string) preg_replace('/```(?:json)?/i', '', (string) end($m[1]))), true);
+        if (!is_array($json)) {
+            return [];
+        }
+        $out = [];
+        foreach ($json as $k => $v) {
+            if (!is_scalar($v)) {
+                continue;
+            }
+            $v = trim(strip_tags((string) $v));
+            if ($v === '' || mb_strlen($v) > 40 || preg_match('/https?:|\*\*|\[\d+\]/', $v)) {
+                continue;
+            }
+            if (is_int($k)) {
+                $out[] = $v;
+            } elseif (preg_match('/^[a-z_]{3,24}$/', (string) $k)) {
+                $out[(string) $k] = $v;
+            }
+            if (count($out) >= 8) {
+                break;
+            }
+        }
+        return $out;
     }
 
     /**
@@ -464,7 +517,7 @@ final class Ai
             . "the brochure pages for {$name}, {$country}. Tone: {$voice}. Four pieces of finished copy, each plain sentences in one or two paragraphs:\n"
             . "overview (60–90 words: what the place is like and why people love it); attractions (70–110 words: the things worth seeing and doing, named); practical (60–90 words: getting around, money, tipping, language, timings — for entry rules say only to check the official advice); culture (50–80 words: customs, food and drink, etiquette).\n"
             . ($factLines ? 'Facts: ' . implode('; ', $factLines) . "\n" : '')
-            . "Reply with a JSON object with exactly the keys overview, attractions, practical, culture, inside <copy></copy>, and nothing else.";
+            . "Reply with a JSON object with exactly the keys overview, attractions, practical, culture, inside <copy></copy>. Then inside <facts></facts> a JSON object with only the keys you are sure of, each a short value: currency (e.g. \"Euro (EUR)\"), language, time_difference (from the UK, e.g. \"+2 hours\"), flight_time (from London, e.g. \"about 4h 30m\"), plugs (e.g. \"Type C/F, 230V\"), best_time (e.g. \"April–June, September–October\"). Nothing else.";
         $prompt .= self::editorNote($cacheId);
         $out = [];
         for ($attempt = 1; $attempt <= 2; $attempt++) {
@@ -474,6 +527,7 @@ final class Ai
                 return $empty;
             }
             $text = self::extractCopy($res['data']);
+            $destFacts = self::extractFacts($res['data']);
             $json = json_decode(trim((string) preg_replace('/^```(?:json)?|```$/m', '', $text)), true);
             if (!is_array($json) && preg_match('/\{.*\}/s', $text, $m)) {
                 $json = json_decode($m[0], true);
@@ -493,6 +547,9 @@ final class Ai
                 }
             }
             if ($why === '' && ($out['overview'] ?? '') !== '') {
+                if (!empty($destFacts)) {
+                    $out['facts'] = $destFacts;
+                }
                 break;
             }
             Log::warning('AI destination guide rejected', ['name' => $name, 'attempt' => $attempt, 'reason' => $why ?: 'empty overview']);

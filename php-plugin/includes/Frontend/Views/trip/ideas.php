@@ -14,11 +14,14 @@ $title = $trip->isQuote() ? 'Make it yours' : 'Make it even better';
   <ul class="vt-extras" role="list">
     <?php foreach ($trip->upsells as $u): ?>
       <li class="vt-extra<?= $u['image'] === '' ? ' no-image' : '' ?>">
-        <?php if ($u['image'] !== ''): ?><img src="<?= e($u['image']) ?>" alt="" loading="lazy" decoding="async"><?php endif; ?>
+        <?php if ($u['image'] !== ''): ?><img src="<?= e($u['image']) ?>" alt="" loading="lazy" decoding="async" onerror="this.remove()"><?php else: ?><span class="vt-extra__tile" aria-hidden="true"><?= icon('sparkle') ?></span><?php endif; ?>
         <div>
           <strong><?= e($u['name']) ?></strong>
           <?php if ($u['info'] !== ''): ?><div class="vt-extra__text"><?= raw($u['info']) ?></div><?php endif; ?>
-          <a class="vt-btn vt-btn--ghost vt-btn--sm" href="#help" data-ask data-ask-prefill="I'd like to add <?= e($u['name']) ?> to my booking."><?= icon('sparkle') ?> Add this</a>
+          <div class="vt-extra__actions">
+            <?php if (!empty($u['link'])): ?><a class="vt-btn vt-btn--primary vt-btn--sm" href="<?= e($u['link']) ?>" target="_blank" rel="noopener sponsored" data-upsell-link="<?= e($u['name']) ?>"><?= icon('external') ?> Book this</a><?php endif; ?>
+            <a class="vt-btn vt-btn--ghost vt-btn--sm" href="#help" data-ask data-ask-prefill="I'd like to add <?= e($u['name']) ?> to my booking."><?= icon('sparkle') ?> <?= !empty($u['link']) ? 'Ask us instead' : 'Add this' ?></a>
+          </div>
         </div>
       </li>
     <?php endforeach; ?>

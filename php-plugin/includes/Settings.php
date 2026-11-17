@@ -37,7 +37,7 @@ final class Settings
             'airtable_pat'              => '',
             'airtable_pat_standby'      => '',
             'airtable_reference_base'   => '',
-            'cache_ttl_booking'         => 60,
+            'cache_ttl_booking'         => 180,   // seconds a page view's booking graph is reused by its own section requests
             // Widgety
             'widgety_app_id'            => '',
             'widgety_token'             => '',
@@ -87,9 +87,22 @@ final class Settings
             'quote_default_validity_days' => 14,
             'quote_accept_fields'       => "Quotation Accepted|checkbox\nQuotation Accepted At|datetime\nQuotation Accepted By|text\nQuotation Accepted IP|text",
             'mint_enabled'              => true,
-            'legal_footer_text'         => 'Vision by The Travel Network Group',
+            'legal_footer_text'         => '',
             'trip_page_slug'            => 'trip',
             'portal_page_slug'          => 'my-trips',
+            'homepage_enabled'          => true,   // the plugin serves the site's front page
+            'homepage_find_enabled'     => true,   // false = holding page only (no find-my-trip form)
+            'member_directory_base'     => '',     // optional TTNG directory base: member code → Vision base id, for members never served here
+            'member_directory_table'    => 'Members',
+            'member_directory_code'     => 'Member Number',
+            'member_directory_base_field' => 'Airtable App ID',
+            'homepage_title'            => 'Your trip, all in one place',
+            'homepage_intro'            => 'Your travel agent shares every quotation and booking here: the itinerary, your documents, payments and who to call — kept up to date, on any device.',
+            'homepage_logo'             => '',     // image URL; blank = wordmark from the site title
+            'homepage_name'             => '',     // blank = WordPress site title
+            'homepage_accent'           => '#1F4F6E',
+            'homepage_email'            => '',
+            'homepage_phone'            => '',
             'portal_enabled'            => true,
             'ics_enabled'               => true,
             'fields'                    => [],   // Field Studio config
@@ -100,7 +113,16 @@ final class Settings
             'view_comments'             => true,
             'csp_enabled'               => false,
             'modules'                   => [],     // module key => bool; missing = on (see Settings::MODULES)
-            'events_table'              => '',     // optional Vision table to append engagement rows to (e.g. Bookings [Engagement])
+            'events_table'              => '',
+            'cost_prices'               => [],     // provider => USD unit price overrides
+            'cost_fx_gbp'               => 0.79,   // USD → GBP for the summary
+            'places_cache_photos'       => true,   // download Places photos once per place; serve from uploads
+            'mention_agent'             => true,   // @mention the booking's agent in comments (questions, acceptance, concierge, documents)
+            'mention_agent_views'       => false,  // …and on every page view too
+            'chat_model'                => 'claude-sonnet-5-5',
+            'chat_research'             => true,   // the concierge may research official sources (up to 3 searches per question)
+            'chat_daily_cap'            => 500,    // site-wide questions per day before everything goes to the agent
+            'chat_booking_cap'          => 30,     // per booking per day     // optional Vision table to append engagement rows to (e.g. Bookings [Engagement])
             'digest_enabled'            => true,   // daily email of warnings/errors to the admin
             'digest_email'              => '',     // blank = WordPress admin email
             'staging_base'              => '',     // staging member base for the Test everything grid
@@ -110,7 +132,7 @@ final class Settings
             'sw_enabled'                => false,  // offline copy of the trip page via a service worker  // strict CSP; only when the plugin URL and site URL share an origin   // Airtable comment when a customer views / accepts / asks
             'ai_travel_notes'           => true,   // AI 'good to know' for airlines and UK airports
             'reviews_min_rating'        => 4,
-            'ideas_enabled'             => true,   // conversion ideas / upsell prompts
+            'ideas_enabled'             => false,  // generated ideas ("fly in more comfort"…) alongside the member's own upsells; off = only Vision upsells
             'widgety_place_lookup'      => '/api/ports.json?q={name}',
             'widgety_destination_lookup' => '/api/destinations.json?q={name}',
         ];
@@ -165,8 +187,12 @@ final class Settings
         'share'        => ['Share with fellow travellers', 'Lead passenger can invite co-travellers (new)'],
         'wallet'       => ['Travel wallet', 'Tickets, vouchers and emergency numbers on one page (new)'],
         'compare'      => ['Compare quotations', 'Other open quotations for the same customer, side by side (new)'],
+        'included'     => ['What\'s included', 'Ticked list of inclusions and exclusions (from Vision lists when kept, otherwise from the itinerary)'],
+        'travellers'   => ['Who\'s travelling', 'Names as booked, passport status and a one-tap "spot a mistake" — on every status'],
+        'message'      => ['Quick message form', 'The send-a-message form (near the top on quotations, under Help once booked)'],
+        'chat'         => ['Trip concierge', 'Customers ask questions about their trip; answered from the booking under PTR-safe rules, or handed to you (new)'],
     ];
-    private const MODULES_OFF_BY_DEFAULT = ['summary', 'folds', 'events', 'share', 'wallet', 'compare'];
+    private const MODULES_OFF_BY_DEFAULT = ['summary', 'folds', 'events', 'share', 'wallet', 'compare', 'chat'];
 
     public static function module(string $key): bool
     {

@@ -31,6 +31,16 @@ Every one of the 26 Vision **Tags** has its own theme (typeface, weight/width/so
 - **Compare quotations**: other open quotations for the same customer, side by side, on the quotation page.
 - **Accessibility statement** at `/trip/accessibility/` (editable under Legal), linked from every page.
 
+## Release checklist
+1. Upload the zip; rewrite rules refresh automatically on the version change.
+2. Status → **Test everything** on a staging booking; **Render staging bookings** on the records you keep for it.
+3. Experience → Modules: switch on what this site should show (new modules ship off).
+4. Experience → Front page: name, headline, logo, colour, contact; optional TTNG member directory base for Find my trip.
+5. Connections: Test AI, Test Widgety; Costs tab unit prices checked against contracts.
+6. Legal: texts reviewed by TTNG compliance; Accessibility statement read once.
+7. Plesk: PHP 8.4 FPM, memory 256M, max_execution_time 120, `zlib.output_compression = Off`, a real cron for wp-cron every 5 minutes, SMTP for mail, nginx `proxy_read_timeout 180s`.
+8. The daily health digest arrives the next morning; the Engagement tab starts filling.
+
 ## Consumer law and regulation
 
 Built in, driven by the booking's `ATOL` and `Licensing` fields (wp-admin → Legal holds the editable texts; they are plain-English summaries with links to the statutory wording and **must be confirmed by TTNG compliance before go-live** — this is engineering, not legal advice):
@@ -176,6 +186,12 @@ After signing in, customers can set Email / Text / Post marketing, preferred dep
 
 ### Page first, external sources after — and nothing depends on JavaScript
 Everything from Vision (hero, itinerary, passengers, payments, documents, protection, help) is server-rendered and visible immediately. Third-party sections (Google Places, Widgety, AI copy, live flights, weather) are rendered **inline from cache when the data is already there** — so the second view of any trip is complete with no browser call — and only on a cold cache do they show a shimmering skeleton that `vision.js` fills from the REST API. Anything that fails to load simply does not appear; WordPress admins see the reason in the sources panel and the browser console. A stale REST nonce is retried automatically. The offline service worker and the strict Content-Security-Policy are opt-in (Security tab) because both can misbehave on hosts where the site URL and plugin URL differ.
+
+### Trip concierge
+Switch on under Experience → Modules. A floating "Ask about my trip" button opens a chat. The answer model is strict by design: a context pack of what the customer already sees, a system prompt written for the PTRs (no promises, confirmations, quotes, changes, refunds, visa/medical/safety rulings, competitors or internal finance), a validator on every answer, and a clean handoff to the member for anything else — the member receives the question by branded email with a reply link, the customer is told a person has it. Every exchange is a comment on the Bookings record. Costs are capped (per booking and site-wide per day), repeat questions are served from a 24-hour cache, and research is optional.
+
+### Loyalty and the customer's own details
+Payments honour the scheme: Payment Type "Loyalty Redemption" rows are hidden and excluded from totals; customer payments by method "Loyalty Redemption" show as points. The portal gains Loyalty (balance, value, expiry, history) and Details (passport, licence, next of kin, airline/cruise programmes — never names, DOBs or contact details). VIP customers get a visibly elevated experience.
 
 ### Engagement comments in Vision
 When a customer views the trip page (once per device per day), accepts a quotation or sends a message, the plugin posts a native comment on the Bookings record (time, device, IP, how they verified, stage). Token scope needed: `data.recordComments:write`. Switch off under Experience if you prefer.

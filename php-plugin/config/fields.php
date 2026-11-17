@@ -5,6 +5,9 @@
  */
 return [
     'tables' => [
+        'loyalty_tx'      => 'Loyalty Transactions',
+        'airline_loyalty' => 'CMS [Loyalty]',
+        'cruise_loyalty'  => 'CMS [Cruise Loyalty]',
         'bookings'      => 'Bookings',
         'elements'      => 'Bookings [Elements]',
         'payments'      => 'Bookings [Payments]',
@@ -29,6 +32,16 @@ return [
     ],
 
     'booking' => [
+        'loyalty_points'    => ['Loyalty_Total Points'],
+        'price_pp'          => ['Cost Per Person', 'Price Per Person', 'Per Person Price'],
+        'included'          => ['What\'s Included', 'Whats Included', 'Inclusions', 'Included'],
+        'not_included'      => ['Not Included', 'What\'s Not Included', 'Exclusions', 'Excluded'],
+        'video_message'     => ['Video Message', 'Video Message URL', 'Personal Video'],
+        'video_walkthrough' => ['Video Walkthrough'],
+        'loyalty_awarded'   => ['Loyalty Points Awarded'], // checkbox: the points have been credited
+        'loyalty_enabled'   => ['Loyalty Enabled'],
+        'loyalty_return'    => ['Eligible Loyalty Return Date'],
+        'loyalty_tx'        => ['Loyalty Transactions'],
         'ref'            => ['Booking Reference', 'iBos Reference'],
         'name'           => ['Trip Name', 'Name', 'Title'],
         'status'         => ['Status'],
@@ -70,6 +83,7 @@ return [
         'personal_message' => ['Personalised Message', 'Personalized Message'],
         'include_message' => ['Include Personalised Message'],
         'agent'          => ['SinGS Agent Name', 'Created by', 'Created By'],
+        'agent_user'     => ['Travel Agent', 'Agent', 'Booking Owner', 'Owner', 'Consultant', 'Assigned To', 'Created by', 'Created By', 'Last modified by'], // a collaborator field → @mention in comments
         'created'        => ['Created time', 'Created'],
         'booking_date'   => ['Booking Date'],
         'status_updated' => ['Status Updated'],
@@ -110,7 +124,6 @@ return [
         'customer_postcode' => ['Customers | Postcode'],
         'supplier_tickets' => ['Supplier Tickets Received'],
         'supplier_confirmations' => ['Supplier Confirmations Received'],
-        'loyalty_points' => ['Loyalty_Total Points'],
         'standalone_lite' => ['Standalone Only [Lite]'],
     ],
 
@@ -130,6 +143,8 @@ return [
         'end_time'       => ['End Time'],
         'from'           => ['Dep. Airport Name', 'Departure Port', 'Dep. Station Name', 'Pick Up Location', 'From', 'Origin'],
         'to'             => ['Arr. Airport Name', 'Disembark Port', 'Arr. Station Name', 'Drop Off Location', 'To', 'Destination'],
+        'from_terminal'  => ['Departure Terminal', 'Dep. Terminal', 'Dep Terminal', 'Outbound Terminal', 'Terminal'],
+        'to_terminal'    => ['Arrival Terminal', 'Arr. Terminal', 'Arr Terminal', 'Inbound Terminal'],
         'from_code'      => ['Dep. IATA Code'],
         'to_code'        => ['Arr. IATA Code'],
         'iata'           => ['IATA', 'IATA Code'],
@@ -198,7 +213,8 @@ return [
         'completed'      => ['Payment Complete', 'Date Complete', 'Receipt Date'],
         'link'           => ['Payment Link URL', 'Payment Link', 'Payment URL'],
         'agent_link'     => ['Payment Link URL (Agent VT)'],
-        'method'         => ['Payment Method', 'Method'],
+        'method'         => ['Method', 'Payment Method'], // Method is the lookup (e.g. "Loyalty Redemption"); Payment Method is the link
+        'loyalty_tx'     => ['Loyalty Transactions'],
         'reference'      => ['paymentReference', 'Receipt Number', 'Payment Reference'],
         'resort_reason'  => ['Resort Payment Reason'],
         'show_on_quote'  => ["Show 'Pay Now' on Quotation", 'Show Pay Now on Quotation'],
@@ -207,6 +223,13 @@ return [
     ],
 
     'customer' => [
+        'vip'               => ['VIP Status', 'VIP'],
+        'points_available'  => ['Available Points', 'New Points Total'],
+        'points_lifetime'   => ['Lifetime Points'],
+        'points_expiry'     => ['Points Expiry Date'],
+        'points_value'      => ['Loyalty Value (£)'],
+        'loyalty_tx'        => ['Loyalty Transactions'],
+        'people'            => ['Customers [People]', 'People'],
         'name'      => ['Full Name', 'Name'],
         'first'     => ['First Name'],
         'last'      => ['Last Name'],
@@ -228,10 +251,20 @@ return [
         'pref_airports' => ['Preferred Departure Airport(s)'],
         'pref_months' => ['Preferred Travel Month(s)'],
         'people'    => ['Customers [People]'],
-        'trips'     => ['Trips'],
+        'trips'     => ['Trips', 'Bookings', 'Quotations & Bookings'],
     ],
 
     'person' => [
+        'passport_number'   => ['Passport Number'],
+        'passport_country'  => ['Issuing Country'],
+        'licence_number'    => ['Driving License Number', 'Driving Licence Number'],
+        'licence_expiry'    => ['Driving License Expiry Date', 'Driving Licence Expiry Date'],
+        'nok_name'          => ['NOK Name', 'Next of Kin Name'],
+        'nok_phone'         => ['NOK Phone Number', 'Next of Kin Phone'],
+        'airline_loyalty'   => ['Airline Loyalty'],
+        'cruise_loyalty'    => ['Cruise Loyalty'],
+        'customers'         => ['Customers', 'Customer'],
+
         'name'       => ['Full Name', 'Name'],
         'first'      => ['First Name', 'Preferred Name'],
         'last'       => ['Last Name'],
@@ -246,6 +279,8 @@ return [
     ],
 
     'brand' => [
+        'why_header'     => ['Why Choose... Header'],
+        'why_subheader'  => ['Why Choose... Subheader'],
         'name'         => ['Trading Name', 'Brand Name', 'Name'],
         'company'      => ['Company Name'],
         'proposition'  => ['Proposition'],
@@ -320,6 +355,7 @@ return [
     ],
 
     'member' => [
+        'loyalty_enabled' => ['Loyalty Scheme Enabled'],
         'company'   => ['Company Name'],
         'number'    => ['Member Number'],
         'reg_no'    => ['Company Registration Number'],
@@ -349,6 +385,7 @@ return [
 
     'airport'  => ['name' => ['Name', 'Airport'], 'iata' => ['IATA Code'], 'country' => ['ISO Country'], 'city' => ['Municipality']],
     'airline'  => ['name' => ['Airline', 'Name'], 'iata' => ['iata']],
+    'operator' => ['name' => ['Name', 'Operator', 'Cruise Operator']],
     'location' => [
         'name' => ['Name', 'Resort', 'Area', 'Country'],
         'country' => ['Country'],
@@ -367,7 +404,7 @@ return [
     'cabin'    => ['name' => ['Cabin Name', 'Name'], 'grade' => ['Cabin Grade'], 'number' => ['Cabin Number'], 'deck' => ['Cabin Deck', 'Deck'], 'side' => ['Ship Side'], 'position' => ['Cabin Position'], 'bed' => ['Bed Type'], 'seating' => ['Seating'], 'table' => ['Table Size'], 'dining' => ['Dining Option']],
     'passenger' => ['name' => ['Passenger', 'Passenger Name'], 'element_type' => ['Element Type'], 'pnr' => ['PNR'], 'class' => ['Flight Class'], 'seat' => ['Seat Number'], 'cabin_bag' => ['Cabin Baggage Allowance'], 'checked_bag' => ['Checked Baggage Allowance'], 'extras' => ['Extras'], 'meal' => ['Meal Request'], 'ssr' => ['Special Requests']],
     'cruise_itin' => ['day' => ['Day'], 'port' => ['Port'], 'port_text' => ['Port (SinGS)', 'Overview'], 'arrive' => ['Arrive'], 'depart' => ['Depart'], 'holiday' => ['CMS [Cruise Holidays]']],
-    'upsell'   => ['name' => ['Name', 'Title'], 'info' => ['Further Information', 'Description'], 'image' => ['Upsell Featured Image', 'Featured Image', 'Image'], 'supplier' => ['Supplier']],
+    'upsell'   => ['affiliate' => ['Affiliate Link', 'Link', 'URL'], 'name' => ['Name', 'Title'], 'info' => ['Further Information', 'Description'], 'image' => ['Upsell Featured Image', 'Featured Image', 'Image'], 'supplier' => ['Supplier']],
     'brand_template' => ['name' => ['Template Name'], 'type' => ['Template Type'], 'letter' => ['Letter'], 'subject' => ['Subject']],
     'comm' => ['name' => ['Name'], 'type' => ['Type'], 'subject' => ['Custom Subject', 'Subject'], 'content' => ['Custom Content', 'Email Template'], 'date' => ['Scheduled For', 'Date'], 'sent' => ['Sent'], 'status' => ['Status'], 'self_only' => ['Send To Self Only'], 'image' => ['Customer Header Image']],
 ];

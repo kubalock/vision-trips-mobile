@@ -57,11 +57,12 @@ $config = [
 ];
 ?>
 <!DOCTYPE html>
-<html lang="en-GB">
+<html lang="en-GB" class="no-js">
+<script>document.documentElement.className = document.documentElement.className.replace('no-js', 'js');</script>
 <head>
-<?= partial('partials/head', ['title' => $title, 'brand' => $brand, 'accent' => $accent, 'fontsUrl' => $fontsUrl, 'displayFont' => $displayFont, 'bodyFont' => $bodyFont, 'theme' => $theme, 'preview' => $preview, 'stylesheet' => 'vision']) ?>
+<?= partial('partials/head', ['title' => $title, 'brand' => $brand, 'manifestUrl' => empty($preview) ? $urls['manifest'] : '', 'accent' => $accent, 'fontsUrl' => $fontsUrl, 'displayFont' => $displayFont, 'bodyFont' => $bodyFont, 'theme' => $theme, 'preview' => $preview, 'stylesheet' => 'vision']) ?>
 </head>
-<body class="vt <?= e(Theme::bodyClasses($theme)) ?> stage-<?= e($stage) ?> tone-<?= e($brand->tone) ?><?= $surprise ? ' is-surprise' : '' ?>" data-stage="<?= e($stage) ?>">
+<body class="vt <?= e(Theme::bodyClasses($theme)) ?> stage-<?= e($stage) ?> tone-<?= e($brand->tone) ?><?= $surprise ? ' is-surprise' : '' ?><?= $trip->vip ? ' is-vip' : '' ?>" data-stage="<?= e($stage) ?>">
 <a class="vt-skip" href="#main">Skip to content</a>
 
 <header class="vt-top" id="top">
@@ -100,8 +101,12 @@ $config = [
     <?php endif; ?>
 
     <?= partial('trip/message', get_defined_vars()) ?>
+    <?php if (!$ended && !$surprise): ?><?= partial('trip/walkthrough', get_defined_vars()) ?><?php endif; ?>
+    <?php if ($trip->stage === Stage::QUOTE && !$traveller && $brand->email !== '' && $mod('message')): ?><section class="vt-section vt-section--ask" id="ask-top"><?= partial('trip/ask', get_defined_vars() + ['compact' => true]) ?></section><?php endif; ?>
+    <?php if (!$ended && !$surprise && $mod('included')): ?><?= $trip->isQuote() ? partial('trip/included', get_defined_vars()) : $fold('included', "What's included", partial('trip/included', get_defined_vars())) ?><?php endif; ?>
     <?php if ($trip->stage === Stage::QUOTE && !$traveller && $mod('compare')): ?><?= partial('trip/compare', get_defined_vars()) ?><?php endif; ?>
     <?php if ($trip->stage === Stage::QUOTE && $mod('whybook')): ?><?= $fold('why', 'Why book with ' . $brand->name, partial('trip/whybook', get_defined_vars())) ?><?php endif; ?>
+    <?php if (!$ended && !$surprise && !$traveller && $mod('travellers')): ?><?= partial('trip/travellers', get_defined_vars()) ?><?php endif; ?>
     <?php if ($trip->isLive() && !$home && !$ended && !$surprise && $mod('next')): ?><?= partial('trip/next', get_defined_vars()) ?><?php endif; ?>
     <?php if (!$ended && !$traveller && $mod('messages')): ?><?= $fold('messages', 'What we\'ve sent you', partial('trip/messages', get_defined_vars())) ?><?php endif; ?>
 
@@ -146,6 +151,9 @@ $config = [
     <?php if ($isWpAdmin): ?><?= partial('trip/sources', get_defined_vars()) ?><?php endif; ?>
   </div>
 </main>
+<?php $chatOn = $mod('chat') && !$ended && empty($traveller) && trim((string) \VisionTrips\Settings::get('ai_api_key', '')) !== ''; ?>
+<?php if ($chatOn): ?><?= partial('trip/chat', get_defined_vars()) ?>
+<?php elseif ($mod('message') && !$ended && empty($traveller) && $brand->email !== ''): ?><a class="vt-chat__fab vt-chat__fab--message" href="<?= $trip->stage === Stage::QUOTE ? '#ask-top' : '#help' ?>" data-ask><?= icon('mail') ?><span>Message <?= e($trip->agentName !== '' ? \VisionTrips\Support\Str::firstName($trip->agentName) : 'us') ?></span></a><?php endif; ?>
 
 <?= partial('trip/footer', get_defined_vars()) ?>
 <?= partial('trip/nav', get_defined_vars()) ?>

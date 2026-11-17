@@ -70,6 +70,8 @@ function status_header(int $c): void {}
 function current_user_can(string $c): bool { return true; }
 function get_bloginfo(string $k = ''): string { return 'My Trip'; }
 function wp_safe_redirect(string $u, int $s = 302): bool { return true; }
+function is_front_page(): bool { return false; }
+function sanitize_email(string $e): string { return filter_var($e, FILTER_SANITIZE_EMAIL) ?: ''; }
 function checked(mixed $a, mixed $b = true, bool $echo = true): string { return $a == $b ? ' checked' : ''; }
 function selected(mixed $a, mixed $b = true, bool $echo = true): string { return $a == $b ? ' selected' : ''; }
 function get_query_var(string $k): string { return $GLOBALS['vt_query'][$k] ?? ''; }

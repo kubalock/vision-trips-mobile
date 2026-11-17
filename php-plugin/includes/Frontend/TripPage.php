@@ -35,6 +35,7 @@ final class TripPage
             'self'      => Token::url($this->token),
             'ics'       => Token::url($this->token, 'ics'),
             'docs'      => Token::url($this->token, 'documents'),
+            'manifest'  => Token::url($this->token, 'manifest'),
             'confirmation' => Token::url($this->token, 'documents/confirmation'),
             'invoice'   => Token::url($this->token, 'documents/invoice'),
             'atol'      => Token::url($this->token, 'documents/atol'),
@@ -70,46 +71,92 @@ final class TripPage
             'flightsOn' => (string) Settings::get('flight_provider', 'off') !== 'off',
             'placesOn'  => trim((string) Settings::get('google_places_key', '')) !== '',
             'widgetyOn' => trim((string) Settings::get('widgety_app_id', '')) !== '',
-            'legalText' => (string) Settings::get('legal_footer_text', 'Vision by The Travel Network Group'),
+            'legalText' => (string) Settings::get('legal_footer_text', ''),
             'ideasOn'   => Settings::bool('ideas_enabled'),
             'aiNotes'   => Settings::bool('ai_travel_notes') && trim((string) Settings::get('ai_api_key', '')) !== '',
             'isWpAdmin' => \VisionTrips\Support\Provenance::isAdmin(),
             'stale'     => $this->stale,
             'traveller' => $this->traveller,
+            'siblings'  => $this->siblings($preview),
+            'agency'    => $preview ? ['rating' => 4.9, 'count' => 312, 'url' => '#'] : (new \VisionTrips\Integrations\Places())->agencyRating($brand->name, implode(', ', $brand->addressLines)),
+            'routeMap'  => $preview ? '' : \VisionTrips\Integrations\Places::routeUrl($this->routePoints()),
             'nonce'     => wp_create_nonce('wp_rest'),
         ];
     }
 
-    /** Other open quotations for the same customer (compare card). @return array<int,array<string,mixed>> */
+    /** The trip's places in order, for the route map. @return array<int,array{lat:float,lng:float}> */
+    private function routePoints(): array
+    {
+        $pts = [];
+        foreach ($this->trip->activeElements() as $e) {
+            if (in_array($e->kind, ['stay', 'cruise'], true) && $e->lat !== null && $e->lng !== null) {
+                $k = round((float) $e->lat, 2) . ',' . round((float) $e->lng, 2);
+                $pts[$k] = ['lat' => (float) $e->lat, 'lng' => (float) $e->lng];
+            }
+        }
+        return array_values($pts);
+    }
+
+    /**
+     * The other options for this customer: quotations held by the same Customer record(s) — not merely the same
+     * email — and, where Vision's "Include in Comparison?" exists, only those the member ticked (this booking
+     * included: an unticked quotation shows no options). Cached 10 minutes.
+     * @return array<int,array<string,mixed>>
+     */
     private function siblings(bool $preview): array
     {
         $trip = $this->trip;
-        if ($preview || !Settings::module('compare') || !$trip->isQuote() || $trip->customerEmail === '') {
+        if ($preview) {
+            return $trip->isQuote() && is_array($GLOBALS['vt_preview_siblings'] ?? null) ? $GLOBALS['vt_preview_siblings'] : [];
+        }
+        if (!Settings::module('compare') || !$trip->isQuote() || !$trip->customerIds) {
             return [];
         }
-        $key = $trip->base . '|' . strtolower($trip->customerEmail) . '|' . $trip->id;
+        $key = $trip->base . '|' . implode(',', $trip->customerIds) . '|' . $trip->id;
         $cached = \VisionTrips\Support\Cache::get('siblings', $key);
         if (is_array($cached)) {
             return $cached;
         }
         $out = [];
         try {
-            $repo = new \VisionTrips\Airtable\BookingRepository(new \VisionTrips\Airtable\Client());
-            foreach ($repo->findByEmail($trip->base, $trip->customerEmail) as $t) {
-                if ($t['id'] === $trip->id || strcasecmp($t['status'], 'Quotation') !== 0) {
+            $client = new \VisionTrips\Airtable\Client();
+            // The customer's own link to their bookings, asked for explicitly (Trips or Bookings, whichever the base uses)
+            $linkFields = \VisionTrips\Airtable\FieldMap::candidates('customer', 'trips');
+            $tripIds = $trip->customerTripIds;
+            // (no field list: naming a field a base does not have makes Airtable reject the whole request)
+            foreach ($client->byIds($trip->base, \VisionTrips\Airtable\FieldMap::table('customers'), array_slice($trip->customerIds, 0, 5)) as $cr) {
+                foreach ($linkFields as $lf) {
+                    $tripIds = array_merge($tripIds, \VisionTrips\Support\Arr::recordIds($cr['fields'][$lf] ?? []));
+                }
+            }
+            $ids = array_values(array_unique(array_filter($tripIds, static fn ($id) => $id !== $trip->id)));
+            if (!$ids) {
+                return [];
+            }
+            foreach ($client->byIds($trip->base, \VisionTrips\Airtable\FieldMap::table('bookings'), array_slice($ids, 0, 40)) as $r) {
+                $f = $r['fields'] ?? [];
+                if (strcasecmp(\VisionTrips\Support\Str::clean($f['Status'] ?? ''), 'Quotation') !== 0) {
                     continue;
                 }
-                $created = Dates::parse($t['created'] ?? null);
-                if ($created && $created < Dates::now()->modify('-90 days')) {
-                    continue;
-                }
-                $t['url'] = Token::urlFor($trip->base, $t['id']);
-                $out[] = $t;
+                $hero = \VisionTrips\Support\Arr::images($f['Hero Image'] ?? []);
+                $out[] = [
+                    'id'      => (string) $r['id'],
+                    'name'    => \VisionTrips\Support\Str::clean($f['Trip Name'] ?? '') ?: 'Option',
+                    'ref'     => \VisionTrips\Support\Str::clean(\VisionTrips\Support\Arr::first($f['Booking Reference'] ?? '')),
+                    'departs' => Dates::iso($f['Departure Date'] ?? null),
+                    'returns' => Dates::iso($f['Return Date'] ?? null),
+                    'total'   => (float) (\VisionTrips\Support\Arr::first($f['Total Price'] ?? 0) ?: 0),
+                    'pp'      => (float) (\VisionTrips\Support\Arr::first($f['Cost Per Person'] ?? 0) ?: 0),
+                    'nights'  => (int) (\VisionTrips\Support\Arr::first($f['Duration'] ?? 0) ?: 0),
+                    'image'   => $hero[0]['thumb'] ?? '',
+                    'url'     => Token::urlFor($trip->base, (string) $r['id']),
+                ];
             }
         } catch (\Throwable $e) {
             \VisionTrips\Support\Log::warning('Sibling quotations failed', ['error' => $e->getMessage()]);
         }
-        $out = array_slice($out, 0, 3);
+        usort($out, static fn ($a, $b) => strcmp($a['departs'], $b['departs']));
+        $out = array_slice($out, 0, 12);
         \VisionTrips\Support\Cache::set('siblings', $key, $out, 10 * MINUTE_IN_SECONDS);
         return $out;
     }
@@ -200,7 +247,8 @@ final class TripPage
             case Stage::PAST:
                 $c['kicker'] = 'A trip to remember';
                 $c['sub'] = ($dest !== '' ? $dest . ', ' : '') . $trip->dateRange() . '.';
-                $c['cta'] = 'Plan the next one';
+                $c['cta'] = 'Leave a review';
+                $c['cta2'] = 'Plan the next one';
                 break;
         }
         if ($trip->surprise && $trip->isLive()) {

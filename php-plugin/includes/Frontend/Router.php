@@ -27,6 +27,7 @@ final class Router
         add_action('init', [$this, 'rewrites']);
         add_filter('query_vars', [$this, 'queryVars']);
         add_action('template_redirect', [$this, 'dispatch'], 0);
+        add_action('template_redirect', [$this, 'homepage'], 2);
         add_action('template_redirect', [$this, 'legacyRedirect'], 1);
         foreach (['vision_trip', 'TTNGBOOKING_V2', 'TTNG_GEMINI_PRINT', 'TTNG_ATOL_CERTIFICATE', 'TTNG_GEMINI_INVOICE', 'TTNG_BASIC_BOOKING', 'airtable_letter'] as $tag) {
             add_shortcode($tag, [$this, 'legacyShortcode']);
@@ -37,8 +38,10 @@ final class Router
     {
         $slug = preg_quote(trim((string) Settings::get('trip_page_slug', 'trip'), '/'), '#');
         $portal = preg_quote(trim((string) Settings::get('portal_page_slug', 'my-trips'), '/'), '#');
-        add_rewrite_rule('^' . $slug . '/([^/]+)/(documents|ics|accept)/?([^/]*)/?([^/]*)/?$', 'index.php?vision_trip=$matches[1]&vision_view=$matches[2]&vision_doc=$matches[3]&vision_arg=$matches[4]', 'top');
+        add_rewrite_rule('^' . $slug . '/([^/]+)/(documents|ics|accept|manifest)/?([^/]*)/?([^/]*)/?$', 'index.php?vision_trip=$matches[1]&vision_view=$matches[2]&vision_doc=$matches[3]&vision_arg=$matches[4]', 'top');
         add_rewrite_rule('^' . $slug . '/sw\.js$', 'index.php?vision_trip=sw.js', 'top');
+        add_rewrite_rule('^' . $slug . '/photo/([a-f0-9]{32})\.jpg$', 'index.php?vision_trip=photo&vision_doc=$matches[1]', 'top');
+        add_rewrite_rule('^' . $slug . '/img/([A-Za-z0-9_-]{1,80})\.(jpg|png|webp|gif)$', 'index.php?vision_trip=img&vision_doc=$matches[1]&vision_arg=$matches[2]', 'top');
         add_rewrite_rule('^' . $slug . '/([^/]+)/?$', 'index.php?vision_trip=$matches[1]', 'top');
         add_rewrite_rule('^' . $slug . '/?$', 'index.php?vision_trip=_', 'top');
         add_rewrite_rule('^' . $portal . '/?$', 'index.php?vision_portal=1', 'top');
@@ -64,8 +67,10 @@ final class Router
         header('Referrer-Policy: strict-origin-when-cross-origin');
         header('X-Content-Type-Options: nosniff');
         header('X-Frame-Options: SAMEORIGIN');
+        header('Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()');
+        header('Cross-Origin-Opener-Policy: same-origin-allow-popups');
         if (Settings::bool('csp_enabled')) {
-            header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' https: data: blob:; connect-src 'self'; frame-src https://www.google.com https://maps.google.com https://www.youtube.com https://player.vimeo.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'");
+            header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' https: data: blob:; connect-src 'self'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com https://www.google.com https://maps.google.com https://www.youtube.com https://player.vimeo.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'");
         }
     }
 
@@ -117,6 +122,110 @@ final class Router
         return '<p class="vt-legacy">Loading your trip…</p>';
     }
 
+    /** Member bases this site has served, and the member code (the X0333 in NWG-X0333-…) each one answers to. */
+    public static function rememberBase(string $base, string $code = ''): void
+    {
+        if (!preg_match('/^app[A-Za-z0-9]{14}$/', $base)) {
+            return;
+        }
+        $known = get_option('vision_trips_known_bases', []);
+        $known = is_array($known) ? $known : [];
+        if (!in_array($base, $known, true)) {
+            $known[] = $base;
+            update_option('vision_trips_known_bases', array_slice($known, -2000), false);
+        }
+        $code = strtoupper(trim($code));
+        if ($code !== '') {
+            $map = get_option('vision_trips_member_bases', []);
+            $map = is_array($map) ? $map : [];
+            if (($map[$code] ?? '') !== $base) {
+                $map[$code] = $base;
+                update_option('vision_trips_member_bases', $map, false);
+            }
+        }
+    }
+
+    /** The member code inside a booking reference: NWG-X0333-2246408A → X0333. */
+    public static function memberCodeFromRef(string $ref): string
+    {
+        $ref = strtoupper(trim($ref));
+        if (preg_match('/^[A-Z]{2,5}-([A-Z]{1,2}\d{3,6})-/', $ref, $m)) {
+            return $m[1];
+        }
+        if (preg_match('/^([A-Z]{1,2}\d{3,6})[-\s]/', $ref, $m)) {
+            return $m[1];
+        }
+        return '';
+    }
+
+    /**
+     * Member code → Vision base: first the bases this site has already served, then the optional TTNG directory
+     * (so a customer of a member whose trips have never been opened here can still be found). Cached a day.
+     */
+    public static function baseForMemberCode(string $code): string
+    {
+        $code = strtoupper(trim($code));
+        if ($code === '') {
+            return '';
+        }
+        $map = get_option('vision_trips_member_bases', []);
+        if (is_array($map) && !empty($map[$code])) {
+            return (string) $map[$code];
+        }
+        $dirBase = trim((string) Settings::get('member_directory_base', ''));
+        if (!preg_match('/^app[A-Za-z0-9]{14}$/', $dirBase)) {
+            return '';
+        }
+        $cached = \VisionTrips\Support\Cache::get('member-dir', $code);
+        if (is_string($cached)) {
+            return $cached;
+        }
+        $codeField = (string) Settings::get('member_directory_code', 'Member Number');
+        $baseField = (string) Settings::get('member_directory_base_field', 'Airtable App ID');
+        $found = '';
+        try {
+            $rows = (new \VisionTrips\Airtable\Client())->find($dirBase, (string) Settings::get('member_directory_table', 'Members'), "UPPER({" . $codeField . "})='" . addslashes($code) . "'", [$codeField, $baseField], 1);
+            $v = (string) ($rows[0]['fields'][$baseField] ?? '');
+            if (preg_match('/^app[A-Za-z0-9]{14}$/', $v)) {
+                $found = $v;
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Member directory lookup failed', ['code' => $code, 'error' => $e->getMessage()]);
+        }
+        \VisionTrips\Support\Cache::set('member-dir', $code, $found, DAY_IN_SECONDS);
+        return $found;
+    }
+
+    /** @return string[] */
+    public static function knownBases(): array
+    {
+        $known = get_option('vision_trips_known_bases', []);
+        return is_array($known) ? array_values(array_filter($known, 'is_string')) : [];
+    }
+
+    /** The site's front page, served by the plugin when enabled. */
+    public function homepage(): void
+    {
+        if (!Settings::bool('homepage_enabled') || !is_front_page() || get_query_var('vision_portal') || get_query_var('vision_trip')) {
+            return;
+        }
+        self::noCache();
+        status_header(200);
+        header('Content-Type: text/html; charset=UTF-8');
+        echo View::render('home', [
+            'name'   => trim((string) Settings::get('homepage_name', '')) ?: (string) get_bloginfo('name'),
+            'title'  => (string) Settings::get('homepage_title', ''),
+            'intro'  => (string) Settings::get('homepage_intro', ''),
+            'logo'   => (string) Settings::get('homepage_logo', ''),
+            'accent' => (string) (Settings::get('homepage_accent', '#1F4F6E') ?: '#1F4F6E'),
+            'email'  => (string) Settings::get('homepage_email', ''),
+            'phone'  => (string) Settings::get('homepage_phone', ''),
+            'portal' => home_url('/' . trim((string) Settings::get('portal_page_slug', 'my-trips'), '/') . '/'),
+            'find'   => Settings::bool('homepage_find_enabled'),
+        ]);
+        exit;
+    }
+
     public function dispatch(): void
     {
         $portal = get_query_var('vision_portal');
@@ -132,6 +241,12 @@ final class Router
         if ($tokenRaw === 'sw.js') {
             $this->serviceWorker();
         }
+        if ($tokenRaw === 'photo') {
+            \VisionTrips\Integrations\Places::servePhoto((string) get_query_var('vision_doc'), (string) ($_GET['k'] ?? ''));
+        }
+        if ($tokenRaw === 'img') {
+            \VisionTrips\Support\Assets::serve((string) get_query_var('vision_doc'), (string) get_query_var('vision_arg'), (string) ($_GET['k'] ?? ''));
+        }
         if ($tokenRaw === 'accessibility') {
             self::noCache();
             $texts = \VisionTrips\Domain\Legal::texts();
@@ -140,7 +255,8 @@ final class Router
         }
         self::noCache();
         if ($tokenRaw === '_') {
-            $this->plain(404, 'Trip not found', 'That link is incomplete. Please use the link your travel agent sent you.');
+            wp_safe_redirect(home_url('/'), 302);
+            exit;
         }
         $token = Token::parse((string) $tokenRaw);
         if (!$token) {
@@ -155,8 +271,9 @@ final class Router
             $this->plain(503, 'Not configured', 'This site is not connected to Vision yet.');
         }
         $repo = new BookingRepository($client);
-        $fresh = $token['scope'] === Token::SCOPE_AGENT && isset($_GET['fresh']);
-        $trip = $repo->load($token['base'], $token['record'], $fresh);
+        // Booking data is never served from an old copy: every page view goes to Vision. The fetched graph is kept
+        // briefly only so the section requests that follow this view reuse it instead of fetching three waves each.
+        $trip = $repo->load($token['base'], $token['record'], true);
         if ($trip === null && $repo->unavailable) {
             status_header(503);
             header('Content-Type: text/html; charset=UTF-8');
@@ -194,6 +311,22 @@ final class Router
             }
         }
 
+        if ($view === 'manifest') {
+            self::noCache();
+            header('Content-Type: application/manifest+json; charset=UTF-8');
+            $iconUrl = $trip->brand->favicon !== '' ? $trip->brand->favicon : $trip->brand->logo;
+            echo wp_json_encode([
+                'name' => $trip->name . ' — ' . $trip->brand->name,
+                'short_name' => \VisionTrips\Support\Str::truncate($trip->brand->name, 12),
+                'start_url' => Token::url((string) $tokenRaw),
+                'scope' => Token::url((string) $tokenRaw),
+                'display' => 'standalone',
+                'background_color' => '#F4F4F1',
+                'theme_color' => $trip->brand->colour !== '' ? $trip->brand->colour : '#1F4F6E',
+                'icons' => $iconUrl !== '' ? [['src' => $iconUrl, 'sizes' => 'any', 'type' => 'image/png', 'purpose' => 'any']] : [],
+            ], JSON_UNESCAPED_SLASHES);
+            exit;
+        }
         if ($view === 'ics') {
             if (!Settings::bool('ics_enabled')) {
                 $this->plain(404, 'Not available', 'Calendar export is switched off.');
@@ -205,8 +338,13 @@ final class Router
         }
         if ($view === 'documents') {
             echo (new Documents($trip, (string) $tokenRaw, $isAgent, $level))->render($doc, $arg);
+            if (function_exists('fastcgi_finish_request')) {
+                fastcgi_finish_request();
+            }
+            \VisionTrips\Airtable\Audit::document($trip, (string) ($doc ?: 'index'), $token['scope']);
             exit;
         }
+        self::rememberBase($token['base'], self::memberCodeFromRef($trip->ref) ?: $trip->brand->memberNumber);
         header('X-Vision-State: ' . ($repo->servedStale ? 'stale' : 'ok'));
         $page = new TripPage($trip, (string) $tokenRaw, $level, $isAgent);
         $page->stale = $repo->servedStale;

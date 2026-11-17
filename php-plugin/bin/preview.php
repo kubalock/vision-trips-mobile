@@ -69,6 +69,10 @@ $pages = [];
 $errors = 0;
 
 foreach ($fixtures as $fkey => $factory) {
+    // Compare options demo data (preview only)
+    $GLOBALS['vt_preview_siblings'] = $fkey === 'egypt'
+        ? [['id' => 'recOPT1', 'name' => 'Cairo & the Nile — the Oberoi Zahra', 'ref' => 'NWG-72566', 'departs' => '2027-03-05', 'returns' => '2027-03-16', 'total' => 7890.0, 'pp' => 3945.0, 'nights' => 11, 'image' => '', 'url' => '#']]
+        : array_map(static fn ($i) => ['id' => 'recOPT' . $i, 'name' => ['Lisbon weekend, Chiado', 'Lisbon with a Sintra day', 'Porto instead', 'Lisbon & the Algarve', 'Lisbon, five nights', 'Seville by rail'][$i], 'ref' => 'HHT-1043' . $i, 'departs' => '2027-02-' . (12 + $i), 'returns' => '2027-02-' . (14 + $i), 'total' => 1096.0 + $i * 140, 'pp' => 548.0 + $i * 70, 'nights' => 2 + ($i % 3), 'image' => '', 'url' => '#'], range(0, 5));
     foreach ($stages as $skey => $slabel) {
         $fx = $factory($skey, $img);
         $trip = $repo->fromGraph('appPREVIEW0000001', $fx['graph']);
@@ -87,6 +91,7 @@ foreach ($fixtures as $fkey => $factory) {
                     foreach ($trip->ofKind('stay') as $e) {
                         if (strcasecmp($q, $e->searchQueryForPlaces()) === 0) {
                             Cache::set('ai', (new \VisionTrips\Integrations\Ai())->placeCacheId($name, $e->locationName ?: $place['address'], '', ['kind' => 'stay']), $text, 3600);
+                            Cache::set('ai', (new \VisionTrips\Integrations\Ai())->placeCacheId($name, $e->locationName ?: $place['address'], '', ['kind' => 'stay']) . '|facts', ['Outdoor pool', 'Spa', 'Pyramid views', 'Four restaurants', 'Family rooms', 'Free Wi-Fi'], 3600);
                         }
                     }
                 }
@@ -118,6 +123,12 @@ foreach ($fixtures as $fkey => $factory) {
         try {
             $page = new TripPage($trip, $token, $level, false);
             $html = $page->render(true);
+            if ($skey === 'countdown' && $fkey === 'egypt') {
+                // Demo: the concierge open with a sample exchange baked into the page
+                $html = str_replace('<section class="vt-chat" id="vt-chat" hidden', '<section class="vt-chat" id="vt-chat"', $html);
+                $html = str_replace('<button type="button" class="vt-chat__fab" data-chat-open', '<button type="button" class="vt-chat__fab" data-chat-open hidden', $html);
+                $html = preg_replace('#(<div class="vt-chat__log" data-chat-log role="log" aria-live="polite">.*?</div>)#s', '$1<div class="vt-chat__msg is-user"><p>When will we get our tickets?</p></div><div class="vt-chat__msg is-bot"><p>Around two weeks before you go. Sarah reconfirms every part of the trip with the suppliers first, then sends your tickets and travel documents — they appear in the Documents section here as soon as they are issued, and sooner where a supplier issues early.</p><span class="vt-chat__tag">From your booking</span></div><div class="vt-chat__msg is-user"><p>Can we have a sea-view room instead?</p></div><div class="vt-chat__msg is-bot is-handoff"><p>I\'ve passed this to Sarah, who will come back to you by email during opening hours. If it\'s urgent, call 01326 312 345.</p><span class="vt-chat__tag">Passed to Sarah</span></div>', $html, 1);
+            }
             $file = $fkey . '-' . $skey . '.html';
             file_put_contents($out . '/' . $file, $html);
             $pages[$fkey][$skey] = ['label' => $slabel, 'file' => $file, 'bytes' => strlen($html), 'theme' => $trip->theme, 'stage' => $trip->stage];
@@ -169,6 +180,44 @@ foreach ($fixtures as $fkey => $factory) {
                 $html = preg_replace('#<script src="/vision-trips/assets/js/vision\.js\?ver=[^"]*" defer></script>#', '<script>' . str_replace('$', '\\$', file_get_contents($root . '/assets/js/vision.js')) . '</script>', $html);
                 file_put_contents($out . '/' . $fkey . '-portal-prefs.html', $html);
                 $pages[$fkey]['portal-prefs'] = ['label' => 'Portal: contact preferences', 'file' => $fkey . '-portal-prefs.html'];
+                // Portal: loyalty and your details (shared vars + demo data)
+                $brand->loyaltyEnabled = true;
+                $portalBase = [
+                    'brand' => $brand, 'base' => $trip->base, 'error' => '', 'notice' => '', 'email' => $trip->customerEmail, 'trips' => [], 'prefs' => null, 'fieldErrors' => [],
+                    'airports' => [], 'months' => [], 'nonce' => 'x', 'self' => '#', 'accent' => $brand->colour !== '' ? $brand->colour : '#1F4F6E', 'theme' => 'default', 'spec' => \VisionTrips\Domain\Theme::spec('default'),
+                    'fontsUrl' => \VisionTrips\Domain\Theme::fontsUrl('default', $brand->fontDisplay, $brand->fontBody), 'displayFont' => $brand->fontDisplay !== '' ? $brand->fontDisplay : 'Fraunces', 'bodyFont' => $brand->fontBody !== '' ? $brand->fontBody : 'Instrument Sans', 'title' => 'My trips',
+                    'loyalty' => null, 'people' => [], 'airlines' => [], 'cruiseLines' => [],
+                ];
+                $inline = static function (string $html) use ($root): string {
+                    $html = preg_replace('#<link rel="stylesheet" href="/vision-trips/assets/css/vision\\.css\\?ver=[^"]*">#', '<style>' . str_replace('$', '\\\\$', file_get_contents($root . '/assets/css/vision.css')) . '</style>', $html);
+                    return preg_replace('#<script src="/vision-trips/assets/js/vision\\.js\\?ver=[^"]*" defer></script>#', '<script>' . str_replace('$', '\\\\$', file_get_contents($root . '/assets/js/vision.js')) . '</script>', $html);
+                };
+                $html = \VisionTrips\Frontend\View::render('portal/page', ['step' => 'loyalty', 'loyalty' => [
+                    'enabled' => true, 'vip' => $fkey === 'egypt', 'available' => 2340, 'lifetime' => 6120, 'value' => 23.40, 'expiry' => \VisionTrips\Support\Dates::now()->modify('+14 months'),
+                    'transactions' => [
+                        ['type' => 'Earn', 'points' => 1240, 'date' => \VisionTrips\Support\Dates::now()->modify('-3 months'), 'notes' => 'Welcome home bonus', 'booking' => 'Madeira in bloom'],
+                        ['type' => 'Redeem', 'points' => -500, 'date' => \VisionTrips\Support\Dates::now()->modify('-5 months'), 'notes' => 'Put towards the deposit', 'booking' => $trip->name],
+                        ['type' => 'Earn', 'points' => 1600, 'date' => \VisionTrips\Support\Dates::now()->modify('-14 months'), 'notes' => '', 'booking' => 'Lake Garda & Verona'],
+                    ],
+                ]] + $portalBase);
+                file_put_contents($out . '/' . $fkey . '-portal-loyalty.html', $inline($html));
+                $pages[$fkey]['portal-loyalty'] = ['label' => 'Portal: loyalty points', 'file' => $fkey . '-portal-loyalty.html'];
+                $html = \VisionTrips\Frontend\View::render('portal/page', ['step' => 'account',
+                    'airlines' => ['recA1' => 'British Airways', 'recA2' => 'easyJet', 'recA3' => 'Emirates', 'recA4' => 'Jet2', 'recA5' => 'Virgin Atlantic'], 'cruiseLines' => ['recC1' => 'Celebrity Cruises', 'recC2' => 'P&O Cruises', 'recC3' => 'Princess Cruises', 'recC4' => 'Royal Caribbean'],
+                    'people' => array_map(static fn ($t, $i) => [
+                        'id' => 'recP' . $i, 'name' => $t->name, 'passport_number' => $i === 0 ? '5321' . '09876' : '', 'nationality' => 'British', 'passport_issue' => $i === 0 ? '2019-04-02' : '', 'passport_expiry' => $i === 0 ? '2029-04-02' : '', 'passport_country' => $i === 0 ? 'United Kingdom' : '',
+                        'licence_number' => '', 'licence_expiry' => '', 'nok_name' => $i === 0 ? 'Margaret Trevithick' : '', 'nok_phone' => $i === 0 ? '07700 900123' : '',
+                        'programmes' => $i === 0 ? [['id' => 'recL1', 'kind' => 'airline', 'name' => 'British Airways', 'number' => 'BA12345678', 'tier' => 'Silver']] : [],
+                    ], $trip->travellers, array_keys($trip->travellers)),
+                ] + $portalBase);
+                file_put_contents($out . '/' . $fkey . '-portal-account.html', $inline($html));
+                $pages[$fkey]['portal-account'] = ['label' => 'Portal: your details', 'file' => $fkey . '-portal-account.html'];
+                // Front page
+                if ($fkey === 'lisbon') { $_GET['notfound'] = '1'; }
+                $html = \VisionTrips\Frontend\View::render('home', ['name' => 'Vision by The Travel Network Group', 'title' => 'Your trip, all in one place', 'intro' => 'Your travel agent shares every quotation and booking here: the itinerary, your documents, payments and who to call — kept up to date, on any device.', 'logo' => '', 'accent' => $fkey === 'egypt' ? '#1F4F6E' : '#C2410C', 'email' => 'hello@ttng.co.uk', 'phone' => '0800 000 0000', 'portal' => '#', 'find' => true]);
+                unset($_GET['notfound']);
+                file_put_contents($out . '/' . $fkey . '-frontpage.html', $html);
+                $pages[$fkey]['frontpage'] = ['label' => 'Front page (find my trip)', 'file' => $fkey . '-frontpage.html'];
                 // Branded email sample
                 $email = \VisionTrips\Integrations\Email::render($brand, 'Thank you', 'Thank you, ' . $trip->leadFirstName(), '<p>We have your acceptance for <strong>' . htmlspecialchars($trip->name) . '</strong> (' . htmlspecialchars($trip->ref) . ').</p><p>We are now confirming every part of the trip with the suppliers. Your written confirmation and key information will follow, and your trip page keeps everything in one place.</p>', [['label' => 'View your trip', 'url' => '#']], [['label' => 'Travel dates', 'value' => $trip->dateRange()], ['label' => 'Deposit', 'value' => '£1,200.00'], ['label' => 'Your travel expert', 'value' => $trip->agentName]], 'Your acceptance is recorded.');
                 file_put_contents($out . '/' . $fkey . '-email.html', $email);

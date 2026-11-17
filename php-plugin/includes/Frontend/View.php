@@ -37,10 +37,11 @@ final class View
     public static function icon(string $name, string $class = ''): string
     {
         $paths = [
-            'plane'      => '<path d="M2.5 19.5h19M3.8 12.4l3.2.9 4.3-3.6 6.3 1.9c1 .3 2-.2 2.3-1.1.3-.9-.2-1.9-1.1-2.3L12.8 6l-2.7-4.1-2.1.7 1.4 4.2-3.9 1.3L4.1 7l-1.9.6z"/>',
+            'plane'      => '<path fill="currentColor" stroke="none" d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>',
             'bed'        => '<path d="M3 11V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4M3 11h18v7M3 11v7m0-3h18M7 8h4v3H7zm6 0h4v3h-4z"/>',
-            'ship'       => '<path d="M3 17l1.5 3h15L21 17M3 17c2 1 4 1 6 0s4-1 6 0 4 1 6 0M5 17V9l7-3 7 3v8M12 6V3m-5 7h10"/>',
-            'car'        => '<path d="M5 17h14M4 12l2-5a2 2 0 0 1 1.9-1.3h8.2A2 2 0 0 1 18 7l2 5v6H4zM7.5 15a1 1 0 1 0 0 .01M16.5 15a1 1 0 1 0 0 .01"/>',
+            'ship'       => '<path fill="currentColor" stroke="none" d="M20 21c-1.39 0-2.78-.47-4-1.32-2.44 1.71-5.56 1.71-8 0C6.78 20.53 5.39 21 4 21H2v2h2c1.38 0 2.74-.35 4-.99 2.52 1.29 5.48 1.29 8 0 1.26.65 2.62.99 4 .99h2v-2h-2zM3.95 19H4c1.6 0 3.02-.88 4-2 .98 1.12 2.4 2 4 2s3.02-.88 4-2c.98 1.12 2.4 2 4 2h.05l1.89-6.68c.08-.26.06-.54-.06-.78s-.34-.42-.6-.5L20 10.62V6c0-1.1-.9-2-2-2h-3V1H9v3H6c-1.1 0-2 .9-2 2v4.62l-1.29.42c-.26.08-.48.26-.6.5s-.15.52-.06.78L3.95 19zM6 6h12v3.97L12 8 6 9.97V6z"/>',
+            'car'        => '<path fill="currentColor" stroke="none" d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/>',
+            'activity'   => '<path fill="currentColor" stroke="none" d="M20 12c0-1.1.9-2 2-2V6c0-1.1-.9-2-2-2H4c-1.1 0-1.99.9-1.99 2v4c1.1 0 1.99.9 1.99 2s-.89 2-2 2v4c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2v-4c-1.1 0-2-.9-2-2zm-4.42 4.8L12 14.5l-3.58 2.3 1.08-4.12-3.29-2.69 4.24-.25L12 5.8l1.54 3.95 4.24.25-3.29 2.69 1.09 4.11z"/>',
             'train'      => '<path d="M6 4h12a2 2 0 0 1 2 2v9a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V6a2 2 0 0 1 2-2zm-2 7h16M8 21l1.5-3m6.5 3-1.5-3M8.5 14.5h.01M15.5 14.5h.01"/>',
             'parking'    => '<path d="M5 3h14v18H5zM9 17V7h4a3 3 0 0 1 0 6H9"/>',
             'ticket'     => '<path d="M3 8a2 2 0 0 0 2-2h14a2 2 0 0 0 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 0-2 2H5a2 2 0 0 0-2-2v-3a2 2 0 0 0 0-4zm11 1v6"/>',
@@ -54,6 +55,8 @@ final class View
             'card'       => '<path d="M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zm0 3h18M7 15h4"/>',
             'doc'        => '<path d="M6 3h8l4 4v14H6zm8 0v4h4M9 12h6m-6 4h6"/>',
             'refresh'    => '<path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/>',
+            'play'       => '<path fill="currentColor" stroke="none" d="M8 5v14l11-7z"/>',
+            'close'      => '<path d="M6 6l12 12M18 6L6 18"/>',
             'shield'     => '<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6zm-3 9 2 2 4-4"/>',
             'check'      => '<path d="m5 12 4 4L19 6"/>',
             'arrow'      => '<path d="M5 12h14m-6-6 6 6-6 6"/>',
@@ -232,7 +235,7 @@ final class View
     public static function kindIcon(string $kind): string
     {
         return self::icon(match ($kind) {
-            'flight' => 'plane', 'stay' => 'bed', 'cruise' => 'ship', 'transfer' => 'car', 'carhire' => 'car', 'parking' => 'parking', 'train' => 'train', 'attraction' => 'binoculars', default => 'ticket',
+            'flight' => 'plane', 'stay' => 'bed', 'cruise' => 'ship', 'transfer' => 'car', 'carhire' => 'car', 'parking' => 'parking', 'train' => 'train', 'attraction' => 'activity', default => 'ticket',
         });
     }
 

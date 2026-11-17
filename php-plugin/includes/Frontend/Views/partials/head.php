@@ -16,10 +16,7 @@ $ver = class_exists('\\VisionTrips\\Plugin') ? \VisionTrips\Plugin::assetVersion
 $vars = Theme::cssVars($theme, $brand->fontDisplay);
 $vars['--vt-accent'] = $accent;
 $vars['--vt-accent-2'] = $brand->colour2 !== '' ? $brand->colour2 : $accent;
-$vars['--vt-font-family'] = "'Montserrat', system-ui, -apple-system, 'Segoe UI', sans-serif";
-$vars['--vt-body'] = 'var(--vt-font-family)';
-$vars['--vt-display'] = 'var(--vt-font-family)';
-$vars['--vt-display-weight'] = '600';
+$vars['--vt-body'] = "'" . $bodyFont . "', 'Instrument Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 $vars['--accent-ink'] = View::contrastInk($accent);
 $vars['--vt-accent-text'] = View::accessibleAccent($accent, '#F4F4F1');
 $vars['--vt-accent-text-dark'] = View::accessibleAccent($accent, '#121415');
@@ -30,10 +27,11 @@ $vars['--vt-accent-text-dark'] = View::accessibleAccent($accent, '#121415');
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="<?= e($accent) ?>">
 <title><?= e($title) ?></title>
-<?php if ($faviconUrl !== ''): ?><link rel="icon" href="<?= e($faviconUrl) ?>"><?php endif; ?>
+<?php if ($faviconUrl !== ''): ?><link rel="icon" href="<?= e($faviconUrl) ?>"><link rel="apple-touch-icon" href="<?= e($faviconUrl) ?>"><?php endif; ?>
+<?php if (!empty($manifestUrl)): ?><link rel="manifest" href="<?= e($manifestUrl) ?>"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="<?= e(\VisionTrips\Support\Str::truncate($brand->name, 24)) ?>"><?php endif; ?>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="<?= e($fontsUrl) ?>">
 <style id="vt-tokens">:root{<?php foreach ($vars as $k => $v): ?><?= e($k) ?>:<?= str_replace(['<', '>', ';'], '', $v) ?>;<?php endforeach; ?>}</style>
 <?php if ($preview): ?>
 <style><?= file_get_contents(VISION_TRIPS_DIR . 'assets/css/' . $stylesheet . '.css') ?></style>

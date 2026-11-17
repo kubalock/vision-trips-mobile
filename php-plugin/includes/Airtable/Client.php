@@ -64,6 +64,14 @@ final class Client
     /** Single GET with standby-token fallback. */
     private string $lastError = '';
     private bool $lastNotFound = false;
+    /** @var string[] group keys whose records could not be fetched in the last byIdsMany() */
+    private array $failedGroups = [];
+
+    /** @return string[] */
+    public function failedGroups(): array
+    {
+        return $this->failedGroups;
+    }
 
     public function lastError(): string
     {
@@ -200,8 +208,12 @@ final class Client
             $out[$key] = [];
         }
         $found = [];
+        $this->failedGroups = [];
         foreach ($this->runMulti($requests) as $rk => $res) {
             $key = $meta[$rk];
+            if (!$res['ok']) {
+                $this->failedGroups[] = $key;
+            }
             if ($res['ok'] && !empty($res['data']['records'])) {
                 foreach ($res['data']['records'] as $r) {
                     $found[$key][$r['id']] = $r;

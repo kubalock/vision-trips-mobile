@@ -30,6 +30,8 @@ final class Element
     public string $to = '';
     public string $fromCode = '';
     public string $toCode = '';
+    public string $fromTerminal = '';
+    public string $toTerminal = '';
     public string $fromCountry = '';
     public string $toCountry = '';
     public string $carrier = '';
@@ -137,6 +139,21 @@ final class Element
         $e->to = $resolve($g('to'));
         $e->fromCode = strtoupper(Str::clean($g('from_code')));
         $e->toCode = strtoupper(Str::clean($g('to_code')));
+        $e->fromTerminal = self::terminal(Str::clean($g('from_terminal')));
+        $e->toTerminal = self::terminal(Str::clean($g('to_terminal')));
+        if ($e->kind === 'flight' && ($e->fromTerminal === '' || $e->toTerminal === '')) {
+            // "Departure terminal 5", "Dep T2", "arrives Terminal 3", or a single "Terminal 5" mention (taken as departure)
+            $text = strip_tags(Str::clean($g('further_info')) . ' ' . Str::clean($g('important_info')) . ' ' . Str::clean($g('description')));
+            if ($e->fromTerminal === '' && preg_match('/\b(?:departure|departs?|dep\.?|outbound|from|departing|check[- ]?in(?:\s+(?:at|from|is))?|at)\s+(?:is\s+)?(?:terminal|t)\s*([0-9]{1,2}[a-z]?)\b/i', $text, $m)) {
+                $e->fromTerminal = strtoupper($m[1]);
+            }
+            if ($e->toTerminal === '' && preg_match('/\b(?:arrival|arrives?|arr\.?|inbound|into|to)\s+(?:is\s+)?(?:terminal|t)\s*([0-9]{1,2}[a-z]?)\b/i', $text, $m)) {
+                $e->toTerminal = strtoupper($m[1]);
+            }
+            if ($e->fromTerminal === '' && preg_match_all('/\bterminal\s*([0-9]{1,2}[a-z]?)\b/i', $text, $mm) && count(array_unique($mm[1])) === 1) {
+                $e->fromTerminal = strtoupper($mm[1][0]);
+            }
+        }
         foreach (['from' => 'from', 'to' => 'to'] as $side => $key) {
             $ids = Arr::recordIds($g($key));
             if ($ids && isset($ctx['airports'][$ids[0]])) {
@@ -315,7 +332,7 @@ final class Element
         $e->emergencyName = Str::clean($g('emergency_name'));
         $e->emergencyPhone = Str::clean($g('emergency_phone'));
         foreach (Arr::images($g('images')) as $img) {
-            $e->images[] = ['url' => $img['url'], 'thumb' => $img['thumb'], 'name' => $img['name']];
+            $e->images[] = ['url' => \VisionTrips\Support\Assets::image($img['url'], $img['id'] ?? ''), 'thumb' => \VisionTrips\Support\Assets::image($img['thumb'], ($img['id'] ?? '') !== '' ? $img['id'] . '-t' : ''), 'name' => $img['name']];
         }
         foreach (Arr::attachments($g('docs')) as $doc) {
             $e->docs[] = ['url' => (string) $doc['url'], 'name' => (string) ($doc['filename'] ?? 'Document'), 'type' => (string) ($doc['type'] ?? '')];
@@ -358,6 +375,54 @@ final class Element
             str_contains($t, 'attraction') || str_contains($t, 'excursion') || str_contains($t, 'tour') => 'attraction',
             default => 'misc',
         };
+    }
+
+    /** "Terminal 5", "T5", "5" → "5"; anything else → ''. */
+    public static function terminal(string $v): string
+    {
+        $v = trim($v);
+        if ($v === '') {
+            return '';
+        }
+        if (preg_match('/^(?:terminal\s*|t\s*)?([0-9]{1,2}[a-z]?|[a-z])$/i', $v, $m)) {
+            return strtoupper($m[1]);
+        }
+        return preg_match('/^[A-Za-z0-9 .-]{1,12}$/', $v) ? $v : '';
+    }
+
+    /**
+     * An airport, station or port the way a person says it: "London Heathrow Airport" → "London Heathrow",
+     * "Paphos International Airport" → "Paphos", "DXB" alone → "DXB". Codes are never shown when a name exists.
+     */
+    public static function placeName(string $name, string $code = ''): string
+    {
+        $n = trim($name);
+        if ($n === '' || preg_match('/^[A-Z]{3}$/', $n)) {
+            return $code !== '' ? $code : $n;
+        }
+        $n = (string) preg_replace('/\s*\((?:[A-Z]{3}|[^)]*airport[^)]*)\)\s*$/i', '', $n);
+        $n = (string) preg_replace('/\s+(international|intl\.?|regional|municipal|national)?\s*(airport|aeroporto|aéroport|flughafen|aeropuerto)\b.*$/iu', '', $n);
+        $n = (string) preg_replace('/\s+(railway|train)\s+station$/i', '', $n);
+        $n = (string) preg_replace('/\s+(international|intl\.?)$/i', '', $n);
+        return trim($n) !== '' ? trim($n) : ($code !== '' ? $code : $name);
+    }
+
+    /** The short form for tight spaces ("until you fly from Heathrow"): drops a leading "London " and the like. */
+    public static function placeShort(string $name, string $code = ''): string
+    {
+        $n = self::placeName($name, $code);
+        $n = (string) preg_replace('/^(London|Paris|Milan|Milano|Rome|Roma|Tokyo|New York|Moscow|Istanbul|Stockholm|Oslo|Berlin|Washington)\s+(?=\S)/i', '', $n);
+        return $n;
+    }
+
+    public function fromName(): string
+    {
+        return self::placeName($this->from, $this->fromCode);
+    }
+
+    public function toName(): string
+    {
+        return self::placeName($this->to, $this->toCode);
     }
 
     /** Vision's element heading is a formula like "Annabelle — 7 nights" or "Transfer (2 pax)": keep only the name part. */
@@ -478,7 +543,7 @@ final class Element
     public function shortTitle(): string
     {
         return match ($this->kind) {
-            'flight' => ($this->fromCode !== '' ? $this->fromCode : $this->from) . ' – ' . ($this->toCode !== '' ? $this->toCode : $this->to),
+            'flight' => $this->fromName() . ' – ' . $this->toName(),
             'transfer' => ($this->car['Vehicle'] ?? '') !== '' ? $this->car['Vehicle'] : 'Transfer',
             default => $this->title,
         };

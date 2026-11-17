@@ -8,6 +8,7 @@ use VisionTrips\Airtable\BookingRepository;
 use VisionTrips\Airtable\Client;
 use VisionTrips\Airtable\FieldMap;
 use VisionTrips\Domain\Stage;
+use VisionTrips\Domain\Element;
 use VisionTrips\Domain\Trip;
 use VisionTrips\Frontend\Router;
 use VisionTrips\Frontend\TripPage;
@@ -22,6 +23,7 @@ use VisionTrips\Security\Access;
 use VisionTrips\Security\Token;
 use VisionTrips\Settings;
 use VisionTrips\Support\Dates;
+use VisionTrips\Support\Cache;
 use VisionTrips\Support\Log;
 use VisionTrips\Support\Provenance;
 use VisionTrips\Support\RateLimit;
@@ -35,6 +37,37 @@ final class Api
     public const NS = 'vision/v1';
     /** Set by fragment builders when AI copy is still being written in the background. */
     public static bool $pending = false;
+    /** Wall-clock deadline for live lookups inside one section request (see budget()). */
+    private static float $deadline = 0.0;
+
+    /** Start the clock: well inside the host's PHP time limit, never more than 18 seconds of live lookups. */
+    public static function startBudget(?float $seconds = null): void
+    {
+        if ($seconds !== null) {
+            self::$deadline = microtime(true) + $seconds;
+            return;
+        }
+        $limit = (int) ini_get('max_execution_time');
+        $limit = $limit > 0 ? $limit : 30;
+        self::$deadline = microtime(true) + max(6, min(18, $limit - 10));
+    }
+
+    /**
+     * True while there is time for another live lookup. Past the deadline, lookups switch to cache-only so the
+     * section still renders; pending is set so the browser quietly re-checks and completes it.
+     */
+    public static function budget(): bool
+    {
+        if (self::$deadline === 0.0 || microtime(true) < self::$deadline) {
+            return true;
+        }
+        if (!\VisionTrips\Support\Http::$cacheOnly) {
+            \VisionTrips\Support\Http::$cacheOnly = true;
+            Provenance::note('Section budget', 'time', 'live lookups paused (time budget reached); the rest completes on the next check', true);
+        }
+        self::$pending = true;
+        return false;
+    }
 
     public function register(): void
     {
@@ -50,14 +83,16 @@ final class Api
             register_rest_route(self::NS, '/ai/feedback', ['methods' => 'POST', 'callback' => [$this, 'aiFeedback'], 'permission_callback' => static fn () => current_user_can('manage_options')]);
             register_rest_route(self::NS, '/notify', ['methods' => 'POST', 'callback' => [$this, 'notify'], 'permission_callback' => '__return_true']);
             register_rest_route(self::NS, '/trip/(?P<token>[^/]+)/share', ['methods' => 'POST', 'callback' => [$this, 'share'], 'permission_callback' => '__return_true']);
+            register_rest_route(self::NS, '/trip/(?P<token>[^/]+)/ask', ['methods' => 'POST', 'callback' => [$this, 'ask'], 'permission_callback' => '__return_true']);
         });
     }
 
     /** @return array{trip:Trip,token:array,level:int}|WP_Error */
-    private function auth(WP_REST_Request $req, int $perMinute = 60): array|WP_Error
+    private function auth(WP_REST_Request $req, int $perMinute = 60, string $scope = 'general'): array|WP_Error
     {
-        if (!RateLimit::hit('rest|' . RateLimit::ip(), $perMinute, MINUTE_IN_SECONDS)) {
-            return new WP_Error('rate_limited', 'Too many requests.', ['status' => 429]);
+        // One bucket per endpoint: the page's own section requests must never use up the accept or pay allowance
+        if (!RateLimit::hit('rest|' . $scope . '|' . RateLimit::ip(), $perMinute, MINUTE_IN_SECONDS)) {
+            return new WP_Error('rate_limited', 'That was a lot of requests in a short time — please wait a minute and try again.', ['status' => 429]);
         }
         $resolved = Router::resolve((string) $req['token']);
         if (!$resolved) {
@@ -69,7 +104,7 @@ final class Api
     /** HTML fragments for sections that are slow or third-party (Places, Widgety, flights, weather). */
     public function section(WP_REST_Request $req): WP_REST_Response|WP_Error
     {
-        $auth = $this->auth($req, 120);
+        $auth = $this->auth($req, 120, 'section');
         if ($auth instanceof WP_Error) {
             return $auth;
         }
@@ -80,7 +115,19 @@ final class Api
         Provenance::reset();
         self::$pending = false;
         @set_time_limit(60);
-        $html = self::fragment($trip, $name, $vm);
+        self::startBudget();
+        try {
+            $html = self::fragment($trip, $name, $vm);
+        } catch (\Throwable $e) {
+            // Never let one bad lookup take a section down: render nothing now, re-check shortly, and tell the admin why.
+            Log::error('Section build failed', ['section' => $name, 'error' => $e->getMessage(), 'at' => basename($e->getFile()) . ':' . $e->getLine()]);
+            Provenance::note('Section: ' . $name, 'error', get_class($e) . ': ' . $e->getMessage(), false);
+            $html = '';
+            self::$pending = true;
+        } finally {
+            \VisionTrips\Support\Http::$cacheOnly = false;
+            self::$deadline = 0.0;
+        }
         if (\VisionTrips\Support\Jobs::queueLength() > 0) {
             \VisionTrips\Support\Jobs::kick(); // runs one job after this response if no runner is active
         }
@@ -123,6 +170,7 @@ final class Api
             if (empty($d['primary']) && $d['image'] === '' && $d['overview'] === '') {
                 continue;
             }
+            self::budget();
             $wp = $w->configured() ? $w->place($d['name'], $d['country']) : null;
             $gp = $places->configured() ? $places->find($d['name'] . ($d['country'] !== '' ? ', ' . $d['country'] : ''), $d['lat'], $d['lng'], true) : null;
             $images = [];
@@ -133,7 +181,10 @@ final class Api
                 if (count($images) >= 8) {
                     break;
                 }
-                $images[] = ['url' => $ph['url'], 'source' => 'Google'];
+                $src = Places::photoSrc($ph);
+                if ($src !== '') {
+                    $images[] = ['url' => $src, 'source' => 'Google'];
+                }
             }
             if (!$images && $d['image'] !== '') {
                 $images[] = ['url' => $d['image'], 'source' => 'Vision'];
@@ -167,6 +218,7 @@ final class Api
             if ($needGuide && $ai->configured()) {
                 $g = $ai->destinationGuideAsync($d['name'], $d['country'] ?: ($trip->countries[0] ?? ''), ['Google summary' => $gp['summary'] ?? '', 'Trip dates' => $trip->dateRange(), 'Traveller type' => $trip->travellerType, 'Trip tags' => $trip->tags], $trip->brand->tone);
                 $guidePending = $g['pending'];
+                $destFacts = is_array($g['guide']['facts'] ?? null) ? $g['guide']['facts'] : [];
                 if ($guidePending) {
                     self::$pending = true;
                 }
@@ -183,7 +235,13 @@ final class Api
             $filled = count(array_filter($sections, static fn ($s) => $s['html'] !== ''));
             Provenance::note('Destination: ' . $d['name'], $textSource ?: ($guidePending ? 'AI guide (writing in the background)' : 'none'), ($wp ? 'Widgety ✓' : 'no Widgety match') . ' · ' . ($gp ? 'Places ✓ (' . count((array) ($gp['photos'] ?? [])) . ' photos)' : 'no Places match') . ' · ' . count($images) . ' image(s) · sections ' . $filled . '/3' . ($guidePending ? ' (AI writing)' : ''), $text !== '' || $images !== [], $needGuide && $ai->configured() ? Ai::$lastCacheId : '');
             $country = $d['country'] !== '' ? $d['country'] : ($trip->countries[0] ?? '');
-            $cards[] = ['dest' => $d, 'images' => $images, 'text' => $text, 'sections' => $sections, 'pending' => $guidePending && $text === '', 'country' => $country, 'lat' => $gp['lat'] ?? $d['lat'], 'lng' => $gp['lng'] ?? $d['lng'], 'placeId' => $gp['id'] ?? ''];
+            $climate = null;
+            $clat = $gp['lat'] ?? ($d['lat'] ?? null);
+            $clng = $gp['lng'] ?? ($d['lng'] ?? null);
+            if ($clat !== null && $clng !== null && $trip->departs && self::budget()) {
+                $climate = Weather::climate((float) $clat, (float) $clng, $trip->departs);
+            }
+            $cards[] = ['dest' => $d, 'facts' => $destFacts, 'climate' => $climate, 'images' => $images, 'text' => $text, 'sections' => $sections, 'pending' => $guidePending && $text === '', 'country' => $country, 'lat' => $gp['lat'] ?? $d['lat'], 'lng' => $gp['lng'] ?? $d['lng'], 'placeId' => $gp['id'] ?? ''];
         }
         return View::render('trip/fragments/destinations', array_merge($vm, ['cards' => $cards]));
     }
@@ -239,6 +297,7 @@ final class Api
         $ai = new Ai();
         $cards = [];
         foreach ($trip->ofKind('stay') as $e) {
+            self::budget();
             $place = $places->configured() ? $places->find($e->searchQueryForPlaces(), $e->lat, $e->lng) : null;
             $desc = '';
             $descSource = 'none';
@@ -269,7 +328,9 @@ final class Api
                 }
             }
             Provenance::note('Stay: ' . $e->title, $place ? 'Google Places' : 'Vision', ($place ? count($place['photos']) . ' photo(s), rating ' . $place['rating'] : count($e->images) . ' Vision image(s)') . ($places->configured() ? ' · ' . (Places::$lastMatch ?: 'no Places result') : '') . ' · description: ' . $descSource, true, str_starts_with($descSource, 'AI') ? Ai::$lastCacheId : '');
-            $cards[] = ['element' => $e, 'place' => $place, 'description' => $desc, 'pending' => $desc === '' && self::$pending];
+            $airport = self::nearestArrival($trip, $e, (float) ($place['lat'] ?? $e->lat ?? 0), (float) ($place['lng'] ?? $e->lng ?? 0));
+            $facilities = $ai->configured() ? $ai->placeFacts($place['name'] ?? $e->title, $e->locationName ?: ($place['address'] ?? $e->address), ['kind' => 'stay']) : [];
+            $cards[] = ['element' => $e, 'place' => $place, 'description' => $desc, 'pending' => $desc === '' && self::$pending, 'airport' => $airport, 'facilities' => $facilities];
         }
         return View::render('trip/fragments/stays', array_merge($vm, ['cards' => $cards]));
     }
@@ -280,6 +341,7 @@ final class Api
         $w = new Widgety();
         $cards = [];
         foreach ($trip->ofKind('cruise') as $e) {
+            self::budget();
             $ship = $w->configured() ? $w->ship($e->widgetyShipId, $e->ship) : null;
             if ($ship && isset($ship['missing'])) {
                 $ship = null;
@@ -289,6 +351,44 @@ final class Api
             $cards[] = ['element' => $e, 'ship' => $ship, 'holiday' => $holiday];
         }
         return View::render('trip/fragments/cruise', array_merge($vm, ['cards' => $cards]));
+    }
+
+    /**
+     * "About 25 km from Paphos airport": the flight that lands before this stay, geocoded once and cached for a month;
+     * straight-line distance rounded, shown only when it is meaningful (2–400 km). @return array{name:string,km:int}|null
+     */
+    private static function nearestArrival(Trip $trip, Element $stay, float $lat, float $lng): ?array
+    {
+        if (!$lat || !$lng || !$stay->start || !Weather::enabled()) {
+            return null;
+        }
+        $flight = null;
+        foreach ($trip->ofKind('flight') as $f) {
+            if ($f->start && $f->start <= $stay->start->modify('+1 day') && (!$flight || $f->start > $flight->start)) {
+                $flight = $f;
+            }
+        }
+        if (!$flight || ($flight->to === '' && $flight->toCode === '')) {
+            return null;
+        }
+        $query = $flight->to !== '' ? $flight->to : $flight->toCode . ' airport';
+        $cacheId = md5('airport-geo|' . strtolower($query));
+        $geo = Cache::get('weather', $cacheId);
+        if ($geo === null) {
+            if (!self::budget()) {
+                return null;
+            }
+            $geo = Weather::geocode($query);
+            Cache::set('weather', $cacheId, $geo ?: ['missing' => true], 30 * DAY_IN_SECONDS);
+        }
+        if (!is_array($geo) || isset($geo['missing'])) {
+            return null;
+        }
+        $km = Trip::distanceKm($lat, $lng, (float) $geo['lat'], (float) $geo['lng']);
+        if ($km < 2 || $km > 400) {
+            return null;
+        }
+        return ['name' => Element::placeShort($flight->to, $flight->toCode), 'km' => (int) round($km < 20 ? $km : round($km / 5) * 5)];
     }
 
     /** @param array<string,mixed> $vm */
@@ -324,6 +424,7 @@ final class Api
         }
         if ($lat === null) {
             foreach ($trip->destinations as $d) {
+                $destFacts = [];
                 if ($d['lat'] !== null && $d['lng'] !== null) {
                     $lat = $d['lat'];
                     $lng = $d['lng'];
@@ -351,7 +452,7 @@ final class Api
     /** Quotation acceptance: validate, write back to Vision, notify, hand over to the deposit payment. */
     public function accept(WP_REST_Request $req): WP_REST_Response|WP_Error
     {
-        $auth = $this->auth($req, 10);
+        $auth = $this->auth($req, 10, 'accept');
         if ($auth instanceof WP_Error) {
             return $auth;
         }
@@ -366,14 +467,11 @@ final class Api
         if ($name === '' || !is_email($email) || !$agreed) {
             return new WP_Error('invalid', 'Please enter your full name and email address and confirm you agree.', ['status' => 422]);
         }
-        $required = ['package', 'names', 'important', 'protection', 'terms'];
-        foreach ($required as $r) {
-            if (empty($read[$r])) {
-                return new WP_Error('unread', 'Please open and read every section before accepting.', ['status' => 422]);
-            }
-        }
+        // The key information and terms were presented in full before acceptance (PTR 2018 reg. 5); which sections the
+        // customer opened is recorded for the audit trail rather than enforced.
+        $opened = array_keys(array_filter($read));
         $stamp = Dates::now();
-        $log = sprintf("%s — accepted online by %s <%s> from %s", $stamp->format('Y-m-d H:i'), $name, $email, RateLimit::ip());
+        $log = sprintf("%s — accepted online by %s <%s> from %s · key information and terms presented; sections opened: %s", $stamp->format('Y-m-d H:i'), $name, $email, RateLimit::ip(), $opened ? implode(', ', array_map('sanitize_key', $opened)) : 'none');
         $fields = [];
         foreach (Settings::quoteAcceptFields() as $field => $type) {
             $fields[$field] = match ($type) {
@@ -437,7 +535,7 @@ final class Api
     /** Custom-amount payment link (customer-initiated), capped at the balance due. */
     public function pay(WP_REST_Request $req): WP_REST_Response|WP_Error
     {
-        $auth = $this->auth($req, 10);
+        $auth = $this->auth($req, 10, 'pay');
         if ($auth instanceof WP_Error) {
             return $auth;
         }
@@ -481,13 +579,16 @@ final class Api
     /** "Ask a question" → email to the brand's customer inbox. */
     public function question(WP_REST_Request $req): WP_REST_Response|WP_Error
     {
-        $auth = $this->auth($req, 5);
+        $auth = $this->auth($req, 5, 'question');
         if ($auth instanceof WP_Error) {
             return $auth;
         }
         $trip = $auth['trip'];
         $message = trim(wp_strip_all_tags((string) $req->get_param('message')));
         $from = strtolower(trim((string) $req->get_param('email')));
+        if ($from === '' || !is_email($from)) {
+            $from = strtolower($trip->customerEmail); // never asked for again on the page
+        }
         if (mb_strlen($message) < 5 || mb_strlen($message) > 2000) {
             return new WP_Error('invalid', 'Please write a short message (up to 2000 characters).', ['status' => 422]);
         }
@@ -548,6 +649,32 @@ final class Api
                 'print'        => Token::url($token, 'documents/print'),
             ],
         ]);
+    }
+
+    /** Trip concierge: a question about this booking. */
+    public function ask(WP_REST_Request $req): WP_REST_Response|WP_Error
+    {
+        $auth = Router::resolve((string) $req['token']);
+        if (!$auth || !Settings::module('chat')) {
+            return new WP_Error('forbidden', 'Not available.', ['status' => 403]);
+        }
+        if (!RateLimit::hit('ask|' . RateLimit::ip(), 20, HOUR_IN_SECONDS)) {
+            return new WP_Error('rate', 'That is a lot of questions in a short time — please try again in a little while, or call us.', ['status' => 429]);
+        }
+        $question = sanitize_textarea_field((string) $req->get_param('message'));
+        $history = [];
+        foreach ((array) $req->get_param('history') as $turn) {
+            if (is_array($turn)) {
+                $history[] = ['role' => (string) ($turn['role'] ?? 'user'), 'text' => sanitize_textarea_field((string) ($turn['text'] ?? ''))];
+            }
+        }
+        @set_time_limit(70);
+        $r = (new \VisionTrips\Integrations\Concierge())->ask($auth['trip'], $question, $history);
+        $out = ['ok' => true, 'answer' => $r['answer'], 'handoff' => $r['handoff'], 'source' => $r['source'], 'sources' => $r['sources'] ?? []];
+        if (current_user_can('manage_options')) {
+            $out['reason'] = (string) ($r['reason'] ?? ''); // why it was handed off — admins only
+        }
+        return new WP_REST_Response($out);
     }
 
     /** A fellow-traveller link: itinerary, documents and contact, nothing financial. Only a verified lead can mint one. */

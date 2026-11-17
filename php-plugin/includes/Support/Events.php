@@ -15,7 +15,7 @@ use VisionTrips\Settings;
  */
 final class Events
 {
-    public const NAMES = ['page_view', 'section_open', 'card_open', 'nav_tap', 'ask_tap', 'idea_ask', 'upsell_add', 'accept_start', 'accept_complete', 'pay_click', 'custom_pay', 'doc_open', 'share_tap', 'refer_tap', 'review_tap', 'fold_open', 'guide_open', 'calendar_add', 'print'];
+    public const NAMES = ['page_view', 'section_open', 'card_open', 'nav_tap', 'ask_tap', 'idea_ask', 'upsell_add', 'accept_start', 'accept_complete', 'pay_click', 'custom_pay', 'doc_open', 'share_tap', 'refer_tap', 'review_tap', 'fold_open', 'guide_open', 'calendar_add', 'print', 'chat_open', 'chat_ask'];
     private const STORE = 'vision_trips_events';
     private const COUNTS = 'vision_trips_event_counts';
     private const MAX_STORE = 4000;

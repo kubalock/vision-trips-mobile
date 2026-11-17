@@ -41,6 +41,28 @@ final class Widgety
         return $this->credentials !== [];
     }
 
+    /**
+     * A playable embed for a Widgety video_url: YouTube and Vimeo become privacy-friendly iframes, a direct file
+     * becomes a native player. Anything else is dropped. @return array{kind:string,src:string}|null
+     */
+    public static function videoEmbed(string $url): ?array
+    {
+        $url = trim($url);
+        if ($url === '' || !preg_match('#^https?://#i', $url)) {
+            return null;
+        }
+        if (preg_match('#(?:youtube\.com/(?:watch\?(?:.*&)?v=|embed/|shorts/)|youtu\.be/)([A-Za-z0-9_-]{6,})#i', $url, $m)) {
+            return ['kind' => 'iframe', 'src' => 'https://www.youtube-nocookie.com/embed/' . $m[1] . '?autoplay=1&rel=0&modestbranding=1'];
+        }
+        if (preg_match('#vimeo\.com/(?:video/)?(\d{5,})#i', $url, $m)) {
+            return ['kind' => 'iframe', 'src' => 'https://player.vimeo.com/video/' . $m[1] . '?autoplay=1&dnt=1'];
+        }
+        if (preg_match('#\.(mp4|webm|m4v)(\?|$)#i', $url)) {
+            return ['kind' => 'file', 'src' => $url];
+        }
+        return null;
+    }
+
     /** Ship profile by Widgety ship id/slug or by name. @return array<string,mixed>|null */
     public function ship(string $idOrSlug, string $name = ''): ?array
     {

@@ -33,7 +33,7 @@ foreach (['correct_names' => 'Correct names notice', 'total_price' => 'Total pri
     <h3 class="vt-page__day"><?= e($d['label']) ?><?= $d['day'] ? ' <span>Day ' . e($d['day']) . '</span>' : '' ?></h3>
     <?php foreach ($d['items'] as $e): ?>
       <div class="vt-doc__el">
-        <div class="vt-doc__el-head"><strong><?= e($e->kind === 'flight' ? $e->from . ' to ' . $e->to : $e->title) ?></strong><span><?= e(View::kindLabel($e->kind)) ?><?= $e->onRequest ? ' (on request)' : '' ?></span></div>
+        <div class="vt-doc__el-head"><strong><?= e($e->kind === 'flight' ? $e->fromName() . ' to ' . $e->toName() : $e->title) ?></strong><span><?= e(View::kindLabel($e->kind)) ?><?= $e->onRequest ? ' (on request)' : '' ?></span></div>
         <dl class="vt-doc__kv">
           <?php if ($e->kind === 'flight'): ?>
             <?php if ($e->carrier !== '' || $e->flightNo !== ''): ?><div><dt>Flight</dt><dd><?= e(trim($e->carrier . ' ' . $e->flightNo)) ?></dd></div><?php endif; ?>
@@ -42,8 +42,8 @@ foreach (['correct_names' => 'Correct names notice', 'total_price' => 'Total pri
             <?php if ($e->flightClass !== ''): ?><div><dt>Class</dt><dd><?= e($e->flightClass) ?></dd></div><?php endif; ?>
           <?php else: ?>
             <div><dt>Dates</dt><dd><?= e($e->kind === 'stay' || $e->kind === 'cruise' || $e->kind === 'carhire' || $e->kind === 'parking' ? Dates::range($e->start, $e->end) : Dates::long($e->start)) ?><?= $e->timeLabel() !== '' ? ', ' . e($e->timeLabel()) : '' ?><?= $e->nights ? ' (' . e($e->nights) . ' nights)' : '' ?></dd></div>
-            <?php if ($e->from !== '' && $e->kind !== 'stay'): ?><div><dt>From</dt><dd><?= e($e->from) ?></dd></div><?php endif; ?>
-            <?php if ($e->to !== '' && $e->kind !== 'stay'): ?><div><dt>To</dt><dd><?= e($e->to) ?></dd></div><?php endif; ?>
+            <?php if ($e->from !== '' && $e->kind !== 'stay'): ?><div><dt>From</dt><dd><?= e($e->from) ?><?= $e->fromCode !== '' ? ' (' . e($e->fromCode) . ')' : '' ?><?= $e->fromTerminal !== '' ? ' · Terminal ' . e($e->fromTerminal) : '' ?></dd></div><?php endif; ?>
+            <?php if ($e->to !== '' && $e->kind !== 'stay'): ?><div><dt>To</dt><dd><?= e($e->to) ?><?= $e->toCode !== '' ? ' (' . e($e->toCode) . ')' : '' ?><?= $e->toTerminal !== '' ? ' · Terminal ' . e($e->toTerminal) : '' ?></dd></div><?php endif; ?>
           <?php endif; ?>
           <?php if ($e->address !== ''): ?><div><dt>Address</dt><dd><?= e($e->address) ?></dd></div><?php endif; ?>
           <?php if ($e->rooms): ?><div><dt>Room</dt><dd><?= e(implode('; ', $e->rooms)) ?></dd></div><?php endif; ?>
@@ -66,11 +66,17 @@ foreach (['correct_names' => 'Correct names notice', 'total_price' => 'Total pri
   <h2 class="vt-page__h2">Price and payments</h2>
   <table class="vt-table">
     <tbody>
-      <tr class="vt-table__total"><td>Total price payable to <?= e($brand->name) ?></td><td class="num"><?= e($trip->money($trip->total)) ?></td></tr>
+      <tr class="vt-table__total"><td>Total price payable to <?= e($brand->name) ?><?= $trip->perPerson() > 0 && count($trip->travellers) > 1 ? ' <small>(' . e($trip->money($trip->perPerson())) . ' per person, ' . e((string) count($trip->travellers)) . ' travellers)</small>' : '' ?></td><td class="num"><?= e($trip->money($trip->total)) ?></td></tr>
       <?php if ($trip->totalInclResort > 0 && abs($trip->totalInclResort - $trip->total) > 0.01): ?><tr><td>Total cost including payments made locally</td><td class="num"><?= e($trip->money($trip->totalInclResort)) ?></td></tr><?php endif; ?>
       <?php if (!$trip->isQuote()): ?><tr><td>Paid to us</td><td class="num"><?= e($trip->money($trip->paid)) ?></td></tr><tr><td>Balance due to us<?= $trip->balanceDueDate ? ' by ' . e(Dates::medium($trip->balanceDueDate)) : '' ?></td><td class="num"><?= e($trip->money($trip->balance)) ?></td></tr><?php endif; ?>
     </tbody>
   </table>
+  <?php $inc = $trip->inclusions(); if ($inc['included']): ?>
+  <h2 class="vt-page__h2">What's included</h2>
+  <ul class="vt-doc__list"><?php foreach ($inc['included'] as $l): ?><li>✓ <?= e($l) ?></li><?php endforeach; ?></ul>
+  <?php if ($inc['excluded']): ?><p class="vt-doc__note"><strong>Not included:</strong> <?= e(implode('; ', $inc['excluded'])) ?></p><?php endif; ?>
+  <?php endif; ?>
+
   <?php if ($payments): ?>
   <table class="vt-table vt-table--rows">
     <thead><tr><th>Payment</th><th>Due</th><th>Status</th><th class="num">Amount</th></tr></thead>

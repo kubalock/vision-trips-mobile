@@ -20,6 +20,7 @@ namespace VisionTrips\Frontend;
       <?php if ($level > 0): ?><a href="<?= e($urls['self']) ?>?signout=1">Sign out of this device</a><?php endif; ?>
     </p>
     <?php if ($brand->memberDisclaimer !== ''): ?><div class="vt-footer__disclaimer"><?= raw($brand->memberDisclaimer) ?></div><?php endif; ?>
-    <p class="vt-footer__vision"><?= e($legalText) ?></p>
+    <?php if ($legalText !== ''): ?><p class="vt-footer__vision"><?= e($legalText) ?></p><?php endif; ?>
   </div>
+  <p class="vt-powered">Powered by <a href="https://thetravelnetworkgroup.co.uk" rel="noopener" target="_blank">Vision</a> from The Travel Network Group</p>
 </footer>

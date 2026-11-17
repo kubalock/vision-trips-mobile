@@ -177,6 +177,18 @@ final class Jobs
                 $result = $ai->placeDescription((string) $args['name'], (string) $args['location'], (array) $args['facts'], (string) $args['tone'], (array) ($args['context'] ?? []));
             } elseif ($type === 'guide') {
                 $result = $ai->guide((string) $args['kind'], (string) $args['name'], (string) ($args['code'] ?? ''));
+            } elseif ($type === 'asset') {
+                $result = Assets::fetch($args) ? 'done' : null;
+                if ($result === null) {
+                    delete_transient(self::pendingKey($cacheId));
+                    return;
+                }
+            } elseif ($type === 'photo') {
+                $result = \VisionTrips\Integrations\Places::fetchPhoto($args) ? 'done' : null;
+                if ($result === null) {
+                    delete_transient(self::pendingKey($cacheId));
+                    return; // not an AI job: no failure marker in the AI cache
+                }
             } elseif ($type === 'events') {
                 Events::flush($args);
                 $result = 'done';

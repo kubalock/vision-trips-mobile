@@ -26,6 +26,10 @@ final class Payment
     public string $resortReason = '';
     public bool $showOnQuote = false;
     public string $travellerName = '';
+    /** Loyalty points redeemed against this payment (from linked Loyalty Transactions), shown instead of a price. */
+    public int $pointsRedeemed = 0;
+    /** Ids of linked Loyalty Transactions (resolved by the repository). */
+    public array $loyaltyTxIds = [];
 
     public static function fromRecord(array $record, array $nameCache = []): self
     {
@@ -50,6 +54,7 @@ final class Payment
         $p->link = Str::clean($g('link'));
         $p->agentLink = Str::clean($g('agent_link'));
         $p->method = Str::clean(self::resolve($g('method'), $nameCache));
+        $p->loyaltyTxIds = Arr::recordIds($g('loyalty_tx'));
         $p->reference = Str::clean($g('reference'));
         $p->resortReason = Str::clean($g('resort_reason'));
         $p->showOnQuote = Arr::truthy($g('show_on_quote'));
@@ -70,6 +75,24 @@ final class Payment
             return implode(', ', $names);
         }
         return Str::clean($value);
+    }
+
+    /** A Bookings [Payments] row of type "Loyalty Redemption" is the scheme funding the member — never customer-facing. */
+    public function isSchemeRedemption(): bool
+    {
+        return strcasecmp($this->type, 'Loyalty Redemption') === 0;
+    }
+
+    /** A customer payment receipted by the method "Loyalty Redemption": shown as points, never as a price. */
+    public function isPointsPayment(): bool
+    {
+        return !$this->isSchemeRedemption() && (stripos($this->method, 'loyalty') !== false || $this->pointsRedeemed > 0);
+    }
+
+    /** What the customer sees in place of the amount for a points payment. */
+    public function pointsLabel(): string
+    {
+        return $this->pointsRedeemed > 0 ? number_format($this->pointsRedeemed) . ' points' : 'Loyalty points';
     }
 
     public function isPaid(): bool

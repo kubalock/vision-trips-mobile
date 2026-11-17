@@ -45,6 +45,7 @@
      it sits in an inline <template> and is swapped in after a short delay so the loading state can be reviewed. */
   var SK_TEXT = '<div class="vt-sk vt-sk--text" aria-hidden="true"><span class="vt-sk__line"></span><span class="vt-sk__line"></span><span class="vt-sk__line"></span></div>';
   function landed(el, html, provenance, pending) {
+    setTimeout(function () { initRevealMore(el); }, 0);
     // Still being written in the background: keep a shimmering placeholder rather than an empty gap.
     if (!html && pending) { el.innerHTML = SK_TEXT; el.dataset.loaded = '1'; delete el.dataset.loading; return; }
     el.innerHTML = html || '';
@@ -59,6 +60,40 @@
     enhance(el);
     if (provenance && provenance.length) addSources(provenance);
   }
+  /* Re-renders while AI copy arrives must not disturb images: compare a hash of the server HTML and, when only
+     text changed, swap the text nodes inside each card and leave the galleries alone. */
+  function hashOf(s) { var h = 5381; for (var i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return String(h); }
+  function morph(el, html) {
+    var tpl = doc.createElement('template'); tpl.innerHTML = html;
+    var sel = '.vt-stay, .vt-dest, .vt-cruise';
+    var oldCards = el.querySelectorAll(sel), newCards = tpl.content.querySelectorAll(sel);
+    if (!oldCards.length || oldCards.length !== newCards.length) return false;
+    var parts = ['.vt-stay__desc', '.vt-stay__pending', '.vt-dest__overview', '.vt-quote', '.vt-stay__links', '.vt-stay__head', '.vt-chips', '.vt-facts'];
+    for (var i = 0; i < oldCards.length; i++) {
+      var o = oldCards[i], n = newCards[i];
+      // galleries: only ever added to or grown (photos arriving from the background fetch), never reloaded
+      var og = o.querySelector('.vt-gallery'), ng = n.querySelector('.vt-gallery');
+      if (!og && ng) { o.insertAdjacentElement('afterbegin', ng.cloneNode(true)); }
+      else if (og && ng && ng.children.length > og.children.length) { og.replaceWith(ng.cloneNode(true)); }
+      // text parts
+      parts.forEach(function (p) {
+        var on = o.querySelector(p), nn = n.querySelector(p);
+        if (on && nn) { if (on.outerHTML !== nn.outerHTML) on.replaceWith(nn.cloneNode(true)); }
+        else if (!on && nn) { var pend = o.querySelector('.vt-stay__pending'); var anchor = pend || o.querySelector('.vt-stay__dates, .vt-dest__country, .vt-h3'); if (anchor) anchor.insertAdjacentElement(pend ? 'beforebegin' : 'afterend', nn.cloneNode(true)); if (pend) pend.remove(); }
+        else if (on && !nn && p === '.vt-stay__pending') { on.remove(); }
+      });
+      // collapsible sections (things to do, practical…) — replace as a group, they carry no images
+      var oldMore = o.querySelectorAll('details.vt-more'), newMore = n.querySelectorAll('details.vt-more');
+      if (oldMore.length !== newMore.length) {
+        oldMore.forEach(function (d) { d.remove(); });
+        var map = o.querySelector('details.vt-map');
+        newMore.forEach(function (d) { var c = d.cloneNode(true); if (map) map.insertAdjacentElement('beforebegin', c); else (o.querySelector('.vt-dest__body, .vt-stay__body') || o).appendChild(c); });
+      } else {
+        for (var k = 0; k < oldMore.length; k++) { if (oldMore[k].outerHTML !== newMore[k].outerHTML) { var wasOpen = oldMore[k].open; var c2 = newMore[k].cloneNode(true); c2.open = wasOpen; oldMore[k].replaceWith(c2); } }
+      }
+    }
+    return true;
+  }
   function loadSection(el, done) {
     done = done || function () {};
     if (el.dataset.loaded === '1' || el.dataset.loading) { done(); return; }
@@ -69,8 +104,10 @@
       return;
     }
     rest('section/' + el.dataset.section).then(function (j) {
-      if (el.dataset.polls && el.dataset.polls !== '0' && el.innerHTML === (j.html || '')) { el.dataset.loaded = '1'; delete el.dataset.loading; }
-      else landed(el, j.html, j.provenance, j.pending);
+      var h = hashOf(j.html || '');
+      if (el.dataset.hash === h) { el.dataset.loaded = '1'; delete el.dataset.loading; }
+      else if (el.dataset.hash && j.html && morph(el, j.html)) { el.dataset.hash = h; el.dataset.loaded = '1'; delete el.dataset.loading; if (j.provenance && j.provenance.length) addSources(j.provenance); }
+      else { el.dataset.hash = h; landed(el, j.html, j.provenance, j.pending); }
       if (j.requests && j.requests.length) addRequests(j.requests);
       var refresh = parseInt(el.dataset.refresh || '0', 10);
       if (refresh > 0) setTimeout(function () { el.dataset.loaded = '0'; enqueue(el); }, refresh * 1000);
@@ -130,6 +167,7 @@
       if (!a) return;
       if (a.matches('.vt-nav a')) track('nav_tap', a.dataset.nav || '');
       else if (a.hasAttribute('data-open-accept')) track('accept_start', '');
+      else if (a.hasAttribute('data-upsell-link')) track('upsell_add', 'link: ' + a.dataset.upsellLink);
       else if (a.matches('.vt-docs a')) track('doc_open', (a.querySelector('strong') || a).textContent.trim());
       else if (a.matches('[data-pay-payment], .vt-pay .vt-btn--primary')) track('pay_click', '');
       else if (a.matches('[data-refer]')) track('refer_tap', '');
@@ -337,6 +375,96 @@
     el.dataset.loaded = '0'; enqueue(el);
   });
 
+  /* ---- Trip concierge ---- */
+  function initChat() {
+    var panel = $('[data-chat]'), fab = $('[data-chat-open]');
+    if (!panel || !fab) return;
+    doc.body.classList.add('has-chat');
+    var log = $('[data-chat-log]', panel), form = $('[data-chat-form]', panel), input = $('#vt-chat-input', panel), suggest = $('[data-chat-suggest]', panel);
+    var key = 'vt-chat-' + (VT.ref || ''), history = [];
+    try { history = JSON.parse(sessionStorage.getItem(key) || '[]'); } catch (e) { history = []; }
+    function bubble(text, who, tag, handoff, sources) {
+      var d = doc.createElement('div'); d.className = 'vt-chat__msg is-' + who + (handoff ? ' is-handoff' : '');
+      // paragraphs; consecutive lines starting with - or • become a list
+      var blocks = String(text).split(/\n{2,}/);
+      blocks.forEach(function (block) {
+        var lines = block.split(/\n/).filter(function (l) { return l.trim() !== ''; });
+        if (lines.length > 1 && lines.every(function (l) { return /^\s*([-•*]|\d+[.)])\s+/.test(l); })) {
+          var ul = doc.createElement('ul'); lines.forEach(function (l) { var li = doc.createElement('li'); li.textContent = l.replace(/^\s*([-•*]|\d+[.)])\s+/, ''); ul.appendChild(li); }); d.appendChild(ul);
+        } else { var p = doc.createElement('p'); p.textContent = lines.join(' '); d.appendChild(p); }
+      });
+      if (tag || (sources && sources.length)) {
+        var t = doc.createElement('span'); t.className = 'vt-chat__tag'; t.textContent = tag || '';
+        (sources || []).forEach(function (s) { var c = doc.createElement('em'); c.textContent = s; t.appendChild(c); });
+        d.appendChild(t);
+      }
+      log.appendChild(d); log.scrollTop = log.scrollHeight; return d;
+    }
+    history.forEach(function (h) { bubble(h.text, h.role === 'assistant' ? 'bot' : 'user', h.tag || '', !!h.handoff, h.sources || []); });
+    function remember(role, text, tag, handoff, sources) { history.push({ role: role, text: text, tag: tag || '', handoff: !!handoff, sources: sources || [] }); history = history.slice(-12); try { sessionStorage.setItem(key, JSON.stringify(history)); } catch (e) {} }
+    function open() { panel.hidden = false; fab.setAttribute('aria-expanded', 'true'); fab.hidden = true; setTimeout(function () { input.focus({ preventScroll: true }); }, 200); track('chat_open', ''); }
+    function close() { panel.hidden = true; fab.hidden = false; fab.setAttribute('aria-expanded', 'false'); }
+    fab.addEventListener('click', open);
+    $('[data-chat-close]', panel).addEventListener('click', close);
+    doc.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !panel.hidden) close(); });
+    function ask(q) {
+      q = (q || '').trim(); if (!q) return;
+      bubble(q, 'user'); remember('user', q);
+      input.value = ''; input.disabled = true;
+      if (suggest) suggest.classList.add('is-compact');
+      var typing = doc.createElement('div'); typing.className = 'vt-chat__msg is-bot'; typing.innerHTML = '<span class="vt-chat__typing"><i></i><i></i><i></i></span>'; log.appendChild(typing); log.scrollTop = log.scrollHeight;
+      var hist = history.slice(0, -1).slice(-6).map(function (h) { return { role: h.role, text: h.text }; });
+      rest('ask', { method: 'POST', body: { message: q, history: hist } }).then(function (r) {
+        typing.remove();
+        var tag = r.handoff ? ('Passed to ' + (panel.dataset.agent || 'your travel agent')) : (r.source === 'research' ? 'Looked this up' : (r.source === 'general' ? 'General guidance' : 'From your booking'));
+        if (r.reason && VT.admin) tag += ' · admin: ' + r.reason;
+        bubble(r.answer, 'bot', tag, r.handoff, r.sources || []); remember('assistant', r.answer, tag, r.handoff, r.sources || []);
+      }).catch(function (err) {
+        typing.remove();
+        var msg = (err && err.message) ? err.message : 'That did not go through. Please try again, or send us a message below.';
+        bubble(msg, 'bot', '', true); remember('assistant', msg, '', true);
+      }).then(function () { input.disabled = false; input.focus({ preventScroll: true }); });
+    }
+    form.addEventListener('submit', function (e) { e.preventDefault(); ask(input.value); });
+    $$('[data-chat-q]', panel).forEach(function (b) { b.addEventListener('click', function () { ask(b.dataset.chatQ); }); });
+    if (location.hash === '#ask') open();
+  }
+
+  /* ---- Walkthrough viewer: the video opens over the page; nothing loads until it is asked for ---- */
+  (function () {
+    var viewer = null;
+    function closeViewer() { if (!viewer) return; viewer.querySelector('.vt-viewer__frame').innerHTML = ''; viewer.hidden = true; doc.body.style.overflow = ''; }
+    function openViewer(src, kind) {
+      if (!viewer) {
+        viewer = doc.createElement('div'); viewer.className = 'vt-viewer'; viewer.setAttribute('role', 'dialog'); viewer.setAttribute('aria-label', 'Video');
+        viewer.innerHTML = '<button type="button" class="vt-viewer__close" aria-label="Close"><svg class="vt-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button><div class="vt-viewer__frame"></div>';
+        doc.body.appendChild(viewer);
+        viewer.addEventListener('click', function (e) { if (e.target === viewer || e.target.closest('.vt-viewer__close')) closeViewer(); });
+        doc.addEventListener('keydown', function (e) { if (e.key === 'Escape' && viewer && !viewer.hidden) closeViewer(); });
+      }
+      var frame = viewer.querySelector('.vt-viewer__frame');
+      frame.innerHTML = kind === 'file'
+        ? '<video controls autoplay playsinline src="' + src.replace(/"/g, '&quot;') + '"></video>'
+        : '<iframe src="' + src.replace(/"/g, '&quot;') + '" title="Video" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>';
+      viewer.hidden = false; doc.body.style.overflow = 'hidden'; viewer.querySelector('.vt-viewer__close').focus();
+      track('section_open', 'walkthrough');
+    }
+    doc.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-walk-play]'); if (!b) return;
+      var box = b.closest('[data-walk]'); if (box) openViewer(box.dataset.video, box.dataset.videoKind);
+    });
+  })();
+
+  /* ---- Ship film: nothing loads until the customer presses play ---- */
+  doc.addEventListener('click', function (e) {
+    var b = e.target.closest('.vt-video__play'); if (!b) return;
+    var box = b.closest('.vt-video'), src = box.dataset.video, kind = box.dataset.videoKind;
+    box.innerHTML = kind === 'file'
+      ? '<video controls autoplay playsinline src="' + src.replace(/"/g, '&quot;') + '"></video>'
+      : '<iframe src="' + src.replace(/"/g, '&quot;') + '" title="Ship film" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe>';
+    box.classList.add('is-playing'); track('section_open', 'ship-video');
+  });
+
   /* ---- Share with fellow travellers ---- */
   $$('[data-share-trip]').forEach(function (b) {
     b.addEventListener('click', function () {
@@ -348,6 +476,34 @@
         if (status) { status.hidden = false; status.textContent = navigator.share ? 'Link ready — choose where to send it.' : 'Link copied — paste it into a message.'; }
       }).catch(function (ex) { if (status) { status.hidden = false; status.textContent = ex.message; } }).then(function () { b.disabled = false; });
     });
+  });
+
+  /* ---- Call me back: a request with a preferred time, sent as a message to the agent ---- */
+  (function () {
+    var form = $('[data-callback]'); if (!form) return;
+    $$('[data-callback-open]').forEach(function (b) { b.addEventListener('click', function () { form.hidden = false; form.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }); });
+    var close = $('[data-callback-close]', form); if (close) close.addEventListener('click', function () { form.hidden = true; });
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var status = $('.vt-ask__status', form), btn = $('button[type=submit]', form);
+      var msg = 'Please call me back — ' + form.slot.value + (form.phone ? ' on ' + form.phone.value : '') + (form.topic && form.topic.value ? '. About: ' + form.topic.value : '') + '.';
+      status.hidden = false; status.classList.remove('is-error'); status.textContent = 'Sending…'; btn.disabled = true;
+      rest('question', { method: 'POST', body: { message: msg, email: '' } }).then(function () { status.textContent = 'Done — we\'ll call you ' + form.slot.value.toLowerCase() + '.'; track('ask_tap', 'callback'); })
+        .catch(function (err) { status.classList.add('is-error'); status.textContent = err.message; }).then(function () { btn.disabled = false; });
+    });
+  })();
+
+  /* ---- Quick message: reveal the email field only when the customer wants a different address ---- */
+  $$('[data-ask-change]').forEach(function (b) { b.addEventListener('click', function () { var f = b.closest('form'); var k = $('[data-ask-known]', f), e = $('[data-ask-emailfield]', f); if (k) k.hidden = true; if (e) { e.hidden = false; e.querySelector('input').focus(); } }); });
+
+  /* ---- Portal: add-programme type switch ---- */
+  $$('[data-kind-switch]').forEach(function (sel) {
+    var form = sel.closest('form');
+    var sync = function () {
+      var kind = sel.value;
+      $$('[data-kind]', form).forEach(function (l) { var on = l.dataset.kind === kind; l.hidden = !on; var s = l.querySelector('select'); if (s) { s.disabled = !on; s.name = on ? 'operator' : 'operator_' + l.dataset.kind; } });
+    };
+    sel.addEventListener('change', sync); sync();
   });
 
   /* ---- Checklist memory (per device, this trip only) ---- */
@@ -371,23 +527,26 @@
 
   /* ---- Ask a question ---- */
   function initAsk() {
-    var form = $('[data-ask-form]');
+    var forms = $$('[data-ask-form]');
+    // "Ask us" links prefill the nearest form: the compact one near the top on quotations, otherwise the one under Help
     $$('[data-ask]').forEach(function (a) {
       a.addEventListener('click', function () {
-        if (!form) return;
+        var form = forms[0]; if (!form) return;
+        if (a.getAttribute('href') === '#help' && forms.length > 1) form = forms[forms.length - 1];
         var ta = $('textarea', form);
         if (a.dataset.askPrefill && ta && !ta.value) ta.value = a.dataset.askPrefill;
         setTimeout(function () { if (ta) ta.focus({ preventScroll: true }); }, 400);
       });
     });
-    if (!form) return;
-    form.addEventListener('submit', function (e) {
-      e.preventDefault();
-      var status = $('.vt-ask__status', form), btn = $('button[type=submit]', form);
-      status.hidden = false; status.classList.remove('is-error'); status.textContent = 'Sending…'; btn.disabled = true;
-      rest('question', { method: 'POST', body: { message: form.message.value, email: form.email.value } }).then(function () {
-        status.textContent = 'Sent. We\'ll come back to you as soon as we can.'; form.message.value = '';
-      }).catch(function (err) { status.classList.add('is-error'); status.textContent = err.message; }).then(function () { btn.disabled = false; });
+    forms.forEach(function (form) {
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var status = $('.vt-ask__status', form), btn = $('button[type=submit]', form);
+        status.hidden = false; status.classList.remove('is-error'); status.textContent = 'Sending…'; btn.disabled = true;
+        rest('question', { method: 'POST', body: { message: form.message.value, email: form.email ? form.email.value : '' } }).then(function () {
+          status.textContent = 'Sent. We\'ll come back to you as soon as we can.'; form.message.value = ''; track('ask_tap', 'sent');
+        }).catch(function (err) { status.classList.add('is-error'); status.textContent = err.message; }).then(function () { btn.disabled = false; });
+      });
     });
   }
 
@@ -439,16 +598,11 @@
       if (read[k]) return;
       read[k] = true; d.classList.add('is-read'); check();
     }
-    reads.forEach(function (d) {
-      var body = $('[data-read-scroll]', d);
-      var done = function () { if (body.scrollHeight - body.scrollTop - body.clientHeight < 24) markRead(d); };
-      body.addEventListener('scroll', done, { passive: true });
-      d.addEventListener('toggle', function () { if (d.open) { setTimeout(function () { if (body.scrollHeight <= body.clientHeight + 24) markRead(d); }, 50); } });
-    });
+    // Opening a section is enough to tick it; nothing is gated on reading to the end.
+    reads.forEach(function (d) { d.addEventListener('toggle', function () { if (d.open) markRead(d); }); });
     var name = $('input[name=name]', card), email = $('input[name=email]', card), agreed = $('input[name=agreed]', card);
     function check() {
-      var all = reads.every(function (d) { return read[d.dataset.read]; });
-      submit.disabled = !(all && name.value.trim().length > 2 && /\S+@\S+\.\S+/.test(email.value) && agreed.checked);
+      submit.disabled = !(name.value.trim().length > 2 && /\S+@\S+\.\S+/.test(email.value) && agreed.checked);
     }
     [name, email, agreed].forEach(function (i) { i.addEventListener('input', check); i.addEventListener('change', check); });
     submit.addEventListener('click', function () {
@@ -478,6 +632,24 @@
     window.addEventListener('online', update); window.addEventListener('offline', update); update();
   }
 
+  /* ---- Gallery images: shimmer until loaded, then fade in; a tile whose image fails is removed ---- */
+  function imgState(img) {
+    var a = img.closest('.vt-gallery a, .vt-memories a'); if (!a) return;
+    if (img.complete && img.naturalWidth > 0) a.classList.add('is-loaded');
+    else if (img.complete) a.remove();
+  }
+  doc.addEventListener('load', function (e) { if (e.target && e.target.tagName === 'IMG') imgState(e.target); }, true);
+  doc.addEventListener('error', function (e) { var t = e.target; if (t && t.tagName === 'IMG') { var a = t.closest('.vt-gallery a, .vt-memories a'); if (a) a.remove(); } }, true);
+  $$('.vt-gallery img, .vt-memories img').forEach(imgState);
+  new MutationObserver(function () { $$('.vt-gallery a:not(.is-loaded) img, .vt-memories a:not(.is-loaded) img').forEach(imgState); }).observe(doc.body, { childList: true, subtree: true });
+
+  /* ---- Hero image: if it cannot load, fall back to the gradient hero ---- */
+  (function () {
+    var hero = $('.vt-hero.has-image'); if (!hero) return;
+    var m = (hero.getAttribute('style') || '').match(/--vt-hero-img:url\('([^']+)'\)/); if (!m) return;
+    var probe = new Image(); probe.onerror = function () { hero.classList.remove('has-image'); hero.classList.add('no-image'); var img = hero.querySelector('.vt-hero__img'); if (img) img.remove(); }; probe.src = m[1];
+  })();
+
   /* ---- Stale copy: try for a fresh one quietly, reload only when it's there ---- */
   function initStale() {
     if (!$('[data-stale]')) return;
@@ -491,6 +663,23 @@
       }, 20000 + tries * 10000);
     })();
   }
+
+  /* ---- Show more: long lists show the first few, then a button reveals the rest (print shows everything) ---- */
+  function initRevealMore(root) {
+    $$('[data-reveal-after]', root || doc).forEach(function (list) {
+      if (list.dataset.revealDone) return;
+      var n = parseInt(list.dataset.revealAfter, 10) || 3, kids = Array.prototype.filter.call(list.children, function (c) { return !c.classList.contains('vt-reveal-more'); });
+      if (kids.length <= n + 1) { list.dataset.revealDone = '1'; return; }
+      kids.slice(n).forEach(function (c) { c.hidden = true; c.dataset.revealHidden = '1'; });
+      var b = doc.createElement('button'); b.type = 'button'; b.className = 'vt-btn vt-btn--ghost vt-reveal-more';
+      var noun = list.dataset.revealNoun || 'items'; b.textContent = 'Show ' + (kids.length - n) + ' more ' + noun;
+      var less = doc.createElement('button'); less.type = 'button'; less.className = 'vt-btn vt-btn--ghost vt-reveal-more'; less.textContent = 'Show fewer ' + noun; less.hidden = true;
+      b.addEventListener('click', function () { kids.forEach(function (c) { c.hidden = false; delete c.dataset.revealHidden; }); b.hidden = true; less.hidden = false; track('section_open', 'show-more ' + noun); });
+      less.addEventListener('click', function () { kids.slice(n).forEach(function (c) { c.hidden = true; c.dataset.revealHidden = '1'; }); less.hidden = true; b.hidden = false; var top = list.getBoundingClientRect().top + window.scrollY - 90; if (window.scrollY > top) window.scrollTo({ top: top, behavior: 'smooth' }); });
+      list.appendChild(b); list.appendChild(less); list.dataset.revealDone = '1';
+    });
+  }
+  window.addEventListener('beforeprint', function () { $$('[data-reveal-hidden]').forEach(function (c) { c.hidden = false; }); $$('.vt-reveal-more').forEach(function (b) { b.hidden = true; }); });
 
   /* ---- Folds: open on desktop, open when linked to ---- */
   function initFolds() {
@@ -508,9 +697,11 @@
     enhance(doc);
     initAsync();
     initOffline();
+    initRevealMore();
     initStale();
     initFolds();
     initEvents();
+    initChat();
     initCountdown();
     initNav();
     initChecklist();

@@ -42,6 +42,31 @@ final class Trip
     public Protection $protection;
     public string $currency = 'GBP';
     public float $total = 0.0;
+    /** Per-person price from Vision when it has one; otherwise the total shared across the travellers. */
+    public float $pricePerPerson = 0.0;
+    /** Optional Vision lists (one per line) and an agent video message URL. */
+    /** The booking's Customer record ids, and the quotations those customers hold (for the compare card). */
+    public array $customerIds = [];
+    public array $customerTripIds = [];
+    public array $included = [];
+    public array $notIncluded = [];
+    public string $videoMessage = '';
+    /** The member's uploaded walkthrough video (Video Walkthrough attachment): url, poster, type — or null. */
+    public ?array $videoWalkthrough = null;
+    /** From the agent collaborator field, when present. */
+    public string $agentEmail = '';
+    /** The agency's own Google rating (looked up by brand name + address, cached a week). */
+    public float $agencyRating = 0.0;
+    public int $agencyReviews = 0;
+
+    public function perPerson(): float
+    {
+        if ($this->pricePerPerson > 0) {
+            return $this->pricePerPerson;
+        }
+        $n = count($this->travellers);
+        return $n > 1 && $this->total > 0 ? round($this->total / $n, 2) : 0.0;
+    }
     public float $totalInclResort = 0.0;
     public float $paid = 0.0;
     public float $balance = 0.0;
@@ -59,6 +84,17 @@ final class Trip
     public string $personalMessage = '';
     public bool $personalMessageLong = false;
     public string $agentName = '';
+    /** Airtable collaborator id (usr…) of the agent who owns the booking, for @mentions in comments. */
+    public string $agentUserId = '';
+    /** Loyalty scheme (TTNG member scheme): enabled for this member, points this booking awards, and when they land. */
+    public bool $loyaltyEnabled = false;
+    public int $loyaltyPoints = 0;
+    public bool $loyaltyAwarded = false;
+    public ?\DateTimeImmutable $loyaltyReturnDate = null;
+    /** The customer's current standing (from the Customers record). */
+    public int $pointsAvailable = 0;
+    public float $pointsValue = 0.0;
+    public bool $vip = false;
     public string $tripOverview = '';
     /** @var array<int,array{url:string,thumb:string}> */
     public array $heroImages = [];
@@ -403,6 +439,60 @@ final class Trip
      * "What happens next": the member's service steps with their status, so the customer always knows when they'll hear from us.
      * @return array<int,array{key:string,title:string,text:string,done:bool,when:string}>
      */
+    /**
+     * What's included, with ticks: Vision's own list when the member keeps one, otherwise derived from the itinerary
+     * (flights, nights with their room/board, cruise and cabins, transfers, car hire, extras) — and what is not, from
+     * Vision or the resort payments plus the usual exclusions.
+     * @return array{included:string[],excluded:string[]}
+     */
+    public function inclusions(): array
+    {
+        $inc = $this->included;
+        if (!$inc) {
+            foreach ($this->activeElements() as $e) {
+                $line = match ($e->kind) {
+                    'flight' => 'Flights ' . $e->fromName() . ' – ' . $e->toName() . ($e->flightClass !== '' ? ' (' . $e->flightClass . ')' : ''),
+                    'stay' => ($e->nights ? $e->nights . ' night' . ($e->nights === 1 ? '' : 's') . ' at ' : '') . $e->title . ($e->rooms ? ' — ' . implode('; ', $e->rooms) : ''),
+                    'cruise' => ($e->nights ? $e->nights . ' nights aboard ' : 'Cruise aboard ') . ($e->ship ?: $e->title) . ($e->cabins ? ' — ' . implode('; ', array_map(static fn ($c) => trim((string) ($c['Cabin'] ?? $c['type'] ?? reset($c) ?: '')), $e->cabins)) : ''),
+                    'transfer' => 'Transfer' . ($e->from !== '' || $e->to !== '' ? ': ' . trim($e->from . ' to ' . $e->to, ' to') : ''),
+                    'car' => 'Car hire: ' . $e->shortTitle(),
+                    'train' => 'Rail: ' . $e->fromName() . ' – ' . $e->toName(),
+                    'parking', 'attraction', 'extra', 'insurance', 'other' => $e->shortTitle(),
+                    default => '',
+                };
+                if ($line !== '') {
+                    $inc[] = $line;
+                }
+            }
+            if ($this->protection->atolApplies()) {
+                $inc[] = 'ATOL financial protection';
+            }
+        }
+        $exc = $this->notIncluded;
+        if (!$exc) {
+            foreach ($this->payments as $p) {
+                if ($p->isResort()) {
+                    $exc[] = ($p->resortReason !== '' ? \VisionTrips\Support\Str::truncate(strip_tags($p->resortReason), 70) : 'Local payment') . ' — ' . $p->money() . ', paid in resort';
+                }
+            }
+            $exc[] = 'Travel insurance';
+            if (!$this->hasKind('transfer') && $this->hasKind('stay') && $this->hasKind('flight')) {
+                $exc[] = 'Airport transfers';
+            }
+            $exc[] = 'Anything not listed above';
+        }
+        return ['included' => array_values(array_unique(array_filter($inc))), 'excluded' => array_values(array_unique(array_filter($exc)))];
+    }
+
+    /** Straight-line distance in km between two points. */
+    public static function distanceKm(float $lat1, float $lng1, float $lat2, float $lng2): float
+    {
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLng = deg2rad($lng2 - $lng1);
+        $a = sin($dLat / 2) ** 2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng / 2) ** 2;
+        return 2 * 6371.0 * asin(min(1.0, sqrt($a)));
+    }
+
     public function nextSteps(): array
     {
         $b = $this->brand;
@@ -416,11 +506,11 @@ final class Trip
         $steps[] = ['key' => 'balance', 'title' => $balance ? 'Balance payment' : 'Paid in full', 'done' => !$balance, 'when' => $this->balanceDueDate ? Dates::medium($this->balanceDueDate) : '',
             'text' => $balance ? 'We\'ll remind you before it\'s due. You can pay online any time from the Payments section.' : 'Nothing more to pay to us. Thank you.'];
         $docsDone = !empty($t['documents']);
-        $steps[] = ['key' => 'documents', 'title' => 'Reconfirmation and travel documents', 'done' => $docsDone, 'when' => $this->departs ? Dates::medium($this->departs->modify('-14 days')) : '',
+        $steps[] = ['key' => 'documents', 'title' => 'Reconfirmation and travel documents', 'done' => $docsDone, 'when' => 'Around two weeks before you go',
             'text' => $docsDone ? 'Every part of your trip has been reconfirmed with the suppliers and your tickets and travel documents have been issued. They are in your documents section.' : (!empty($t['reconfirmed']) ? 'Your arrangements are reconfirmed with the suppliers; your tickets and travel documents will follow around two weeks before departure.' : 'Around two weeks before you go we reconfirm every part of your trip with the suppliers and send your tickets and travel documents, sooner where suppliers issue early.')];
-        $steps[] = ['key' => 'predeparture', 'title' => 'Pre-departure call', 'done' => !empty($t['predeparture']), 'when' => $this->departs ? Dates::medium($this->departs->modify('-3 days')) : '',
+        $steps[] = ['key' => 'predeparture', 'title' => 'Pre-departure call', 'done' => !empty($t['predeparture']), 'when' => 'A few days before you go',
             'text' => !empty($t['predeparture']) ? 'Done. Anything else, just call.' : ($casual ? ($first !== '' ? "We'll give you a ring a few days before you go, {$first}, to make sure you have everything." : "We'll give you a ring a few days before you go to make sure you have everything.") : 'We call every customer a few days before departure to run through the final details.')];
-        $steps[] = ['key' => 'followup', 'title' => 'How was it?', 'done' => !empty($t['followup']), 'when' => $this->returns ? Dates::medium($this->returns->modify('+5 days')) : '',
+        $steps[] = ['key' => 'followup', 'title' => 'How was it?', 'done' => !empty($t['followup']), 'when' => 'Shortly after you\'re home',
             'text' => !empty($t['followup']) ? 'Thank you for talking to us after your trip.' : 'We\'ll be in touch when you\'re home to hear how it went and to look after any feedback.'];
         return $steps;
     }

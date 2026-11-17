@@ -70,8 +70,9 @@ final class Plugin
 
     public function maybeFlushRewrites(): void
     {
-        if (get_option('vision_trips_flush') === '1') {
+        if (get_option('vision_trips_flush') === '1' || get_option('vision_trips_rules_version') !== VISION_TRIPS_VERSION) {
             delete_option('vision_trips_flush');
+            update_option('vision_trips_rules_version', VISION_TRIPS_VERSION, false);
             flush_rewrite_rules();
         }
     }

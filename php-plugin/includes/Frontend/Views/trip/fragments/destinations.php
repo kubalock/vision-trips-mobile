@@ -10,17 +10,23 @@ if (!$cards) {
 }
 $countrySlug = static fn (string $c) => Str::slug((string) preg_replace('/\(.*?\)|,.*$/', '', $c));
 ?>
-<div class="vt-dests">
+<div class="vt-dests" data-reveal-after="3" data-reveal-noun="destinations">
 <?php foreach ($cards as $card): $d = $card['dest']; $imgs = $card['images']; $slug = $countrySlug($card['country']); ?>
   <article class="vt-dest">
     <?php if ($imgs): ?>
       <div class="vt-gallery vt-gallery--hero" data-gallery>
-        <?php foreach ($imgs as $img): ?><a href="<?= e($img['url']) ?>" data-lightbox><img src="<?= e($img['url']) ?>" alt="<?= e($d['name']) ?>" loading="lazy" decoding="async"></a><?php endforeach; ?>
+        <?php foreach ($imgs as $gi => $img): ?><a href="<?= e($img['url']) ?>" data-lightbox><img src="<?= e($img['url']) ?>" alt="<?= e($d['name']) ?>"<?= $gi < 3 ? '' : ' loading="lazy"' ?> decoding="async" onerror="this.parentNode.remove()"></a><?php endforeach; ?>
       </div>
     <?php endif; ?>
     <div class="vt-dest__body">
       <h3 class="vt-h3"><?= e($d['name']) ?><?php if ($card['country'] !== '' && strcasecmp($card['country'], $d['name']) !== 0): ?><span class="vt-dest__country"><?= e($card['country']) ?></span><?php endif; ?></h3>
-      <?php if ($card['text'] !== ''): ?><div class="vt-dest__overview"><?= raw($card['text']) ?></div><?php elseif (!empty($card['pending'])): ?><p class="vt-stay__pending"><span class="vt-sk__line"></span>Putting together a few words about <?= e($d['name']) ?>…</p><?php endif; ?>
+      <?php if (!empty($card['facts'])): $labels = ['currency' => 'Currency', 'language' => 'Language', 'time_difference' => 'Time difference', 'flight_time' => 'Flight time', 'plugs' => 'Plugs', 'best_time' => 'Best time to go']; ?>
+        <dl class="vt-facts"><?php foreach ($labels as $k => $label): if (!empty($card['facts'][$k])): ?><div><dt><?= e($label) ?></dt><dd><?= e($card['facts'][$k]) ?></dd></div><?php endif; endforeach; ?></dl>
+      <?php endif; ?>
+      <?php if (!empty($card['climate'])): $cl = $card['climate']; ?>
+        <p class="vt-climate"><?= icon('sun') ?><span>In <?= e($cl['month']) ?> it's usually <strong><?= e((string) $cl['high']) ?>°</strong> by day and <strong><?= e((string) $cl['low']) ?>°</strong> at night, with about <?= e((string) $cl['sun']) ?> hours of sunshine a day<?= $cl['rainDays'] > 0 ? ' and ' . e((string) $cl['rainDays']) . ' rainy day' . ($cl['rainDays'] === 1 ? '' : 's') . ' in the month' : ' and hardly any rain' ?>.</span></p>
+      <?php endif; ?>
+      <?php if ($card['text'] !== ''): ?><div class="vt-dest__overview"><?= raw($card['text']) ?></div><?php endif; ?>
       <?php $sec = $card['sections'] ?? ['attractions' => ['html' => $d['attractions']], 'practical' => ['html' => $d['practical']], 'culture' => ['html' => $d['culture']]]; ?>
       <?php if ($sec['attractions']['html'] !== ''): ?><details class="vt-more"><summary><span>Things to do</span><?= icon('chevron') ?></summary><div class="vt-longtext"><?= raw($sec['attractions']['html']) ?></div></details><?php endif; ?>
       <?php if ($sec['practical']['html'] !== ''): ?><details class="vt-more"><summary><span>Practical information</span><?= icon('chevron') ?></summary><div class="vt-longtext"><?= raw($sec['practical']['html']) ?></div></details><?php endif; ?>

@@ -17,6 +17,8 @@ if ($brand->emergencyPhone !== '' || $trip->emergencyPhone !== '') {
     $items[] = ['phone', 'With you while away', 'Out-of-hours support'];
 }
 ?>
+<?php if (!empty($agency['rating']) && (float) $agency['rating'] >= 4.3 && (int) ($agency['count'] ?? 0) >= 10) { $items[] = ['star', number_format((float) $agency['rating'], 1) . ' on Google', number_format((int) $agency['count']) . ' reviews']; } ?>
+<?php if ($trip->vip) { array_unshift($items, ['star', 'VIP priority', $brand->phone !== '' ? 'Your direct line: ' . $brand->phone : 'Handled first, always']); } ?>
 <ul class="vt-reassure" role="list" aria-label="Why you can relax">
   <?php foreach ($items as [$ic, $t, $sub]): ?><li><?= icon($ic) ?><span><strong><?= e($t) ?></strong><em><?= e($sub) ?></em></span></li><?php endforeach; ?>
 </ul>

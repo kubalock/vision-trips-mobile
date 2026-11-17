@@ -80,6 +80,62 @@ final class Weather
         return $out;
     }
 
+    /**
+     * What the weather is usually like in the travel month: average daytime high and night low, sunshine hours a day
+     * and rainy days, from the same month over the last three years (Open-Meteo archive, free). Cached for a year.
+     * @return array{month:string,high:int,low:int,sun:float,rainDays:int}|null
+     */
+    public static function climate(float $lat, float $lng, \DateTimeImmutable $when): ?array
+    {
+        if (!self::enabled()) {
+            return null;
+        }
+        $month = (int) $when->format('n');
+        $cacheId = md5('climate|' . round($lat, 1) . '|' . round($lng, 1) . '|' . $month);
+        $cached = Cache::get('weather', $cacheId);
+        if (is_array($cached)) {
+            return isset($cached['missing']) ? null : $cached;
+        }
+        $thisYear = (int) gmdate('Y');
+        $highs = $lows = $suns = [];
+        $rain = 0;
+        $days = 0;
+        for ($y = $thisYear - 1; $y >= $thisYear - 3; $y--) {
+            $start = sprintf('%04d-%02d-01', $y, $month);
+            $end = (new \DateTimeImmutable($start))->modify('last day of this month')->format('Y-m-d');
+            $url = 'https://archive-api.open-meteo.com/v1/archive?latitude=' . $lat . '&longitude=' . $lng . '&start_date=' . $start . '&end_date=' . $end . '&daily=temperature_2m_max,temperature_2m_min,sunshine_duration,precipitation_sum&timezone=auto';
+            $res = Http::getJson($url, [], 10);
+            if (!$res['ok'] || empty($res['data']['daily']['time'])) {
+                continue;
+            }
+            $d = $res['data']['daily'];
+            foreach ($d['time'] as $i => $t) {
+                if (isset($d['temperature_2m_max'][$i], $d['temperature_2m_min'][$i])) {
+                    $highs[] = (float) $d['temperature_2m_max'][$i];
+                    $lows[] = (float) $d['temperature_2m_min'][$i];
+                    $suns[] = (float) ($d['sunshine_duration'][$i] ?? 0) / 3600;
+                    if ((float) ($d['precipitation_sum'][$i] ?? 0) >= 1.0) {
+                        $rain++;
+                    }
+                    $days++;
+                }
+            }
+        }
+        if ($days < 20) {
+            Cache::negative('weather', $cacheId, 7 * DAY_IN_SECONDS);
+            return null;
+        }
+        $out = [
+            'month'    => $when->format('F'),
+            'high'     => (int) round(array_sum($highs) / count($highs)),
+            'low'      => (int) round(array_sum($lows) / count($lows)),
+            'sun'      => round(array_sum($suns) / count($suns), 1),
+            'rainDays' => (int) round($rain / max(1, $days / 30.4)),
+        ];
+        Cache::set('weather', $cacheId, $out, 365 * DAY_IN_SECONDS);
+        return $out;
+    }
+
     public static function label(int $code): string
     {
         return match (true) {

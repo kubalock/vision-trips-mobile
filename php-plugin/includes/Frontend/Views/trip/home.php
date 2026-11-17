@@ -38,9 +38,10 @@ foreach ($trip->destinations as $d) {
   <div class="vt-chips" aria-label="Next trip ideas">
     <?php foreach (['Winter sun', 'City break', 'A cruise', 'Big celebration', 'Family holiday', 'Somewhere new'] as $chip): ?><a class="vt-chip" href="#help" data-ask data-ask-prefill="<?= e('Next time we fancy: ' . strtolower($chip) . '. Could you send us some ideas and rough prices?') ?>"><?= icon('sparkle') ?> <?= e($chip) ?></a><?php endforeach; ?>
   </div>
-  <?php if ($photos): ?>
-    <div class="vt-gallery vt-gallery--memories" data-gallery>
-      <?php foreach (array_slice($photos, 0, 10) as $img): ?><a href="<?= e($img['url']) ?>" data-lightbox><img src="<?= e($img['thumb']) ?>" alt="<?= e($img['name']) ?>" loading="lazy" decoding="async"></a><?php endforeach; ?>
+  <?php if (count($photos) >= 3): ?>
+    <h3 class="vt-h3 vt-home__memories-h">A few reminders</h3>
+    <div class="vt-memories" data-gallery>
+      <?php foreach (array_slice($photos, 0, 9) as $i => $img): ?><a href="<?= e($img['url']) ?>" data-lightbox class="<?= $i === 0 ? 'is-lead' : '' ?>"><img src="<?= e($img['thumb']) ?>" alt="<?= e($img['name']) ?>" loading="lazy" decoding="async" onerror="this.parentNode.remove()"></a><?php endforeach; ?>
     </div>
   <?php endif; ?>
 </section>

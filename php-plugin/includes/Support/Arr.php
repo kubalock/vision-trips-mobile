@@ -152,6 +152,7 @@ final class Arr
                 continue;
             }
             $out[] = [
+                'id'    => (string) ($att['id'] ?? ''),
                 'url'   => (string) $att['url'],
                 'thumb' => (string) ($att['thumbnails']['large']['url'] ?? $att['thumbnails']['small']['url'] ?? $att['url']),
                 'name'  => (string) ($att['filename'] ?? 'image'),

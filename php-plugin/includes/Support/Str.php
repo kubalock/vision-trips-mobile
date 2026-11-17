@@ -294,7 +294,11 @@ final class Str
             return '';
         }
         [$u, $d] = explode('@', $email, 2);
-        return mb_substr($u, 0, 1) . str_repeat('*', max(2, mb_strlen($u) - 1)) . '@' . $d;
+        $n = mb_strlen($u);
+        if ($n <= 2) {
+            return mb_substr($u, 0, 1) . '••' . '@' . $d;
+        }
+        return mb_substr($u, 0, 1) . str_repeat('•', max(2, $n - 2)) . mb_substr($u, -1) . '@' . $d;
     }
 
     public static function maskPhone(string $phone): string

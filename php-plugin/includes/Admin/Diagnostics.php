@@ -51,6 +51,14 @@ final class Diagnostics
         if (!$trip) {
             return $rows;
         }
+        // Terminal fields (added to Vision as single line text)
+        $s = $t();
+        $flightEl = $trip->ofKind('flight')[0] ?? null;
+        if ($flightEl) {
+            $hasDep = array_key_exists('Departure Terminal', $flightEl->raw);
+            $hasArr = array_key_exists('Arrival Terminal', $flightEl->raw);
+            $row('Vision terminal fields', $hasDep || $hasArr, $s, ($hasDep ? 'Departure Terminal ✓' : 'Departure Terminal missing') . ' · ' . ($hasArr ? 'Arrival Terminal ✓' : 'Arrival Terminal missing') . ($flightEl->fromTerminal !== '' || $flightEl->toTerminal !== '' ? ' · showing T' . $flightEl->fromTerminal . ' → T' . $flightEl->toTerminal : ' · no value on this flight yet (Airtable omits empty fields, so blanks look missing)'));
+        }
         // Places
         $s = $t();
         $places = new Places();

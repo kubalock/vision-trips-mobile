@@ -15,6 +15,7 @@ use VisionTrips\Settings;
 use VisionTrips\Support\Arr;
 use VisionTrips\Support\Cache;
 use VisionTrips\Support\Dates;
+use VisionTrips\Support\Http;
 use VisionTrips\Support\Log;
 use VisionTrips\Support\Str;
 
@@ -53,6 +54,20 @@ final class BookingRepository
                 $this->unavailable = !$this->client->lastWasNotFound();
                 return null;
             }
+        } elseif (!empty($graph['incomplete'])) {
+            // Some linked records could not be fetched (rate limit or timeout): prefer the last complete copy, and
+            // never let this partial graph become the saved copy or sit in the cache for long.
+            $stale = Cache::get('graph-stale', $key);
+            Cache::set('graph', $key, $graph, 10);
+            if (is_array($stale) && !empty($stale['booking']) && empty($stale['incomplete'])) {
+                $missing = implode(', ', (array) $graph['incomplete']);
+                $graph = $stale;
+                $this->servedStale = true;
+                $how = 'partial fetch (' . $missing . ' unavailable) — showing the complete copy saved ' . gmdate('D H:i', (int) ($stale['fetched_at'] ?? 0)) . ' UTC';
+            } else {
+                $this->servedStale = true; // the page refreshes itself; the banner says we're updating
+                $how = 'partial fetch: ' . implode(', ', (array) $graph['incomplete']) . ' could not be loaded (rate limit/timeout); retrying';
+            }
         } elseif (!$hit) {
             Cache::set('graph-stale', $key, $graph, 3 * DAY_IN_SECONDS);
         }
@@ -64,6 +79,43 @@ final class BookingRepository
     public function fromGraph(string $base, array $graph): Trip
     {
         return $this->build($base, $graph);
+    }
+
+    /** IATA code → airport name from the Airports table (one formula query for all codes, cached 30 days). @return array<string,string> */
+    private function airportNames(string $base, array $codes): array
+    {
+        $out = [];
+        $missing = [];
+        foreach ($codes as $c) {
+            $hit = Cache::get('airports', $base . '|' . $c);
+            if (is_string($hit)) {
+                if ($hit !== '') {
+                    $out[$c] = $hit;
+                }
+            } else {
+                $missing[] = $c;
+            }
+        }
+        if ($missing && Http::$cacheOnly === false) {
+            $iata = FieldMap::candidates('airport', 'iata')[0] ?? 'IATA Code';
+            $nameField = FieldMap::candidates('airport', 'name')[0] ?? 'Name';
+            $formula = 'OR(' . implode(',', array_map(static fn ($c) => '{' . $iata . "}='" . addslashes($c) . "'", $missing)) . ')';
+            try {
+                foreach ($this->client->find($base, FieldMap::table('airports'), $formula, [$iata, $nameField], 50) as $r) {
+                    $code = strtoupper(Str::clean($r['fields'][$iata] ?? ''));
+                    $name = Str::clean($r['fields'][$nameField] ?? '');
+                    if ($code !== '' && $name !== '') {
+                        $out[$code] = $name;
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Airport name lookup failed', ['error' => $e->getMessage()]);
+            }
+            foreach ($missing as $c) {
+                Cache::set('airports', $base . '|' . $c, $out[$c] ?? '', 30 * DAY_IN_SECONDS);
+            }
+        }
+        return $out;
     }
 
     public function invalidate(string $base, string $recordId): void
@@ -95,6 +147,7 @@ final class BookingRepository
             'locations' => ['table' => $t('locations'), 'ids' => Arr::recordIds($pick('destinations'))],
             'comms'     => ['table' => $t('comms'),     'ids' => array_slice(Arr::recordIds($pick('communications')), -40)],
         ]);
+        $incomplete = $this->client->failedGroups();
 
         // Wave 3: second-level links from elements, brand, payments
         $ids = ['suppliers' => [], 'airports' => [], 'airlines' => [], 'rooms' => [], 'cabins' => [], 'passengers' => [], 'ships' => [], 'itinerary' => [], 'elocations' => [], 'operators' => []];
@@ -134,7 +187,9 @@ final class BookingRepository
             'operators'  => ['table' => $t('operators'), 'ids' => $ids['operators']],
             'templates'  => ['table' => $t('brand_templates'), 'ids' => $templateIds],
             'methods'    => ['table' => 'Payment Setup', 'ids' => $methodIds],
-        ]);
+                    'loyalty'    => ['table' => FieldMap::table('loyalty_tx'), 'ids' => Arr::recordIds($pick('loyalty_tx'))],
+]);
+        $incomplete = array_values(array_unique(array_merge($incomplete, $this->client->failedGroups())));
 
         // Ports inside cruise itinerary rows link to CMS [Locations]
         $portIds = [];
@@ -145,6 +200,7 @@ final class BookingRepository
 
         return [
             'fetched_at' => time(),
+            'incomplete' => $incomplete,
             'booking'    => $booking,
             'w2'         => $wave2,
             'w3'         => $wave3,
@@ -195,12 +251,27 @@ final class BookingRepository
         $includeMsg = $pick('include_message');
         $msg = Str::clean($pick('personal_message'));
         $trip->agentName = Str::clean(Arr::first($pick('agent')));
+        // Collaborator fields come back as {id: usr…, email, name}; the first such value found wins
+        foreach ((array) (FieldMap::candidates('booking', 'agent_user') ?: []) as $cand) {
+            $v = $f[$cand] ?? null;
+            $v = is_array($v) && array_is_list($v) ? ($v[0] ?? null) : $v;
+            if (is_array($v) && isset($v['id']) && str_starts_with((string) $v['id'], 'usr')) {
+                $trip->agentUserId = (string) $v['id'];
+                if ($trip->agentName === '' && !empty($v['name'])) {
+                    $trip->agentName = Str::clean($v['name']);
+                }
+                if (!empty($v['email']) && is_email((string) $v['email'])) {
+                    $trip->agentEmail = strtolower((string) $v['email']);
+                }
+                break;
+            }
+        }
         $trip->tripOverview = Str::richText(Str::clean(Arr::first($pick('trip_overview'))));
         foreach (Arr::images($pick('hero')) as $img) {
-            $trip->heroImages[] = ['url' => $img['url'], 'thumb' => $img['thumb']];
+            $trip->heroImages[] = ['url' => \VisionTrips\Support\Assets::image($img['url'], $img['id'] ?? ''), 'thumb' => \VisionTrips\Support\Assets::image($img['thumb'], ($img['id'] ?? '') !== '' ? $img['id'] . '-t' : '')];
         }
         foreach (Arr::images($pick('gallery')) as $img) {
-            $trip->heroImages[] = ['url' => $img['url'], 'thumb' => $img['thumb']];
+            $trip->heroImages[] = ['url' => \VisionTrips\Support\Assets::image($img['url'], $img['id'] ?? ''), 'thumb' => \VisionTrips\Support\Assets::image($img['thumb'], ($img['id'] ?? '') !== '' ? $img['id'] . '-t' : '')];
         }
         $trip->oohLink = Str::clean(Arr::first($pick('ooh_link')));
         $trip->oohEmail = Str::clean(Arr::first($pick('ooh_email')));
@@ -360,9 +431,89 @@ final class BookingRepository
             $trip->elements[] = Element::fromRecord($el, $ctx, $i);
         }
 
-        // Payments
+        // A flight that carries only an IATA code (no airport name) gets its name from the Airports table, cached a month
+        $codesNeeded = [];
+        foreach ($trip->elements as $fe) {
+            if ($fe->kind !== 'flight') {
+                continue;
+            }
+            foreach ([[$fe->from, $fe->fromCode], [$fe->to, $fe->toCode]] as [$nm, $cd]) {
+                if ($cd !== '' && ($nm === '' || preg_match('/^[A-Z]{3}$/', $nm))) {
+                    $codesNeeded[$cd] = true;
+                }
+            }
+        }
+        if ($codesNeeded) {
+            $names = $this->airportNames($base, array_keys($codesNeeded));
+            foreach ($trip->elements as $fe) {
+                if ($fe->kind === 'flight') {
+                    if (($fe->from === '' || preg_match('/^[A-Z]{3}$/', $fe->from)) && isset($names[$fe->fromCode])) {
+                        $fe->from = $names[$fe->fromCode];
+                    }
+                    if (($fe->to === '' || preg_match('/^[A-Z]{3}$/', $fe->to)) && isset($names[$fe->toCode])) {
+                        $fe->to = $names[$fe->toCode];
+                    }
+                }
+            }
+        }
+
+        // Terminals from live airport data, when it has already been fetched for this flight (never a new call here)
+        foreach ($trip->elements as $fe) {
+            if ($fe->kind === 'flight' && $fe->flightNo !== '' && $fe->start && ($fe->fromTerminal === '' || $fe->toTerminal === '')) {
+                $st = Cache::get('flights', (string) Settings::get('flight_provider', 'aerodatabox') . '|' . $fe->flightNo . '|' . $fe->start->format('Y-m-d'));
+                if (is_array($st) && !isset($st['missing'])) {
+                    $fe->fromTerminal = $fe->fromTerminal !== '' ? $fe->fromTerminal : Element::terminal((string) ($st['depTerminal'] ?? ''));
+                    $fe->toTerminal = $fe->toTerminal !== '' ? $fe->toTerminal : Element::terminal((string) ($st['arrTerminal'] ?? ''));
+                }
+            }
+        }
+
+        // Loyalty on the booking and the customer
+        $trip->pricePerPerson = (float) Arr::number($pick('price_pp'));
+        $trip->customerIds = Arr::recordIds($pick('customers'));
+        foreach (($w2['customers'] ?? []) as $cr) {
+            $trip->customerTripIds = array_merge($trip->customerTripIds, Arr::recordIds(FieldMap::pick($cr['fields'] ?? [], 'customer', 'trips')));
+        }
+        $trip->customerTripIds = array_values(array_unique($trip->customerTripIds));
+        $trip->included = array_values(array_filter(array_map('trim', preg_split('/\r?\n|•/', Str::clean($pick('included'))) ?: [])));
+        $trip->notIncluded = array_values(array_filter(array_map('trim', preg_split('/\r?\n|•/', Str::clean($pick('not_included'))) ?: [])));
+        $trip->videoMessage = Str::clean($pick('video_message'));
+        foreach ((array) $pick('video_walkthrough') as $att) {
+            // Only an actual video file counts: a photo or a PDF dropped in the field is ignored
+            if (is_array($att) && str_starts_with((string) ($att['type'] ?? ''), 'video/') && !empty($att['url'])) {
+                $trip->videoWalkthrough = ['url' => (string) $att['url'], 'type' => (string) $att['type'], 'poster' => (string) ($att['thumbnails']['large']['url'] ?? $att['thumbnails']['small']['url'] ?? ''), 'name' => Str::clean($att['filename'] ?? '')];
+                break;
+            }
+        }
+        $trip->loyaltyEnabled = Arr::truthy(Arr::first($pick('loyalty_enabled')));
+        $trip->loyaltyPoints = (int) round(Arr::number($pick('loyalty_points')));
+        $trip->loyaltyAwarded = Arr::truthy($pick('loyalty_awarded'));
+        $trip->loyaltyReturnDate = Dates::parse($pick('loyalty_return'));
+        $custRec = $w2['customers'][0] ?? null;
+        if (is_array($custRec)) {
+            $cf = $custRec['fields'] ?? [];
+            $trip->vip = Arr::truthy(FieldMap::pick($cf, 'customer', 'vip'));
+            $trip->pointsAvailable = (int) round(Arr::number(FieldMap::pick($cf, 'customer', 'points_available')));
+            $trip->pointsValue = (float) Arr::number(FieldMap::pick($cf, 'customer', 'points_value'));
+        }
+        // Points per payment from the linked Loyalty Transactions (wave 3)
+        $txPoints = [];
+        foreach (($w3['loyalty'] ?? []) as $tx) {
+            $tf = $tx['fields'] ?? [];
+            if (strcasecmp(Str::clean($tf['Transaction Type'] ?? ''), 'Redeem') === 0) {
+                $txPoints[(string) $tx['id']] = abs((int) round(Arr::number($tf['Points'] ?? 0)));
+            }
+        }
+        // Payments: scheme redemptions (the member's own funding) are never customer-facing
         foreach ($w2['payments'] as $p) {
-            $trip->payments[] = Payment::fromRecord($p, $names);
+            $pay = Payment::fromRecord($p, $names);
+            if ($pay->isSchemeRedemption()) {
+                continue;
+            }
+            foreach ($pay->loyaltyTxIds as $tid) {
+                $pay->pointsRedeemed += (int) ($txPoints[$tid] ?? 0);
+            }
+            $trip->payments[] = $pay;
         }
         if ($trip->paid <= 0 && $trip->payments) {
             $sum = 0.0;
@@ -414,7 +565,8 @@ final class BookingRepository
             $trip->upsells[] = [
                 'name'     => Str::clean(FieldMap::pick($uf, 'upsell', 'name')) ?: 'Optional extra',
                 'info'     => Str::richText(Str::clean(FieldMap::pick($uf, 'upsell', 'info'))),
-                'image'    => $img[0]['thumb'] ?? '',
+                'image'    => isset($img[0]) ? \VisionTrips\Support\Assets::image((string) ($img[0]['url'] ?? ''), (string) ($img[0]['id'] ?? '')) : '',
+                'link'     => (static function (string $u): string { $u = trim($u); return preg_match('#^https?://#i', $u) ? $u : ''; })(Str::clean(FieldMap::pick($uf, 'upsell', 'affiliate'))),
                 'supplier' => Str::clean(FieldMap::pick($uf, 'upsell', 'supplier')),
             ];
         }

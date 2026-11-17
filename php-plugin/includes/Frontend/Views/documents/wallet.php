@@ -31,8 +31,8 @@ $tel = static fn (string $n) => 'tel:' . preg_replace('/[^0-9+]/', '', $n);
         <div class="vt-doc__el-head"><strong><?= e($e->shortTitle()) ?></strong><span><?= e(View::kindLabel($e->kind)) ?><?= $e->startTime !== '' ? ' · ' . e($e->startTime) : '' ?><?= $e->endTime !== '' && in_array($e->kind, ['flight', 'train', 'transfer'], true) ? ' – ' . e($e->endTime) : '' ?></span></div>
         <dl class="vt-doc__kv">
           <?php if ($e->kind === 'flight'): ?>
-            <?php if ($e->from !== ''): ?><div><dt>From</dt><dd><?= e($e->from) ?><?= $e->fromCode !== '' ? ' (' . e($e->fromCode) . ')' : '' ?></dd></div><?php endif; ?>
-            <?php if ($e->to !== ''): ?><div><dt>To</dt><dd><?= e($e->to) ?><?= $e->toCode !== '' ? ' (' . e($e->toCode) . ')' : '' ?></dd></div><?php endif; ?>
+            <?php if ($e->from !== ''): ?><div><dt>From</dt><dd><?= e($e->from) ?><?= $e->fromCode !== '' ? ' (' . e($e->fromCode) . ')' : '' ?><?= $e->fromTerminal !== '' ? ' · Terminal ' . e($e->fromTerminal) : '' ?></dd></div><?php endif; ?>
+            <?php if ($e->to !== ''): ?><div><dt>To</dt><dd><?= e($e->to) ?><?= $e->toCode !== '' ? ' (' . e($e->toCode) . ')' : '' ?><?= $e->toTerminal !== '' ? ' · Terminal ' . e($e->toTerminal) : '' ?></dd></div><?php endif; ?>
             <?php if ($e->flightNo !== ''): ?><div><dt>Flight</dt><dd><?= e(trim($e->carrier . ' ' . $e->flightNo)) ?></dd></div><?php endif; ?>
             <?php foreach ($e->passengers as $p): ?><div><dt><?= e($p['name']) ?></dt><dd><?= e(trim(implode(' · ', array_filter([($p['Booking ref'] ?? '') !== '' ? 'Ref ' . $p['Booking ref'] : '', ($p['Seat'] ?? '') !== '' ? 'Seat ' . $p['Seat'] : '', $p['Class'] ?? ''])))) ?: '—' ?></dd></div><?php endforeach; ?>
           <?php elseif ($e->kind === 'stay'): ?>

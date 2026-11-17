@@ -10,3 +10,5 @@ namespace VisionTrips\Frontend;
 </article>
 </body>
 </html>
+
+<p class="vt-powered">Powered by <a href="https://thetravelnetworkgroup.co.uk" rel="noopener" target="_blank">Vision</a> from The Travel Network Group</p>

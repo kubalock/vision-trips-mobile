@@ -11,7 +11,7 @@ if (!$trip->messages) {
 <section class="vt-section" id="messages" aria-labelledby="messages-h">
   <h2 class="vt-h2" id="messages-h">What we've sent you</h2>
   <p class="vt-section__lead">A record of every email and message from <?= e($brand->name) ?> about this trip, in case one goes astray.</p>
-  <ul class="vt-msgs" role="list">
+  <ul class="vt-msgs" role="list" data-reveal-after="4" data-reveal-noun="messages">
     <?php foreach (array_slice($trip->messages, 0, 12) as $m): ?>
       <li class="vt-msg">
         <?php if ($m['content'] !== ''): ?>

@@ -86,7 +86,8 @@ final class Places
             $author = Str::clean($photo['authorAttributions'][0]['displayName'] ?? '');
             $official = $author !== '' && $name !== '' && (stripos($author, $name) !== false || stripos($name, $author) !== false);
             $photos[] = [
-                'url'      => self::PHOTO . $photo['name'] . '/media?maxWidthPx=1400&key=' . rawurlencode($this->key),
+                'name'     => (string) $photo['name'],
+                'url'      => '',
                 'author'   => $author,
                 'official' => $official,
             ];
@@ -98,6 +99,11 @@ final class Places
             usort($photos, static fn ($a, $b) => ((int) $b['official']) <=> ((int) $a['official']));
         }
         $photos = array_slice($photos, 0, $max);
+        // Keep the photo names; URLs are resolved at render time (local copy when the background job has fetched it).
+        foreach ($photos as &$ph) {
+            $ph['url'] = self::PHOTO . $ph['name'] . '/media?maxWidthPx=1200&key=' . rawurlencode($this->key);
+        }
+        unset($ph);
         $reviews = [];
         foreach ((array) ($p['reviews'] ?? []) as $r) {
             $text = Str::clean($r['text']['text'] ?? $r['originalText']['text'] ?? '');
@@ -125,7 +131,7 @@ final class Places
             'reviews' => array_slice($reviews, 0, 3),
             'priceLevel' => Str::clean($p['priceLevel'] ?? ''),
         ];
-        Cache::set('places', $cacheId, $place, 14 * DAY_IN_SECONDS);
+        Cache::set('places', $cacheId, $place, 30 * DAY_IN_SECONDS); // a hotel does not change much in a month
         return $place;
     }
 
@@ -184,7 +190,140 @@ final class Places
         return ['ok' => $ok, 'reason' => ($ok ? 'matched: ' : 'rejected: ') . $reason];
     }
 
+    /** @return array{dir:string,url:string}|null */
+    private static function photoStore(): ?array
+    {
+        if (!Settings::bool('places_cache_photos') || !function_exists('wp_upload_dir')) {
+            return null;
+        }
+        $uploads = wp_upload_dir();
+        if (!empty($uploads['error'])) {
+            return null;
+        }
+        return ['dir' => trailingslashit($uploads['basedir']) . 'vision-trips/places/', 'url' => trailingslashit($uploads['baseurl']) . 'vision-trips/places/'];
+    }
+
+    /**
+     * The URL to show for a photo right now: the local copy if the background job has fetched it, otherwise the
+     * direct Places URL while a job is queued to fetch it. Nothing is ever downloaded inside a page or section request.
+     * @param array{name?:string,url:string} $photo
+     */
+    public static function photoSrc(array $photo): string
+    {
+        $name = (string) ($photo['name'] ?? '');
+        $direct = (string) ($photo['url'] ?? '');
+        $store = self::photoStore();
+        if ($name === '' || $store === null || $direct === '') {
+            return $direct;
+        }
+        $hash = md5($name);
+        $file = $store['dir'] . $hash . '.jpg';
+        if (is_file($file) && filemtime($file) > time() - 14 * DAY_IN_SECONDS) {
+            return $store['url'] . $hash . '.jpg';
+        }
+        // Not on disk yet: the page links to our own photo endpoint, which fetches from Google on first request
+        // (server-side, so API-key restrictions never apply), stores the file and streams it. Images appear at once.
+        set_transient('vtr_photo_' . $hash, $direct, 30 * DAY_IN_SECONDS);
+        \VisionTrips\Support\Jobs::dispatch('photo', ['name' => $name, 'url' => $direct, 'hash' => $hash], 'photo|' . $hash);
+        return home_url('/' . trim((string) Settings::get('trip_page_slug', 'trip'), '/') . '/photo/' . $hash . '.jpg?k=' . self::sig($hash));
+    }
+
+    private static function sig(string $hash): string
+    {
+        return substr(hash_hmac('sha256', 'photo|' . $hash, (string) Settings::get('link_secret', '')), 0, 12);
+    }
+
+    /** /trip/photo/{hash}.jpg — serve from disk, or fetch from Google once, store and serve. Never returns. */
+    public static function servePhoto(string $hash, string $key): never
+    {
+        $hash = (string) preg_replace('/[^a-f0-9]/', '', $hash);
+        if (strlen($hash) !== 32 || !hash_equals(self::sig($hash), $key)) {
+            status_header(404);
+            exit;
+        }
+        $store = self::photoStore();
+        $file = $store ? $store['dir'] . $hash . '.jpg' : '';
+        if ($file === '' || !is_file($file)) {
+            $direct = (string) get_transient('vtr_photo_' . $hash);
+            if ($direct === '' || !self::fetchPhoto(['name' => $hash, 'url' => $direct, 'hash' => $hash])) {
+                status_header(404);
+                header('Cache-Control: no-store');
+                exit;
+            }
+        }
+        \VisionTrips\Support\Assets::stream($file, 'image/jpeg', 1209600);
+    }
+
+    /** Background or on-demand: download one photo into uploads. @param array<string,mixed> $args */
+    public static function fetchPhoto(array $args): bool
+    {
+        $store = self::photoStore();
+        $name = (string) ($args['name'] ?? '');
+        $direct = (string) ($args['url'] ?? '');
+        if ($store === null || $name === '' || $direct === '') {
+            return false;
+        }
+        $hash = (string) ($args['hash'] ?? md5($name));
+        if (is_file($store['dir'] . $hash . '.jpg')) {
+            return true;
+        }
+        if (!is_dir($store['dir'])) {
+            wp_mkdir_p($store['dir']);
+        }
+        $res = wp_remote_get($direct, ['timeout' => 15, 'redirection' => 3]);
+        \VisionTrips\Support\Metrics::hit('places_photo');
+        if (is_wp_error($res) || (int) wp_remote_retrieve_response_code($res) !== 200) {
+            return false;
+        }
+        $body = (string) wp_remote_retrieve_body($res);
+        $type = (string) wp_remote_retrieve_header($res, 'content-type');
+        if ($body === '' || strlen($body) > 4 * 1024 * 1024 || !str_starts_with($type, 'image/')) {
+            return false;
+        }
+        return @file_put_contents($store['dir'] . $hash . '.jpg', $body) !== false;
+    }
+
+    /** The agency's own Google rating and review count, by trading name + address, cached a week. @return array{rating:float,count:int,url:string} */
+    public function agencyRating(string $name, string $address): array
+    {
+        $empty = ['rating' => 0.0, 'count' => 0, 'url' => ''];
+        if (!$this->configured() || $name === '') {
+            return $empty;
+        }
+        $key = md5('agency|' . strtolower($name) . '|' . strtolower($address));
+        $cached = Cache::get('places', $key);
+        if (is_array($cached)) {
+            return $cached + $empty;
+        }
+        $res = Http::sendJson('POST', self::SEARCH, ['textQuery' => $name . ($address !== '' ? ', ' . $address : ''), 'maxResultCount' => 1], ['X-Goog-Api-Key' => $this->key, 'X-Goog-FieldMask' => 'places.displayName,places.rating,places.userRatingCount,places.googleMapsUri'], 12);
+        $p = $res['ok'] ? ($res['data']['places'][0] ?? null) : null;
+        $out = $empty;
+        if (is_array($p) && similar_text(strtolower($name), strtolower((string) ($p['displayName']['text'] ?? ''))) / max(1, strlen($name)) > 0.6) {
+            $out = ['rating' => (float) ($p['rating'] ?? 0), 'count' => (int) ($p['userRatingCount'] ?? 0), 'url' => (string) ($p['googleMapsUri'] ?? '')];
+        }
+        Cache::set('places', $key, $out, 7 * DAY_IN_SECONDS);
+        return $out;
+    }
+
     /** Maps Embed URL (uses the embed key if set; otherwise the keyless maps.google.com embed). */
+    /**
+     * A map of the whole route: origin, stops and destination, for trips with two or more places. Needs the Maps Embed
+     * key (free); without it there is no route map. @param array<int,array{lat:float,lng:float}> $points
+     */
+    public static function routeUrl(array $points): string
+    {
+        $key = trim((string) Settings::get('google_maps_embed_key', ''));
+        $points = array_values(array_filter($points, static fn ($p) => isset($p['lat'], $p['lng'])));
+        if ($key === '' || count($points) < 2) {
+            return '';
+        }
+        $fmt = static fn (array $p) => round((float) $p['lat'], 5) . ',' . round((float) $p['lng'], 5);
+        $origin = $fmt(array_shift($points));
+        $dest = $fmt(array_pop($points));
+        $way = implode('|', array_map($fmt, array_slice($points, 0, 8)));
+        return 'https://www.google.com/maps/embed/v1/directions?key=' . rawurlencode($key) . '&origin=' . rawurlencode($origin) . '&destination=' . rawurlencode($dest) . ($way !== '' ? '&waypoints=' . rawurlencode($way) : '') . '&mode=driving&units=metric';
+    }
+
     public static function embedUrl(string $query, ?float $lat = null, ?float $lng = null, string $placeId = ''): string
     {
         $key = trim((string) Settings::get('google_maps_embed_key', ''));
