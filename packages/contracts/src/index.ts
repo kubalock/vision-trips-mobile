@@ -114,17 +114,16 @@ export interface TripAgent {
 
 export type LoyaltyTripState = 'quote' | 'pending' | 'post_return' | 'awarded';
 
+/**
+ * Booking-level loyalty only. The snapshot is cached per booking and shared by every customer linked to it, so a
+ * customer's balance, its value and VIP status are never in it: they come from the verified account endpoint.
+ */
 export interface TripLoyalty {
   /** Points this trip earns; null when the booking has no figure (never shown as 0). */
   pointsEarned: number | null;
   state: LoyaltyTripState;
   /** The date the points become eligible (normally the return date). */
   eligibleFrom: string | null;
-  /** The verified customer's balance, when it could be read. */
-  available: number | null;
-  availableValue: number | null;
-  currency: string;
-  vip: boolean;
 }
 
 export interface TripContent {
@@ -137,6 +136,12 @@ export interface TripContent {
 }
 
 export interface ContentListItem { text: string }
+
+/**
+ * GET /trips/current/walkthrough: the walkthrough with a freshly read attachment URL, fetched just before playback
+ * (Airtable attachment URLs expire, so the copy in a saved snapshot may no longer play).
+ */
+export interface WalkthroughResponse { video: TripVideo | null }
 
 export interface TripVideo {
   kind: 'file' | 'youtube' | 'vimeo';
@@ -343,7 +348,8 @@ export interface RelatedQuotationSummary {
   durationDays: number | null;
   /** Nights (duration in days minus one is not assumed: departure to return). */
   nights?: number | null;
-  total: number;
+  /** Null when the quotation has no readable total (shown as "Price to be confirmed", never £0). */
+  total: number | null;
   /** Per person: the booking's own figure, otherwise the total shared across travellers (when more than one). */
   perPerson?: number | null;
   currency: string;
@@ -516,8 +522,6 @@ export interface TravellerSummary {
   insuranceStatus: string | null;
   /** Age on the departure date (or today when unknown); primary customer only. */
   age?: number | null;
-  /** Only on verified sessions when DOB display is allowed (TRAVELLER_DOB_VISIBLE). */
-  dateOfBirth?: string | null;
   /** Last three characters only (···876); primary customer only. */
   passportEnding?: string | null;
   /** True when the passport expires within six months after the return date (or is already expired). */

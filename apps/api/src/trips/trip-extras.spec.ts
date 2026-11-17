@@ -77,10 +77,10 @@ describe('agent', () => {
 
 describe('travellers', () => {
   it('masks the passport, works out the age on departure and warns within six months of return', () => {
-    delete process.env.TRAVELLER_DOB_VISIBLE;
     const details = travellerDetails(record({ 'Passport Number': '123456876', 'Date of Birth': '1990-06-15', 'Expiry Date': '2027-08-01' }), '2027-05-01', '2027-05-08');
-    expect(details).toEqual({ age: 36, dateOfBirth: null, passportEnding: '···876', passportWarning: true });
+    expect(details).toEqual({ age: 36, passportEnding: '···876', passportWarning: true });
     expect(JSON.stringify(details)).not.toContain('123456');
+    expect(JSON.stringify(details)).not.toContain('1990');
     expect(ageOn('2000-05-02', '2027-05-01')).toBe(26);
   });
 });
@@ -88,15 +88,29 @@ describe('travellers', () => {
 describe('trip loyalty', () => {
   const member = (enabled: boolean) => record({ 'Loyalty Scheme Enabled': enabled });
   it('is absent unless the member scheme is enabled', () => {
-    expect(mapTripLoyalty({ booking: record({ 'Loyalty_Total Points': 500 }), member: member(false), customer: undefined, stage: 'countdown', returns: '2027-05-08', currency: 'GBP' })).toBeNull();
-    expect(mapTripLoyalty({ booking: record({ 'Loyalty_Total Points': 500 }), member: undefined, customer: undefined, stage: 'countdown', returns: '2027-05-08', currency: 'GBP' })).toBeNull();
+    expect(mapTripLoyalty({ booking: record({ 'Loyalty_Total Points': 500 }), member: member(false), stage: 'countdown', returns: '2027-05-08' })).toBeNull();
+    expect(mapTripLoyalty({ booking: record({ 'Loyalty_Total Points': 500 }), member: undefined, stage: 'countdown', returns: '2027-05-08' })).toBeNull();
   });
   it('distinguishes quote, pending, post-return and awarded, and never turns missing points into 0', () => {
-    const base = { member: member(true), customer: undefined, returns: '2027-05-08', currency: 'GBP', today: new Date('2027-01-01T00:00:00Z') };
+    const base = { member: member(true), returns: '2027-05-08', today: new Date('2027-01-01T00:00:00Z') };
     expect(mapTripLoyalty({ ...base, booking: record({ 'Loyalty_Total Points': 500 }), stage: 'quote' })?.state).toBe('quote');
-    expect(mapTripLoyalty({ ...base, booking: record({ 'Loyalty_Total Points': 500 }), stage: 'countdown' })).toMatchObject({ state: 'pending', pointsEarned: 500, available: null });
+    expect(mapTripLoyalty({ ...base, booking: record({ 'Loyalty_Total Points': 500 }), stage: 'countdown' })).toEqual({ state: 'pending', pointsEarned: 500, eligibleFrom: '2027-05-08' });
     expect(mapTripLoyalty({ ...base, today: new Date('2027-06-01T00:00:00Z'), booking: record({}), stage: 'home' })).toMatchObject({ state: 'post_return', pointsEarned: null });
     expect(mapTripLoyalty({ ...base, booking: record({ 'Loyalty Points Awarded': true, 'Loyalty_Total Points': 1 }), stage: 'past' })).toMatchObject({ state: 'awarded', pointsEarned: 1 });
+  });
+});
+
+describe('loyalty in the shared booking snapshot', () => {
+  beforeAll(() => { process.env.VISION_LINK_SECRET ??= 'loyalty-test'; });
+  it('carries no customer balance, value or VIP, whichever of two linked customers comes first', () => {
+    const booking = { id: 'recBOOKINGAAAAAAA', fields: { Status: 'Confirmed', 'Departure Date': '2027-05-01', 'Return Date': '2027-05-08', 'Loyalty_Total Points': 800 } };
+    const rich = { id: 'recCUSTOMERRICH01', fields: { 'Full Name': 'Rich', 'Available Points': 90000, 'Loyalty Value (£)': 900, 'VIP Status': true } };
+    const modest = { id: 'recCUSTOMERMODEST', fields: { 'Full Name': 'Modest', 'Available Points': 10, 'Loyalty Value (£)': 0.1 } };
+    const map = (customers: Array<{ id: string; fields: Record<string, unknown> }>) => new TripsService({} as never).mapSnapshot('appABCDEFGHIJKLMN', booking as never, { id: 'recBRANDAAAAAAAAA', fields: {} } as never, 'primary_customer', { customers, members: [{ id: 'recMEMBERAAAAAAAA', fields: { 'Loyalty Scheme Enabled': true } }] } as never);
+    const first = map([rich, modest]); const second = map([modest, rich]);
+    expect(first.loyalty).toEqual({ pointsEarned: 800, state: expect.any(String), eligibleFrom: '2027-05-08' });
+    expect(second.loyalty).toEqual(first.loyalty);
+    for (const snapshot of [first, second]) for (const leaked of ['90000', '900', '"vip"', 'availableValue']) expect(JSON.stringify(snapshot.loyalty)).not.toContain(leaked);
   });
 });
 

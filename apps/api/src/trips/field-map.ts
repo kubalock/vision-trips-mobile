@@ -189,13 +189,13 @@ export interface ResponsiveImage { url: string; width: number | null; height: nu
  */
 export function attachmentImage(value: unknown): ResponsiveImage | null {
   const file = value as AirtableAttachment | null;
-  if (!file || typeof file.url !== 'string' || !file.url.startsWith('https://')) return null;
+  if (!file || typeof file.url !== 'string' || !isAttachmentLink(file.url)) return null;
   const width = positive(file.width); const height = positive(file.height);
   const candidates = [file.thumbnails?.large, file.thumbnails?.full, { url: file.url, width: file.width }];
   const variants = new Map<number, string>();
   for (const candidate of candidates) {
     const candidateWidth = positive(candidate?.width);
-    if (candidateWidth && typeof candidate?.url === 'string' && candidate.url.startsWith('https://') && !variants.has(candidateWidth)) variants.set(candidateWidth, candidate.url);
+    if (candidateWidth && typeof candidate?.url === 'string' && isAttachmentLink(candidate.url) && !variants.has(candidateWidth)) variants.set(candidateWidth, candidate.url);
   }
   return { url: file.url, width, height, variants: [...variants].sort(([a], [b]) => a - b).map(([variantWidth, url]) => ({ url, width: variantWidth })) };
 }
@@ -208,17 +208,20 @@ export function firstAttachmentImage(value: unknown): ResponsiveImage | null {
 export function firstAttachmentThumbnail(value: unknown): string | null {
   if (!Array.isArray(value)) return null;
   const large = (value[0] as AirtableAttachment | undefined)?.thumbnails?.large?.url;
-  return typeof large === 'string' && large.startsWith('https://') ? large : firstAttachmentUrl(value);
+  return typeof large === 'string' && isAttachmentLink(large) ? large : firstAttachmentUrl(value);
 }
 
 function positive(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.round(value) : null;
 }
 
+/** An Airtable https URL, or a media-endpoint marker (see media/attachment-media.ts). */
+function isAttachmentLink(url: string): boolean { return url.startsWith('https://') || url.startsWith('vt-media:'); }
+
 export function firstAttachmentUrl(value: unknown): string | null {
   if (!Array.isArray(value)) return null;
   const attachment = value[0] as { url?: unknown } | undefined;
-  return typeof attachment?.url === 'string' && attachment.url.startsWith('https://') ? attachment.url : null;
+  return typeof attachment?.url === 'string' && isAttachmentLink(attachment.url) ? attachment.url : null;
 }
 
 export function numberValue(value: unknown): number {

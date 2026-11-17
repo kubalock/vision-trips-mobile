@@ -112,11 +112,28 @@ describe('TravellerProfilesService', () => {
   it('validates formats and dates', () => {
     const today = new Date('2026-11-17T00:00:00Z');
     expect(() => validate({ passportNumber: '12' }, today)).toThrow(/5 to 12/);
-    expect(() => validate({ nationality: 'Brit1sh' }, today)).toThrow(/letters only/);
+    expect(() => validate({ nationality: 'Brit1sh' }, today)).toThrow(/nationality from the list/);
+    expect(() => validate({ passportIssuingCountry: 'Narnia' }, today)).toThrow(/issuing country from the list/);
+    expect(validate({ nationality: 'british', passportIssuingCountry: 'uk' }, today)).toEqual({ nationality: 'British', passportIssuingCountry: 'United Kingdom' });
+    expect(validate({ passportIssuingCountry: 'FR' }, today)).toEqual({ passportIssuingCountry: 'France' });
     expect(() => validate({ passportIssueDate: '2027-01-01' }, today)).toThrow(/future/);
     expect(() => validate({ passportIssueDate: '2020-01-01', passportExpiryDate: '2019-01-01' }, today)).toThrow(/after its issue date/);
     expect(() => validate({ nextOfKinPhone: '123' }, today)).toThrow(/full phone/);
     expect(validate({ nextOfKinName: 'Mary O’Neil-Smith', nextOfKinPhone: '+44 7700 900123' }, today)).toEqual({ nextOfKinName: 'Mary O’Neil-Smith', nextOfKinPhone: '+44 7700 900123' });
+  });
+
+  it('checks one changed date against the date already stored', async () => {
+    const tables = world();
+    tables[BASE_A]!['Customers [People]']![GRACE_PERSON]!['Issue Date'] = '2020-01-10';
+    const { service, airtable } = setup(tables);
+    const id = (await service.list(principal())).travellers[0]!.travellerId;
+    // Stored expiry is 2030-01-01; stored issue is 2020-01-10.
+    await expect(service.update(principal(), id, { passportExpiryDate: '2019-12-31' })).rejects.toThrow(/after its issue date/);
+    await expect(service.update(principal(), id, { passportIssueDate: '2026-01-01', passportExpiryDate: '2025-06-01' })).rejects.toThrow(/after its issue date/);
+    tables[BASE_A]!['Customers [People]']![GRACE_PERSON]!['Expiry Date'] = '2021-01-01';
+    await expect(service.update(principal(), id, { passportIssueDate: '2022-02-02' })).rejects.toThrow(/before its expiry date/);
+    expect(airtable.updateRecord).not.toHaveBeenCalled();
+    await expect(service.update(principal(), id, { passportExpiryDate: '' , passportIssueDate: '2022-02-02' })).resolves.toMatchObject({ saved: true });
   });
 
   it('rate-limits profile updates on their own allowance', async () => {
@@ -140,6 +157,18 @@ describe('account loyalty', () => {
     expect(result.loyalty?.transactions.map((tx) => [tx.type, tx.points])).toEqual([['redeem', -500], ['earn', 1500]]);
     expect(JSON.stringify(result.loyalty)).not.toContain('9999');
     expect(JSON.stringify(result.loyalty)).not.toContain('rec');
+  });
+
+  it('gives each of two customers on the same booking only their own balance', async () => {
+    const tables = world();
+    const OTHER = 'recCUSTOMEROTHER1';
+    tables[BASE_A]!.Customers![OTHER] = { 'Primary Email': 'other@example.com', 'Available Points': 10, 'Loyalty Value (£)': 0.1 };
+    tables[BASE_A]!.Bookings!.recBOOKINGAAAAAAA!.Customers = [GRACE, OTHER];
+    const { service } = account(tables);
+    expect((await service.account(principal())).loyalty).toMatchObject({ available: 2500, availableValue: 25 });
+    const other = await service.account(principal({ customerRecordId: OTHER }));
+    expect(other.loyalty).toMatchObject({ available: 10, availableValue: 0.1, transactions: [] });
+    expect(other.vip).toBe(false);
   });
 
   it('shows no loyalty where the member scheme is off (branch B), and degrades to null on broken links', async () => {

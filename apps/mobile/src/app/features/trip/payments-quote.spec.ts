@@ -49,13 +49,22 @@ describe('PaymentsSection on a quotation', () => {
 });
 
 describe('PaymentsSection loyalty', () => {
-  const loyalty = (overrides: Partial<TripLoyalty>): TripLoyalty => ({ pointsEarned: 1, state: 'pending', eligibleFrom: '2027-05-08', available: null, availableValue: null, currency: 'GBP', vip: false, ...overrides });
+  const loyalty = (overrides: Partial<TripLoyalty>): TripLoyalty => ({ pointsEarned: 1, state: 'pending', eligibleFrom: '2027-05-08', ...overrides });
   it('words each state with correct singular and plural', () => {
     expect(render({ payments: payments(), loyalty: loyalty({}) }).textContent).toContain('This trip earns you 1 point, credited after you return on 8 May 2027.');
     expect(render({ payments: payments(), loyalty: loyalty({ pointsEarned: 2500, state: 'awarded' }) }).textContent).toContain('You earned 2,500 points');
     expect(render({ payments: payments(), loyalty: loyalty({ pointsEarned: 500, state: 'post_return' }) }).textContent).toContain('credited shortly');
-    expect(render({ payments: payments(), stage: 'quote', loyalty: loyalty({ pointsEarned: 500, state: 'quote', available: 1200, availableValue: 12 }) }).textContent).toMatch(/Book with us and earn 500 points[\s\S]*1,200 points[\s\S]*£12\.00[\s\S]*this trip/);
+    expect(render({ payments: payments(), stage: 'quote', loyalty: loyalty({ pointsEarned: 500, state: 'quote' }), balance: { available: 1200, availableValue: 12, currency: 'GBP', lifetime: null, expiresAt: null, transactions: [] } }).textContent).toMatch(/Book with us and earn 500 points[\s\S]*1,200 points[\s\S]*£12\.00[\s\S]*this trip/);
   });
+  it('shows the balance and VIP only from the verified account, never from the trip', () => {
+    const withoutAccount = render({ payments: payments(), loyalty: loyalty({ pointsEarned: 500 }) });
+    expect(withoutAccount.textContent).not.toContain('You have');
+    expect(withoutAccount.querySelector('.vt-vip-pill')).toBeNull();
+    const withAccount = render({ payments: payments(), loyalty: loyalty({ pointsEarned: 500 }), vip: true, balance: { available: 300, availableValue: null, currency: 'GBP', lifetime: null, expiresAt: null, transactions: [] } });
+    expect(withAccount.textContent).toContain('You have 300 points');
+    expect(withAccount.querySelector('.vt-vip-pill')).not.toBeNull();
+  });
+
   it('shows nothing for missing points rather than 0, and no block without loyalty', () => {
     const missing = render({ payments: payments(), loyalty: loyalty({ pointsEarned: null }) });
     expect(missing.textContent).not.toMatch(/(^|[^\d,])0 points/);

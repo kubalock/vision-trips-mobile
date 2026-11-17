@@ -2,11 +2,13 @@ import { Component, ElementRef, afterNextRender, computed, inject, input, output
 import { DomSanitizer, type SafeResourceUrl } from '@angular/platform-browser';
 import type { TripVideo } from '@vision-trips/contracts';
 import { VtIcon } from './lucide-icon';
+import { isPlayableUrl } from '../core/api/trip-schema';
 
 /** Embeds the app will load: the privacy-friendly players only, rebuilt from scratch (never a URL as given). */
 export function embedUrl(video: TripVideo): string | null {
   try {
     const url = new URL(video.url);
+    if (video.kind === 'file') return isPlayableUrl(video.url) ? url.toString() : null;
     if (url.protocol !== 'https:') return null;
     if (video.kind === 'youtube') {
       const id = url.hostname === 'www.youtube-nocookie.com' ? url.pathname.match(/^\/embed\/([A-Za-z0-9_-]{6,20})$/)?.[1] : null;

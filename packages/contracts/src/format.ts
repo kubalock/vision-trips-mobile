@@ -72,3 +72,60 @@ export function passportExpiresTooSoon(expiry: string | null | undefined, return
   limit.setUTCMonth(limit.getUTCMonth() + 6);
   return new Date(`${expiry.slice(0, 10)}T00:00:00Z`).getTime() < limit.getTime();
 }
+
+/** Region codes that are not countries (groupings, private-use and test codes). */
+const NOT_COUNTRIES = new Set(['EU', 'EZ', 'UN', 'QO', 'XA', 'XB', 'ZZ', 'AA', 'QM', 'QN', 'QP', 'QQ', 'QR', 'QS', 'QT', 'QU', 'QV', 'QW', 'QX', 'QY', 'QZ']);
+const COUNTRY_ALIASES: Record<string, string> = {
+  uk: 'United Kingdom', gb: 'United Kingdom', 'great britain': 'United Kingdom', britain: 'United Kingdom', england: 'United Kingdom',
+  scotland: 'United Kingdom', wales: 'United Kingdom', 'northern ireland': 'United Kingdom', usa: 'United States', us: 'United States',
+  'united states of america': 'United States', america: 'United States', 'republic of ireland': 'Ireland', eire: 'Ireland', holland: 'Netherlands',
+};
+let countryCache: string[] | null = null;
+
+/** English country names, from the platform's own region data (the same list in the API and the app). */
+export function countryNames(): string[] {
+  if (countryCache) return countryCache;
+  const names = new Set<string>();
+  try {
+    const display = new Intl.DisplayNames(['en-GB'], { type: 'region' });
+    for (let first = 65; first <= 90; first += 1) for (let second = 65; second <= 90; second += 1) {
+      const code = String.fromCharCode(first, second);
+      if (NOT_COUNTRIES.has(code)) continue;
+      const name = display.of(code);
+      if (name && name !== code && !/unknown/i.test(name)) names.add(name);
+    }
+  } catch { /* No region data: validation then accepts aliases only. */ }
+  countryCache = [...names].sort((a, b) => a.localeCompare(b, 'en-GB'));
+  return countryCache;
+}
+
+/** The canonical country name for a typed value ("uk" → "United Kingdom", "FR" → "France"), or null. */
+export function canonicalCountry(value: string): string | null {
+  const text = value.trim().replace(/\s+/g, ' ');
+  if (!text) return null;
+  const lower = text.toLowerCase();
+  if (COUNTRY_ALIASES[lower]) return COUNTRY_ALIASES[lower]!;
+  const byName = countryNames().find((name) => name.toLowerCase() === lower);
+  if (byName) return byName;
+  if (/^[a-z]{2}$/i.test(text) && !NOT_COUNTRIES.has(text.toUpperCase())) {
+    try { const name = new Intl.DisplayNames(['en-GB'], { type: 'region' }).of(text.toUpperCase()); return name && name !== text.toUpperCase() ? name : null; } catch { return null; }
+  }
+  return null;
+}
+
+/** Nationalities as Vision records them (demonyms); a country name is also accepted. */
+export const NATIONALITIES = [
+  'American', 'Argentine', 'Australian', 'Austrian', 'Bangladeshi', 'Belgian', 'Brazilian', 'British', 'Bulgarian', 'Canadian', 'Chilean', 'Chinese',
+  'Colombian', 'Croatian', 'Cypriot', 'Czech', 'Danish', 'Dutch', 'Egyptian', 'Emirati', 'Estonian', 'Filipino', 'Finnish', 'French', 'German', 'Ghanaian',
+  'Greek', 'Hungarian', 'Icelandic', 'Indian', 'Indonesian', 'Irish', 'Israeli', 'Italian', 'Jamaican', 'Japanese', 'Kenyan', 'Latvian', 'Lithuanian',
+  'Luxembourgish', 'Malaysian', 'Maltese', 'Mexican', 'Moroccan', 'New Zealander', 'Nigerian', 'Norwegian', 'Pakistani', 'Polish', 'Portuguese', 'Romanian',
+  'Russian', 'Saudi', 'Serbian', 'Singaporean', 'Slovak', 'Slovenian', 'South African', 'South Korean', 'Spanish', 'Sri Lankan', 'Swedish', 'Swiss', 'Thai',
+  'Turkish', 'Ukrainian', 'Vietnamese', 'Zimbabwean',
+] as const;
+
+/** A nationality from the list (canonical spelling), or a country name; null otherwise. */
+export function canonicalNationality(value: string): string | null {
+  const lower = value.trim().replace(/\s+/g, ' ').toLowerCase();
+  if (!lower) return null;
+  return NATIONALITIES.find((item) => item.toLowerCase() === lower) ?? canonicalCountry(value);
+}

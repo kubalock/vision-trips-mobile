@@ -152,7 +152,7 @@
             }
           </section>
         }
-        <app-trip-content-section [trip]="currentTrip" (watch)="openVideo.set($event)" (message)="messageAgent()" (accept)="goToAcceptance()" />
+        <app-trip-content-section [trip]="currentTrip" (watch)="watchVideo($event)" (message)="messageAgent()" (accept)="goToAcceptance()" />
         @if (!isReturned(currentTrip.stage) && (currentTrip.timeline.nextItemTitle || currentTrip.timeline.daysUntilDeparture !== null)) {
           <section class="vt-home-info-card vt-home-up-next"><p class="vt-home-info-card__kicker">Up next</p><h2>{{ currentTrip.timeline.nextItemTitle || 'Your trip is coming up' }}</h2>@if (currentTrip.timeline.nextItemDate) { <p class="vt-home-up-next__date">{{ currentTrip.timeline.nextItemDate | europeanDate }}{{ currentTrip.timeline.nextItemTime ? ' at ' + currentTrip.timeline.nextItemTime : '' }}</p> }@if (currentTrip.timeline.daysUntilDeparture !== null && currentTrip.timeline.daysUntilDeparture > 0) { <p class="vt-home-up-next__countdown">{{ currentTrip.timeline.daysUntilDeparture }} days until departure</p> }</section>
         }
@@ -203,7 +203,7 @@
             @if (status.tone !== 'info') { <button type="button" class="vt-status-card__close" aria-label="Dismiss" data-engagement="Dismiss payment status" (click)="dismissPaymentStatus()"><vt-icon name="close" [size]="18" /></button> }
           </section>
         }
-        @if (currentTrip.payments; as payments) { @if (signedOut() && hasPayableItems(payments)) { <vt-sign-in-again action="make a payment" [brandName]="currentTrip.brand.name" [showHelp]="true" (help)="getNewTripLink()" /> }<app-payments-section [payments]="payments" [stage]="currentTrip.stage" [awaitingAcceptance]="currentTrip.stage === 'quote' && !currentTrip.quotation.accepted" [travellerCount]="currentTrip.summary.totalTravellers" [loyalty]="currentTrip.loyalty" [openingPaymentId]="openingPaymentId()" [actionsDisabled]="signedOut() || !online()" (accept)="goToAcceptance()" (pay)="openPayment($event)" (payCustom)="openCustomPayment($event)" /> } @else { <p class="mt-5 rounded-2xl bg-white p-5 text-slate-600 ring-1 ring-slate-200">Payment information is only available to the lead customer.</p> }
+        @if (currentTrip.payments; as payments) { @if (signedOut() && hasPayableItems(payments)) { <vt-sign-in-again action="make a payment" [brandName]="currentTrip.brand.name" [showHelp]="true" (help)="getNewTripLink()" /> }<app-payments-section [payments]="payments" [stage]="currentTrip.stage" [awaitingAcceptance]="currentTrip.stage === 'quote' && !currentTrip.quotation.accepted" [travellerCount]="currentTrip.summary.totalTravellers" [loyalty]="currentTrip.loyalty" [balance]="customerAccount()?.loyalty" [vip]="customerAccount()?.vip === true" [openingPaymentId]="openingPaymentId()" [actionsDisabled]="signedOut() || !online()" (accept)="goToAcceptance()" (pay)="openPayment($event)" (payCustom)="openCustomPayment($event)" /> } @else { <p class="mt-5 rounded-2xl bg-white p-5 text-slate-600 ring-1 ring-slate-200">Payment information is only available to the lead customer.</p> }
       } @else if (activeView() === 'documents') {
         <app-documents-section [documents]="currentTrip.documents" [statuses]="documentStatuses()" [downloadingId]="downloadingDocumentId()" [failure]="documentFailure()" (download)="downloadDocument($event)" />
       } @else if (activeView() === 'help') {

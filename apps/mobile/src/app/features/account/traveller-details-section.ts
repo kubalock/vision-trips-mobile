@@ -1,5 +1,5 @@
 import { Component, input, output, signal } from '@angular/core';
-import type { TravellerProfile, TravellerProfileUpdate } from '@vision-trips/contracts';
+import { countryNames, NATIONALITIES, type TravellerProfile, type TravellerProfileUpdate } from '@vision-trips/contracts';
 import { EuropeanDatePipe } from '../../shared/european-date.pipe';
 import { VtIcon } from '../../shared/lucide-icon';
 
@@ -27,6 +27,8 @@ export const TRAVELLER_FIELDS: ReadonlyArray<{ key: EditableKey; label: string; 
   selector: 'app-traveller-details-section',
   imports: [EuropeanDatePipe, VtIcon],
   template: `
+    <datalist id="vt-countries">@for (country of countries; track country) { <option [value]="country"></option> }</datalist>
+    <datalist id="vt-nationalities">@for (nationality of nationalities; track nationality) { <option [value]="nationality"></option> }</datalist>
     <section class="vt-account-card vt-traveller-details" aria-labelledby="traveller-details-title">
       <h2 id="traveller-details-title">Traveller details</h2>
       @if (loading()) { <p class="vt-account-intro" role="status"><vt-icon name="loader" [size]="16" /> Loading traveller details…</p> }
@@ -42,7 +44,7 @@ export const TRAVELLER_FIELDS: ReadonlyArray<{ key: EditableKey; label: string; 
                 @for (field of fieldsIn(group.id); track field.key) {
                   <label [for]="traveller.travellerId + field.key"><span>{{ field.label }}</span>
                     <input [id]="traveller.travellerId + field.key" [type]="field.type" [attr.autocomplete]="field.autocomplete" maxlength="60"
-                      [attr.placeholder]="placeholder(traveller, field.key)" [value]="initial(traveller, field.key)" (input)="edit(field.key, $event)" [disabled]="saving() === traveller.travellerId">
+                      [attr.placeholder]="placeholder(traveller, field.key)" [attr.list]="field.key === 'nationality' ? 'vt-nationalities' : field.key === 'passportIssuingCountry' ? 'vt-countries' : null" [value]="initial(traveller, field.key)" (input)="edit(field.key, $event)" [disabled]="saving() === traveller.travellerId">
                   </label>
                 }
               </fieldset>
@@ -70,6 +72,9 @@ export class TravellerDetailsSection {
   readonly reload = output<void>();
   readonly contactAgent = output<string>();
 
+  /** The same controlled lists the API validates against. */
+  protected readonly countries = countryNames();
+  protected readonly nationalities = [...NATIONALITIES];
   protected readonly groups = [{ id: 'passport' as const, label: 'Passport' }, { id: 'licence' as const, label: 'Driving licence' }, { id: 'kin' as const, label: 'Next of kin' }];
   protected readonly editing = signal<string | null>(null);
   private readonly changes = signal<Partial<Record<EditableKey, string>>>({});

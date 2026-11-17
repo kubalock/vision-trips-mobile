@@ -1,7 +1,8 @@
 import type { ContentListItem, ItineraryItem, LoyaltyTripState, TravellerSummary, TripAgent, TripContent, TripLoyalty, TripSnapshot, TripVideo } from '@vision-trips/contracts';
 import { maskDocumentNumber, normalizeTerminal, passportExpiresTooSoon, terminalFromNotes } from '@vision-trips/contracts';
 import type { AirtableRecord } from '../airtable/airtable.service.js';
-import { bookingFields, brandFields, customerFields, dateString, firstString, loyaltyTransactionFields, memberFields, moneyValue, personFields, pick, strings, truthy } from './field-map.js';
+import { MEDIA_MARKER } from '../media/attachment-media.js';
+import { bookingFields, brandFields, dateString, firstString, loyaltyTransactionFields, memberFields, moneyValue, personFields, pick, strings, truthy } from './field-map.js';
 
 /*
  * Snapshot pieces added for PHP plugin 2.0 parity. Each is a pure function of Airtable records, tolerant of missing
@@ -101,8 +102,9 @@ export function walkthroughVideo(value: unknown, agentName: string | null): Trip
   for (const file of value as Array<{ url?: unknown; type?: unknown; thumbnails?: { large?: { url?: unknown } } }>) {
     const type = typeof file?.type === 'string' ? file.type : '';
     const url = typeof file?.url === 'string' ? file.url : '';
-    if (!VIDEO_FILE.test(type) || !isHttps(url)) continue;
-    const poster = typeof file.thumbnails?.large?.url === 'string' && isHttps(file.thumbnails.large.url) ? file.thumbnails.large.url : null;
+    if (!VIDEO_FILE.test(type) || !(isHttps(url) || url.startsWith(MEDIA_MARKER))) continue;
+    const largeThumb = file.thumbnails?.large?.url;
+    const poster = typeof largeThumb === 'string' && (isHttps(largeThumb) || largeThumb.startsWith(MEDIA_MARKER)) ? largeThumb : null;
     return { kind: 'file', url, mimeType: type.toLowerCase(), posterUrl: poster, title: agentName ? `${agentName} walks you through your trip` : 'A walkthrough of your trip' };
   }
   return null;
@@ -181,9 +183,9 @@ export function ageOn(dateOfBirth: string | null, on: string | null, today = new
 }
 
 /**
- * Extra "Who's travelling" detail for the lead customer's view only: age, DOB (only when TRAVELLER_DOB_VISIBLE is
- * on; the API also removes it for sessions not verified by email), the passport's last three characters and the
- * six-month warning. Fellow travellers get none of it.
+ * Extra "Who's travelling" detail for the lead customer's view only: age, the passport's last three characters and
+ * the six-month warning. Never the date of birth: the snapshot is cached per booking whatever the session's
+ * assurance, so DOB is only in the verified Account → Traveller details endpoint. Fellow travellers get none of it.
  */
 export function travellerDetails(person: AirtableRecord, departure: string | null, returns: string | null): Partial<TravellerSummary> {
   const dateOfBirth = dateString(pick(person.fields, personFields.dateOfBirth));
@@ -191,7 +193,6 @@ export function travellerDetails(person: AirtableRecord, departure: string | nul
   const expiry = dateString(pick(person.fields, personFields.passportExpiry));
   return {
     age: ageOn(dateOfBirth, departure) ?? (explicitAge !== null && explicitAge >= 0 && explicitAge < 130 ? Math.floor(explicitAge) : null),
-    dateOfBirth: process.env.TRAVELLER_DOB_VISIBLE === 'true' ? dateOfBirth : null,
     passportEnding: maskDocumentNumber(firstString(pick(person.fields, personFields.passportNumber))),
     passportWarning: passportExpiresTooSoon(expiry, returns ?? departure),
   };
@@ -200,11 +201,12 @@ export function travellerDetails(person: AirtableRecord, departure: string | nul
 // --- Loyalty ----------------------------------------------------------------------------------------------------
 
 /**
- * Loyalty for the trip, only when the member's scheme is enabled and the booking takes part. The balance comes from
- * the booking's own linked Customer in this base (primary customer only); nothing is matched by email.
+ * Booking-level loyalty for the trip, only when the member's scheme is enabled and the booking takes part. Nothing
+ * customer-specific (balance, value, VIP) is included: the snapshot is cached per booking and shared by every
+ * Customer linked to it.
  */
 export function mapTripLoyalty(input: {
-  booking: AirtableRecord; member: AirtableRecord | undefined; customer: AirtableRecord | undefined; stage: TripSnapshot['stage']; returns: string | null; currency: string; today?: Date;
+  booking: AirtableRecord; member: AirtableRecord | undefined; stage: TripSnapshot['stage']; returns: string | null; today?: Date;
 }): TripLoyalty | null {
   if (!input.member || !truthy(pick(input.member.fields, memberFields.loyaltyEnabled))) return null;
   const bookingFlag = pick(input.booking.fields, bookingFields.loyaltyEnabled);
@@ -215,15 +217,7 @@ export function mapTripLoyalty(input: {
   const state: LoyaltyTripState = input.stage === 'quote' ? 'quote'
     : truthy(pick(input.booking.fields, bookingFields.loyaltyAwarded)) ? 'awarded'
       : eligibleFrom && eligibleFrom <= today ? 'post_return' : 'pending';
-  const customer = input.customer?.fields ?? {};
-  return {
-    pointsEarned: points(pick(input.booking.fields, bookingFields.loyaltyPoints)),
-    state, eligibleFrom,
-    available: points(pick(customer, customerFields.pointsAvailable)),
-    availableValue: moneyValue(pick(customer, customerFields.pointsValue)),
-    currency: 'GBP',
-    vip: truthy(pick(customer, customerFields.vip)),
-  };
+  return { pointsEarned: points(pick(input.booking.fields, bookingFields.loyaltyPoints)), state, eligibleFrom };
 }
 
 /** A Bookings [Payments] row of Payment Type "Loyalty Redemption" is the scheme funding the member: never customer-facing. */

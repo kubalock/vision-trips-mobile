@@ -17,6 +17,18 @@ import * as z from 'zod/mini';
 
 export const CURRENT_SCHEMA_VERSION = 4;
 
+/**
+ * https anywhere; plain http only for the API's own media endpoint on this machine or the local network (development
+ * builds talk to a local API). Anything else is refused.
+ */
+export function isPlayableUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    if (url.protocol === 'https:') return true;
+    return url.protocol === 'http:' && url.pathname.includes('/media/attachment/') && /^(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)$/.test(url.hostname);
+  } catch { return false; }
+}
+
 export class TripDataError extends Error {
   override readonly name = 'TripDataError';
   constructor(readonly reason: 'unsupported_version' | 'invalid', detail: string) {
@@ -40,6 +52,8 @@ const optNumber = z.catch(z.nullable(z.number()), null);
 const currencyCode = z.string().check(z.regex(/^[A-Z]{3}$/));
 /** Video and affiliate links must be https; anything else is dropped (never opened). */
 const httpsText = z.string().check(z.refine((value) => { try { return new URL(value).protocol === 'https:'; } catch { return false; } }, 'Expected an https URL.'));
+/** Videos: https, or the API's own media endpoint on plain http in local development. */
+const videoText = z.string().check(z.refine(isPlayableUrl, 'Expected a playable URL.'));
 const optHttps = z.catch(z.nullable(httpsText), null);
 
 function oneOf<const T extends readonly [string, ...string[]]>(values: T, fallback: T[number]) {
@@ -151,7 +165,7 @@ const payments = z.catch(z.optional(z.object({
 })), undefined);
 
 const video = z.object({
-  kind: z.enum(['file', 'youtube', 'vimeo']), url: httpsText, mimeType: optText, posterUrl: optText, title: text,
+  kind: z.enum(['file', 'youtube', 'vimeo']), url: videoText, mimeType: optText, posterUrl: optText, title: text,
 });
 const contentItem = z.object({ text: nonEmpty });
 
@@ -227,7 +241,7 @@ const snapshotSchema = z.object({
   travellers: list(z.object({
     name: text, firstName: text, isLead: flag, assistance: strings, meals: strings,
     nationality: optText, passportExpiry: optText, insuranceStatus: optText,
-    age: optNumber, dateOfBirth: optText, passportEnding: optText, passportWarning: flag,
+    age: optNumber, passportEnding: optText, passportWarning: flag,
   })),
   itinerary: list(itineraryItem),
   payments,
@@ -237,7 +251,6 @@ const snapshotSchema = z.object({
   agent: z.catch(z.nullable(z.object({ name: optText, email: optText, branchName: optText, branchPhone: optText })), null),
   loyalty: z.catch(z.nullable(z.object({
     pointsEarned: optNumber, state: oneOf(['quote', 'pending', 'post_return', 'awarded'], 'pending'), eligibleFrom: optText,
-    available: optNumber, availableValue: optNumber, currency: z.catch(currencyCode, 'GBP'), vip: flag,
   })), null),
   content: record({
     included: list(contentItem), notIncluded: list(contentItem),

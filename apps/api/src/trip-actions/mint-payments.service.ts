@@ -3,7 +3,7 @@ import type { PaymentLinkResponse, TripSnapshot } from '@vision-trips/contracts'
 import { createHmac, randomUUID } from 'node:crypto';
 import { AirtableService, type AirtableRecord } from '../airtable/airtable.service.js';
 import { BOOKED_PAYMENT_STAGES, paymentStageAllows, TripsService } from '../trips/trips.service.js';
-import { PAYABLE_CURRENCIES, bookingFields, brandFields, currencyCode, firstString, paymentAmount, paymentFields, pick, strings, truthy } from '../trips/field-map.js';
+import { bookingFields, brandFields, firstString, pick, strings, truthy } from '../trips/field-map.js';
 
 @Injectable()
 export class MintPaymentsService {
@@ -37,27 +37,23 @@ export class MintPaymentsService {
     return this.create(context, payment.amount, payment.currency, `${snapshot.summary.reference} ${payment.label}`, payment.id);
   }
 
+  /**
+   * The deposit link returned at acceptance. The deposit is chosen from the fresh snapshot's payment items, which
+   * have already had the shared rules applied (no scheme-funding "Loyalty Redemption" rows, no points payments, no
+   * refunds or resort payments, known amount in a payable currency, stage allows it), and only then mapped back to
+   * its Airtable record. Nothing is picked from the raw payment rows.
+   */
   async depositLink(baseId: string, recordId: string): Promise<string | null> {
     const context = await this.context(baseId, recordId);
     // Only straight after acceptance (the fresh snapshot then shows it accepted) or once booked.
     if (!paymentStageAllows(context.snapshot.stage, context.snapshot.quotation.accepted === true)) return null;
-    // A payment's own currency if valid, otherwise the booking's (same rule as the trip snapshot).
-    const recordCurrency = (record: AirtableRecord) => currencyCode(pick(record.fields, paymentFields.currency)) ?? context.snapshot.payments?.currency ?? 'GBP';
-    const payable = context.payments.filter((record) => {
-      const status = firstString(pick(record.fields, paymentFields.status));
-      const type = firstString(pick(record.fields, paymentFields.type));
-      const amount = paymentAmount(record.fields, recordCurrency(record));
-      return !/complete|paid|settled/i.test(status) && !/refund|resort/i.test(type) && amount !== null && amount > 0 && (PAYABLE_CURRENCIES as readonly string[]).includes(recordCurrency(record));
-    });
-    const source = payable.find((record) => /deposit/i.test(firstString(pick(record.fields, paymentFields.customerType)))) ?? payable[0];
+    const payable = (context.snapshot.payments?.items ?? []).filter((item) => item.canPay && item.kind !== 'points' && item.status !== 'paid' && item.amount !== null && item.amount > 0);
+    const deposit = payable.find((item) => /deposit/i.test(item.label)) ?? payable[0];
+    if (!deposit || deposit.amount === null) return null;
+    if (deposit.actionUrl?.startsWith('https://')) return deposit.actionUrl;
+    const source = context.payments.find((record) => publicPaymentId(context.snapshot.tripId, record.id) === deposit.id);
     if (!source) return null;
-    const existingUrl = firstString(pick(source.fields, paymentFields.link));
-    if (existingUrl.startsWith('https://')) return existingUrl;
-    const currency = recordCurrency(source);
-    const amount = paymentAmount(source.fields, currency);
-    if (amount === null) return null;
-    const label = firstString(pick(source.fields, paymentFields.customerType)) || 'Deposit';
-    return (await this.create(context, amount, currency, `${context.snapshot.summary.reference} ${label}`, publicPaymentId(context.snapshot.tripId, source.id))).url;
+    return (await this.create(context, deposit.amount, deposit.currency, `${context.snapshot.summary.reference} ${deposit.label}`, deposit.id)).url;
   }
 
   private async create(context: PaymentContext, amount: number, currency: string, reference: string, paymentId: string): Promise<PaymentLinkResponse> {

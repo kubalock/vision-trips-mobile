@@ -69,4 +69,34 @@ describe('MintPaymentsService', () => {
       await expect(accepted.link('appABCDEFGHIJKLMN', booking.id, 'pay_1')).resolves.toMatchObject({ url: 'https://pay.example/deposit' });
     });
   });
+
+  describe('deposit chosen at acceptance', () => {
+    const BASE = 'appABCDEFGHIJKLMN';
+    const booking = { id: 'recBOOKINGABCDEFG', createdTime: '2026-11-01T00:00:00.000Z', fields: { Status: 'Quotation', 'Quotation Accepted': true, 'Departure Date': '2027-05-01', 'Return Date': '2027-05-08', 'Total Price': 3000, 'MS Paid': 0, 'MS Outstanding': 3000, 'Brands & Branches': ['recBRANDABCDEFGHI'], 'Mint | Booking ID': 'BK.123', 'Bookings [Payments]': [] as string[] } };
+    const brand = { id: 'recBRANDABCDEFGHI', fields: { 'Mint | API Key': 'k', 'Mint | Business Unit': 'u', 'Webhook URL': 'https://airtable.com/hook' } };
+    const scheme = { id: 'recPAYSCHEMEAAAAA', fields: { 'Payment Type': 'Loyalty Redemption', 'Customer Payment Type': 'Deposit', Amount: 150, Status: 'Outstanding', 'Date Due': '2026-11-20' } };
+    const points = { id: 'recPAYPOINTSAAAAA', fields: { 'Payment Type': 'Customer Payment', Method: 'Loyalty Redemption', 'Customer Payment Type': 'Deposit (points)', Amount: 25, Status: 'Outstanding', 'Date Due': '2026-11-21' } };
+    const deposit = { id: 'recPAYDEPOSITAAAA', fields: { 'Payment Type': 'Customer Payment', 'Customer Payment Type': 'Deposit Payment', Amount: 300, Status: 'Outstanding', 'Date Due': '2026-12-01' } };
+    async function depositFor(rows: Array<{ id: string; fields: Record<string, unknown> }>) {
+      process.env.VISION_LINK_SECRET = 'snapshot-secret';
+      const { TripsService } = await import('../trips/trips.service.js');
+      const snapshot = new TripsService({} as never).mapSnapshot(BASE, { ...booking, fields: { ...booking.fields, 'Bookings [Payments]': rows.map((row) => row.id) } } as never, brand as never, 'primary_customer', { payments: rows } as never);
+      const airtable = { record: vi.fn(async (_base: string, table: string) => table === 'Bookings' ? { ...booking, fields: { ...booking.fields, 'Bookings [Payments]': rows.map((row) => row.id) } } : brand), records: vi.fn().mockResolvedValue(rows) };
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ payment_link: { url: 'https://secure.mintpayments.com/pay/dep' } }), { status: 200 }));
+      const url = await new MintPaymentsService(airtable as never, { snapshot: vi.fn().mockResolvedValue(snapshot) } as never).depositLink(BASE, booking.id);
+      return { url, fetchSpy };
+    }
+
+    it('skips scheme-funding and points rows listed before the real deposit', async () => {
+      const { url, fetchSpy } = await depositFor([scheme, points, deposit]);
+      expect(url).toBe('https://secure.mintpayments.com/pay/dep');
+      expect(JSON.parse(fetchSpy.mock.calls[0]![1]!.body as string)).toMatchObject({ amount: '300.00', customer_reference: 'NWG-1 Deposit Payment'.replace('NWG-1', 'Your trip') });
+    });
+
+    it('creates no link when only loyalty rows exist', async () => {
+      const { url, fetchSpy } = await depositFor([scheme, points]);
+      expect(url).toBeNull();
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+  });
 });

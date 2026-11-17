@@ -55,7 +55,7 @@ export const fellowTravellerLinkResponseSchema = z.object({ url: webUrl, expires
 export const relatedQuotationsResponseSchema = z.object({
   quotations: z.array(z.object({
     comparisonId: nonEmpty, reference: text, name: text, departureDate: optDate, returnDate: optDate,
-    durationDays: z.nullable(z.number()), nights: z.optional(z.nullable(z.number())), total: amount, perPerson: z.optional(z.nullable(amount)), currency, heroImageUrl: optUrlText,
+    durationDays: z.nullable(z.number()), nights: z.optional(z.nullable(z.number())), total: optAmount, perPerson: z.optional(z.nullable(amount)), currency, heroImageUrl: optUrlText,
     status: z.enum(['available', 'expired']), current: z.boolean(),
   })),
 });
@@ -90,6 +90,9 @@ export const travellerProfileSchema = z.object({
 });
 export const travellerProfilesResponseSchema = z.object({ travellers: z.array(travellerProfileSchema) });
 export const travellerProfileUpdateResponseSchema = z.object({ saved: z.literal(true), traveller: travellerProfileSchema });
+export const walkthroughResponseSchema = z.object({
+  video: z.nullable(z.object({ kind: z.literal('file'), url: webUrl, mimeType: z.nullable(text), posterUrl: z.nullable(text), title: text })),
+});
 export const callbackResponseSchema = z.object({ sent: z.literal(true), sentAt: isoDateTime });
 
 export const updateCustomerPreferencesResponseSchema = z.object({

@@ -1,6 +1,6 @@
 import { BadGatewayException, BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, Headers, Logger, NotFoundException, Optional, Param, Post, Req, ServiceUnavailableException, StreamableFile } from '@nestjs/common';
 import { ApiBearerAuth, ApiProduces, ApiTags } from '@nestjs/swagger';
-import type { CallbackRequest, CallbackResponse, TravellerProfilesResponse, TravellerProfileUpdateResponse, CustomerAccount, CustomerMessageRequest, CustomerMessageResponse, CustomerMessageTopic, CustomerPreferences, FellowTravellerLinkResponse, OpenCustomerAccountTripResponse, OpenRelatedQuotationResponse, PaymentLinkResponse, QuotationAcceptanceContext, QuotationAcceptanceRequest, QuotationAcceptanceResponse, QuotationReviewSectionId, RelatedQuotationsResponse, UpdateCustomerPreferencesResponse, PaymentStatusResponse } from '@vision-trips/contracts';
+import type { WalkthroughResponse, CallbackRequest, CallbackResponse, TravellerProfilesResponse, TravellerProfileUpdateResponse, CustomerAccount, CustomerMessageRequest, CustomerMessageResponse, CustomerMessageTopic, CustomerPreferences, FellowTravellerLinkResponse, OpenCustomerAccountTripResponse, OpenRelatedQuotationResponse, PaymentLinkResponse, QuotationAcceptanceContext, QuotationAcceptanceRequest, QuotationAcceptanceResponse, QuotationReviewSectionId, RelatedQuotationsResponse, UpdateCustomerPreferencesResponse, PaymentStatusResponse } from '@vision-trips/contracts';
 import type { Request } from 'express';
 import { AirtableService } from '../airtable/airtable.service.js';
 import { SessionsService, type SessionPrincipal } from '../sessions/sessions.service.js';
@@ -20,6 +20,8 @@ import { formatMoney } from '../trips/field-map.js';
 import { openSupplierDocument, SupplierDocumentError } from './supplier-document.js';
 import { type AcceptanceEvidence, parseAcceptanceEvidence, signedInAs, signedInAuditText, signedInRows } from './acceptance-evidence.js';
 import { customerEmail, customersTable } from './customer-identity.js';
+import { walkthroughVideo } from '../trips/trip-extras.js';
+import { bookingFields, pick } from '../trips/field-map.js';
 import { maskEmail } from '@vision-trips/contracts';
 
 const REVIEW_SECTION_IDS: readonly QuotationReviewSectionId[] = ['package', 'names', 'important', 'protection', 'terms'];
@@ -131,12 +133,22 @@ export class TripActionsController {
     );
     // Stored payment-page URLs would bypass the verified-session check on payment links: an unverified session gets
     // none, so tapping "Pay" asks the API, which asks the customer to confirm by email first.
-    if (isVerified(principal)) return snapshot;
-    // Dates of birth are only shown on sessions verified by email (or a trusted device).
-    const withoutDob = snapshot.travellers?.some((traveller) => traveller.dateOfBirth)
-      ? { ...snapshot, travellers: snapshot.travellers.map((traveller) => ({ ...traveller, dateOfBirth: null })) } : snapshot;
-    if (!withoutDob.payments) return withoutDob;
-    return { ...withoutDob, payments: { ...withoutDob.payments, items: withoutDob.payments.items.map((item) => ({ ...item, actionUrl: null })) } };
+    if (isVerified(principal) || !snapshot.payments) return snapshot;
+    return { ...snapshot, payments: { ...snapshot.payments, items: snapshot.payments.items.map((item) => ({ ...item, actionUrl: null })) } };
+  }
+
+  /**
+   * The walkthrough with a fresh Airtable attachment URL, read from the Booking itself (never the cached snapshot)
+   * just before playback. Hidden while a surprise trip is concealed.
+   */
+  @Get('walkthrough')
+  @ApiBearerAuth()
+  async walkthrough(@Headers('authorization') authorization: string | undefined): Promise<WalkthroughResponse> {
+    const principal = await this.live(authorization);
+    const snapshot = await this.trips.snapshot(principal.baseId, principal.recordId, principal.fellowTraveller ? 'fellow_traveller' : 'primary_customer', { maxAgeMs: SNAPSHOT_CACHE_MS });
+    if (snapshot.experience.surprise.concealed) return { video: null };
+    const booking = await this.airtable.record(principal.baseId, process.env.AIRTABLE_BOOKINGS_TABLE?.trim() || 'Bookings', principal.recordId);
+    return { video: walkthroughVideo(pick(booking.fields, bookingFields.videoWalkthrough), snapshot.agent?.name ?? snapshot.experience.agentName) };
   }
 
   @Get('payment-status')

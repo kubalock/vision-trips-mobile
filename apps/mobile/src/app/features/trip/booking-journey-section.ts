@@ -125,5 +125,5 @@ export class BookingJourneySection {
   readonly openingId = input<string | null>(null);
   readonly enquire = output<string>();
   readonly open = output<string>();
-  money(quote: RelatedQuotationSummary): string { try { return new Intl.NumberFormat('en-GB', { style: 'currency', currency: quote.currency, maximumFractionDigits: 0 }).format(quote.total); } catch { return `${quote.currency} ${quote.total.toFixed(0)}`; } }
+  money(quote: RelatedQuotationSummary): string { if (quote.total === null) return 'Price to be confirmed'; try { return new Intl.NumberFormat('en-GB', { style: 'currency', currency: quote.currency, maximumFractionDigits: 0 }).format(quote.total); } catch { return `${quote.currency} ${quote.total.toFixed(0)}`; } }
 }

@@ -1,3 +1,5 @@
+import { resolveMediaMarkers } from '../media/attachment-media.js';
+import { publicApiBase } from '../external-content/external-content.service.js';
 import { BadGatewayException, BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import type { TripSnapshot } from '@vision-trips/contracts';
 import { createHash } from 'node:crypto';
@@ -64,7 +66,7 @@ export class CustomerNotificationsService {
   /** `deliveryKey` is scoped to base, booking and template, so the provider never treats two trips' emails as one. */
   private async deliver(to: string, snapshot: TripSnapshot, content: EmailContent, deliveryKey: string): Promise<string> {
     const apiKey = process.env.RESEND_API_KEY?.trim(); if (!apiKey) throw new ServiceUnavailableException('Customer email delivery is not configured. Set RESEND_API_KEY.');
-    const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'Idempotency-Key': createHash('sha256').update(`${to}|${deliveryKey}`).digest('base64url') }, body: JSON.stringify({ from: process.env.VISION_EMAIL_FROM?.trim() || 'Vision Trips <onboarding@resend.dev>', to: [to], ...(snapshot.support.email ? { reply_to: snapshot.support.email } : {}), subject: content.subject, html: renderEmail(snapshot, content) }), signal: AbortSignal.timeout(10_000) });
+    const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'Idempotency-Key': createHash('sha256').update(`${to}|${deliveryKey}`).digest('base64url') }, body: JSON.stringify({ from: process.env.VISION_EMAIL_FROM?.trim() || 'Vision Trips <onboarding@resend.dev>', to: [to], ...(snapshot.support.email ? { reply_to: snapshot.support.email } : {}), subject: content.subject, html: renderEmail(resolveMediaMarkers(snapshot, publicApiBase()), content) }), signal: AbortSignal.timeout(10_000) });
     if (!response.ok) { this.logger.warn(`Customer email provider returned ${response.status}`); throw new BadGatewayException('The customer email could not be delivered.'); }
     const result = await response.json().catch(() => ({})) as { id?: unknown }; return typeof result.id === 'string' ? result.id : 'accepted';
   }

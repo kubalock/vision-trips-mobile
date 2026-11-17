@@ -312,6 +312,8 @@ describe('RelatedQuotationsService identity', () => {
     const { quotations, sessions } = setup();
     const list = await quotations.list(principal());
     expect(list.quotations.map((quote) => quote.name)).toEqual(['Quote']);
+    // The Quote booking has no Total Price: it stays unknown rather than becoming £0.
+    expect(list.quotations[0]).toMatchObject({ total: null, perPerson: null });
     const opened = await quotations.open(principal(), list.quotations[0].comparisonId);
     expect(sessions.validateAccess(`Bearer ${opened.session.accessToken}`)).toMatchObject({ baseId: BASE_A, recordId: QUOTE, customerRecordId: GRACE });
   });

@@ -23,7 +23,9 @@ describe('API response contracts', () => {
   it('rejects the whole response when one payment, account trip or quotation is malformed, rather than dropping it', () => {
     const quotation = { comparisonId: 'cmp_1', reference: 'R1', name: 'Lisbon', departureDate: null, returnDate: null, durationDays: 7, total: 1200, currency: 'GBP', heroImageUrl: null, status: 'available', current: false };
     expect(relatedQuotationsResponseSchema.parse({ quotations: [quotation] }).quotations).toEqual([quotation]);
-    expect(relatedQuotationsResponseSchema.safeParse({ quotations: [quotation, { ...quotation, total: null }] }).success).toBe(false);
+    expect(relatedQuotationsResponseSchema.safeParse({ quotations: [quotation, { ...quotation, total: '1200' }] }).success).toBe(false);
+    // A missing total is allowed (shown as "Price to be confirmed"), never turned into 0.
+    expect(relatedQuotationsResponseSchema.parse({ quotations: [{ ...quotation, total: null }] }).quotations[0]?.total).toBeNull();
     expect(relatedQuotationsResponseSchema.safeParse({ quotations: null }).success).toBe(false);
     const preferences = { emailMarketing: true, smsMarketing: false, postalMarketing: false, preferredAirports: [], preferredMonths: [] };
     const trip = { accountTripId: 'a', tripId: 't', reference: 'R', name: 'N', departureDate: null, returnDate: null, status: 'confirmed', heroImageUrl: null, current: true };

@@ -69,6 +69,9 @@ describe('BookingJourneySection quotation layouts', () => {
     expect(many.textContent).toContain('7 nights');
     expect(many.textContent).toContain('£749.50 pp');
     expect(many.querySelectorAll('.vt-quotation-row button')).toHaveLength(5);
+    const unpriced = render([quotations[0]!, { ...quotations[1]!, total: null }]);
+    expect(unpriced.textContent).toContain('Price to be confirmed');
+    expect(unpriced.querySelectorAll('.vt-quotation-card')[1]?.textContent).not.toContain('£0');
   });
 });
 

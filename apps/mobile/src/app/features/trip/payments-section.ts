@@ -1,6 +1,6 @@
 import { CurrencyPipe } from '@angular/common';
 import { Component, computed, input, output, signal } from '@angular/core';
-import { formatPoints, type PaymentSummary, type TripLoyalty, type TripStage } from '@vision-trips/contracts';
+import { formatPoints, type CustomerLoyalty, type PaymentSummary, type TripLoyalty, type TripStage } from '@vision-trips/contracts';
 
 function formatDay(date: string): string {
   const value = new Date(`${date}T00:00:00Z`);
@@ -45,11 +45,11 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
 
       @if (loyalty(); as points) {
         <section class="vt-payment-card vt-loyalty-card" aria-labelledby="loyalty-title">
-          <h2 id="loyalty-title"><span aria-hidden="true">★</span> Loyalty points @if (points.vip) { <span class="vt-vip-pill">VIP</span> }</h2>
+          <h2 id="loyalty-title"><span aria-hidden="true">★</span> Loyalty points @if (vip()) { <span class="vt-vip-pill">VIP</span> }</h2>
           @if (earnedLine(); as line) { <p>{{ line }}</p> }
-          @if (points.available !== null && points.available > 0) {
-            <p>You have <strong>{{ pointsLabel(points.available) }}</strong>@if (points.availableValue !== null && points.availableValue > 0) { (worth {{ money(points.availableValue, points.currency) }}) } to put towards {{ stage() === 'quote' ? 'this trip' : 'your next trip' }}.</p>
-          }
+          @if (balance(); as own) { @if (own.available !== null && own.available > 0) {
+            <p>You have <strong>{{ pointsLabel(own.available) }}</strong>@if (own.availableValue !== null && own.availableValue > 0) { (worth {{ money(own.availableValue, own.currency) }}) } to put towards {{ stage() === 'quote' ? 'this trip' : 'your next trip' }}.</p>
+          } }
         </section>
       }
 
@@ -117,6 +117,9 @@ export class PaymentsSection {
   readonly awaitingAcceptance = input(false);
   readonly travellerCount = input(0);
   readonly loyalty = input<TripLoyalty | null | undefined>(null);
+  /** The verified customer's own balance, from the account endpoint (never from the shared booking snapshot). */
+  readonly balance = input<CustomerLoyalty | null | undefined>(null);
+  readonly vip = input(false);
   /** Wording follows the state; a missing points figure shows no line rather than "0 points". */
   protected readonly earnedLine = computed(() => {
     const loyalty = this.loyalty();

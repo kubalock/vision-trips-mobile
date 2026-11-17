@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, HttpException, HttpStatus, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import type { TravellerProfile, TravellerProfilesResponse, TravellerProfileUpdate, TravellerProfileUpdateResponse } from '@vision-trips/contracts';
-import { maskDocumentNumber } from '@vision-trips/contracts';
+import { canonicalCountry, canonicalNationality, maskDocumentNumber } from '@vision-trips/contracts';
 import { createHmac } from 'node:crypto';
 import { AirtableService, type AirtableRecord } from '../airtable/airtable.service.js';
 import { DurableAuthStore } from '../sessions/durable-auth.store.js';
@@ -69,6 +69,7 @@ export class TravellerProfilesService {
     const { people, customerId } = await this.owned(principal);
     const person = people.find((candidate) => this.travellerId(principal, customerId, candidate.id) === travellerId);
     if (!person) throw new NotFoundException('That traveller is not on your account.');
+    crossCheckDates(values, person);
     const payload: Record<string, unknown> = {};
     const changed: string[] = [];
     for (const [key, value] of Object.entries(values) as Array<[keyof TravellerProfileUpdate, string]>) {
@@ -146,7 +147,19 @@ export function validate(input: TravellerProfileUpdate, today = new Date()): Par
         value = value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
         if (value && !/^[A-Z0-9]{5,20}$/.test(value)) errors.push('That does not look like a driving licence number.');
         break;
-      case 'nationality': case 'passportIssuingCountry': case 'nextOfKinName':
+      case 'nationality': {
+        if (!value) break;
+        const nationality = canonicalNationality(value);
+        if (!nationality) errors.push('Choose a nationality from the list.'); else value = nationality;
+        break;
+      }
+      case 'passportIssuingCountry': {
+        if (!value) break;
+        const country = canonicalCountry(value);
+        if (!country) errors.push('Choose the issuing country from the list.'); else value = country;
+        break;
+      }
+      case 'nextOfKinName':
         if (value && (value.length < 2 || value.length > 60 || !/^[\p{L}\p{M} '’.-]+$/u.test(value))) errors.push(`Use letters only for the ${LABELS[key]}.`);
         break;
       case 'nextOfKinPhone': {
@@ -174,6 +187,21 @@ export function validate(input: TravellerProfileUpdate, today = new Date()): Par
   if (errors.length) throw new BadRequestException(errors.join(' '));
   if (!Object.keys(out).length) throw new BadRequestException('Nothing to update.');
   return out;
+}
+
+/**
+ * Issue and expiry are checked together using what is already stored for anything not being changed, so a single
+ * edit can't put the expiry before the stored issue date (or the issue date after the stored expiry).
+ */
+export function crossCheckDates(values: Partial<Record<keyof TravellerProfileUpdate, string>>, person: AirtableRecord): void {
+  const effective = (key: 'passportIssueDate' | 'passportExpiryDate', fields: readonly string[]) => (key in values ? values[key] || null : dateString(pick(person.fields, fields)));
+  const issue = effective('passportIssueDate', personFields.passportIssueDate);
+  const expiry = effective('passportExpiryDate', personFields.passportExpiry);
+  if (issue && expiry && expiry <= issue) {
+    throw new BadRequestException('passportExpiryDate' in values
+      ? `The passport expiry date must be after its issue date (${issue}).`
+      : `The passport issue date must be before its expiry date (${expiry}).`);
+  }
 }
 
 function clean(value: unknown, max: number): string {

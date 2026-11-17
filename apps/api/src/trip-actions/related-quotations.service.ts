@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import type { OpenRelatedQuotationResponse, RelatedQuotationSummary, RelatedQuotationsResponse } from '@vision-trips/contracts';
 import { createHmac } from 'node:crypto';
+import { withMediaLinks } from '../media/attachment-media.js';
 import { AirtableService, type AirtableRecord } from '../airtable/airtable.service.js';
 import { SessionsService, type SessionPrincipal } from '../sessions/sessions.service.js';
 import { bookingFields, firstAttachmentThumbnail, firstString, moneyValue, numberValue, pick } from '../trips/field-map.js';
@@ -58,12 +59,13 @@ export class RelatedQuotationsService {
     const departure = date(pick(record.fields, bookingFields.departure));
     const returns = date(pick(record.fields, bookingFields.return));
     const stage = resolveStage(firstString(pick(record.fields, bookingFields.status)), departure, returns, date(pick(record.fields, bookingFields.quoteExpiry)));
-    const total = numberValue(pick(record.fields, bookingFields.total));
+    // A missing or unreadable total stays null: never shown as £0.
+    const total = moneyValue(pick(record.fields, bookingFields.total));
     const travellers = numberValue(pick(record.fields, bookingFields.totalTravellers));
     const ownPerPerson = moneyValue(pick(record.fields, bookingFields.pricePerPerson));
     return {
       nights: departure && returns ? Math.max(0, Math.round((Date.parse(`${returns}T00:00:00Z`) - Date.parse(`${departure}T00:00:00Z`)) / 86_400_000)) : null,
-      perPerson: ownPerPerson ?? (travellers > 1 && total > 0 ? Math.round(total / travellers * 100) / 100 : null),
+      perPerson: ownPerPerson ?? (travellers > 1 && total !== null && total > 0 ? Math.round(total / travellers * 100) / 100 : null),
       comparisonId: this.id(principal.baseId, record.id),
       reference: firstString(pick(record.fields, bookingFields.reference)) || 'Quotation',
       name: firstString(pick(record.fields, bookingFields.name)) || 'Your trip',
@@ -71,7 +73,7 @@ export class RelatedQuotationsService {
       durationDays: duration(departure, returns, pick(record.fields, bookingFields.duration)),
       total,
       currency: firstString(pick(record.fields, bookingFields.currency)) || 'GBP',
-      heroImageUrl: firstAttachmentThumbnail(pick(record.fields, bookingFields.hero)),
+      heroImageUrl: firstAttachmentThumbnail(pick(withMediaLinks(principal.baseId, 'Bookings', record).fields, bookingFields.hero)),
       status: stage === 'quote' ? 'available' : 'expired', current: record.id === principal.recordId,
     };
   }

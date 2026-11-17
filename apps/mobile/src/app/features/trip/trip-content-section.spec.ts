@@ -37,6 +37,11 @@ describe('video embeds', () => {
     expect(embedUrl({ kind: 'youtube', url: 'https://evil.example/embed/dQw4w9WgXcQ', mimeType: null, posterUrl: null, title: '' })).toBeNull();
     expect(embedUrl({ kind: 'vimeo', url: 'https://player.vimeo.com/video/123456789?autoplay=1', mimeType: null, posterUrl: null, title: '' })).toBe('https://player.vimeo.com/video/123456789?dnt=1');
     expect(embedUrl({ kind: 'file', url: 'http://dl.airtable.com/v.mp4', mimeType: null, posterUrl: null, title: '' })).toBeNull();
+    // The API's own media endpoint over plain http is allowed only on this machine or the local network (development).
+    expect(embedUrl({ kind: 'file', url: 'http://localhost:3000/v1/media/attachment/abc', mimeType: null, posterUrl: null, title: '' })).toBe('http://localhost:3000/v1/media/attachment/abc');
+    expect(embedUrl({ kind: 'file', url: 'http://192.168.1.20:3000/v1/media/attachment/abc', mimeType: null, posterUrl: null, title: '' })).not.toBeNull();
+    expect(embedUrl({ kind: 'file', url: 'http://evil.example/v1/media/attachment/abc', mimeType: null, posterUrl: null, title: '' })).toBeNull();
+    expect(embedUrl({ kind: 'file', url: 'http://localhost:3000/other.mp4', mimeType: null, posterUrl: null, title: '' })).toBeNull();
   });
 });
 

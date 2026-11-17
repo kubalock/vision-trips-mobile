@@ -1,7 +1,7 @@
 import { HttpClient, HttpEventType, type HttpResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import type { CallbackRequest, CallbackResponse, TravellerProfilesResponse, TravellerProfileUpdate, TravellerProfileUpdateResponse, CustomerAccount, CustomerEngagementRequest, CustomerEngagementResponse, CustomerMessageRequest, CustomerMessageResponse, CustomerPreferences, DevInvitationStatus, ExternalTripContent, FellowTravellerLinkResponse, InvitationAuthorized, InvitationOtpState, InvitationState, LinkExchangeResponse, MobileSession, OpenCustomerAccountTripResponse, OpenRelatedQuotationResponse, PaymentLinkResponse, PaymentStatusResponse, QuotationAcceptanceContext, QuotationAcceptanceRequest, QuotationAcceptanceResponse, RelatedQuotationsResponse, TripSnapshot, UpdateCustomerPreferencesResponse } from '@vision-trips/contracts';
-import { callbackResponseSchema, travellerProfilesResponseSchema, travellerProfileUpdateResponseSchema, authorizedLinkExchangeSchema, customerAccountSchema, customerEngagementResponseSchema, customerMessageResponseSchema, devInvitationResponseSchema, devInvitationStatusSchema, fellowTravellerLinkResponseSchema, invitationAuthorizedResponseSchema, invitationOtpStateSchema, invitationRequiredLinkExchangeSchema, invitationStateSchema, mobileSessionSchema, paymentLinkResponseSchema, paymentStatusResponseSchema, quotationAcceptanceContextSchema, quotationAcceptanceResponseSchema, relatedQuotationsResponseSchema, stepUpResponseSchema, tripSessionResponseSchema, updateCustomerPreferencesResponseSchema } from '@vision-trips/contracts';
+import type { WalkthroughResponse, CallbackRequest, CallbackResponse, TravellerProfilesResponse, TravellerProfileUpdate, TravellerProfileUpdateResponse, CustomerAccount, CustomerEngagementRequest, CustomerEngagementResponse, CustomerMessageRequest, CustomerMessageResponse, CustomerPreferences, DevInvitationStatus, ExternalTripContent, FellowTravellerLinkResponse, InvitationAuthorized, InvitationOtpState, InvitationState, LinkExchangeResponse, MobileSession, OpenCustomerAccountTripResponse, OpenRelatedQuotationResponse, PaymentLinkResponse, PaymentStatusResponse, QuotationAcceptanceContext, QuotationAcceptanceRequest, QuotationAcceptanceResponse, RelatedQuotationsResponse, TripSnapshot, UpdateCustomerPreferencesResponse } from '@vision-trips/contracts';
+import { walkthroughResponseSchema, callbackResponseSchema, travellerProfilesResponseSchema, travellerProfileUpdateResponseSchema, authorizedLinkExchangeSchema, customerAccountSchema, customerEngagementResponseSchema, customerMessageResponseSchema, devInvitationResponseSchema, devInvitationStatusSchema, fellowTravellerLinkResponseSchema, invitationAuthorizedResponseSchema, invitationOtpStateSchema, invitationRequiredLinkExchangeSchema, invitationStateSchema, mobileSessionSchema, paymentLinkResponseSchema, paymentStatusResponseSchema, quotationAcceptanceContextSchema, quotationAcceptanceResponseSchema, relatedQuotationsResponseSchema, stepUpResponseSchema, tripSessionResponseSchema, updateCustomerPreferencesResponseSchema } from '@vision-trips/contracts';
 import { filter, firstValueFrom, map } from 'rxjs';
 import { API_BASE_URL } from '../config/api-base-url';
 import { isTripDataError, parseExternalContent, parseTripSnapshot } from './trip-schema';
@@ -101,6 +101,11 @@ export class VisionApiService {
   /** The masked verified email shown on the acceptance form (the customer is never asked for it again). */
   quotationAcceptanceContext(accessToken: string): Promise<QuotationAcceptanceContext> {
     return parsed(firstValueFrom(this.http.get<unknown>(`${this.baseUrl}/trips/current/quotation-acceptance`, this.readOptions(accessToken))), (value) => quotationAcceptanceContextSchema.parse(value), 'quotation acceptance');
+  }
+
+  /** A fresh walkthrough URL, fetched just before playback (stored Airtable URLs expire). */
+  walkthrough(accessToken: string): Promise<WalkthroughResponse> {
+    return parsed(firstValueFrom(this.http.get<unknown>(`${this.baseUrl}/trips/current/walkthrough`, this.readOptions(accessToken))), (value) => walkthroughResponseSchema.parse(value), 'walkthrough');
   }
 
   requestCallback(input: CallbackRequest, accessToken: string, operationId: string): Promise<CallbackResponse> {

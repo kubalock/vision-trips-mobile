@@ -639,6 +639,17 @@ describe('App', () => {
       expect(app.session()?.refreshToken).toBe('tab-b-refresh');
     });
 
+    it('fetches a fresh walkthrough URL before playing, since saved Airtable URLs expire', async () => {
+      const { app, api } = setup();
+      const stale = { kind: 'file' as const, url: 'https://v5.airtableusercontent.com/old.mp4', mimeType: 'video/mp4', posterUrl: null, title: 'Walkthrough' };
+      app.trip.set(parseTripSnapshot({ ...(minimalTrip() as object), schemaVersion: 4, content: { walkthrough: stale } }));
+      const fresh = { ...stale, url: 'https://v5.airtableusercontent.com/fresh.mp4' };
+      vi.spyOn(api, 'walkthrough').mockResolvedValue({ video: fresh });
+      const view = app as unknown as { watchVideo: (video: unknown) => Promise<void>; openVideo: () => unknown };
+      await view.watchVideo(stale);
+      expect(view.openVideo()).toEqual(fresh);
+    });
+
     it('keeps the itinerary when extra content (places, weather, AI) fails', async () => {
       const { app, api } = setup();
       const withItinerary = parseTripSnapshot({ ...(minimalTrip() as object), itinerary: [{ id: 'itm_1', kind: 'flight', title: 'London Heathrow to Lisbon', departureTerminal: 'T5' }] });

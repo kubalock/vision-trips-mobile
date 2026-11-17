@@ -305,3 +305,22 @@ describe('quotation acceptance evidence', () => {
   });
 });
 
+
+describe('walkthrough before playback', () => {
+  const setup = (concealed: boolean) => {
+    const sessions = { validateAccess: vi.fn().mockReturnValue({ baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false, customerRecordId: 'recCUSTOMERAAAAAA', assurance: 'otp' }) };
+    const trips = { snapshot: vi.fn().mockResolvedValue({ experience: { agentName: 'Sarah', surprise: { concealed } }, agent: null, content: { walkthrough: { url: 'https://v5.airtableusercontent.com/old.mp4?expired' } } }) };
+    const airtable = { record: vi.fn().mockResolvedValue({ id: 'recABCDEFGHIJKLMN', fields: { 'Video Walkthrough': [{ url: 'https://v5.airtableusercontent.com/fresh.mp4?sig=new', type: 'video/mp4' }] } }) };
+    return { airtable, controller: new TripActionsController(sessions as never, trips as never, airtable as never, {} as never, {} as never, {} as never, {} as never) };
+  };
+  it('returns a freshly read attachment URL from the Booking, not the cached one', async () => {
+    const { controller, airtable } = setup(false);
+    await expect(controller.walkthrough('Bearer token')).resolves.toEqual({ video: expect.objectContaining({ url: 'https://v5.airtableusercontent.com/fresh.mp4?sig=new', title: 'Sarah walks you through your trip' }) });
+    expect(airtable.record).toHaveBeenCalledWith('appABCDEFGHIJKLMN', 'Bookings', 'recABCDEFGHIJKLMN');
+  });
+  it('returns nothing while a surprise trip is concealed', async () => {
+    const { controller, airtable } = setup(true);
+    await expect(controller.walkthrough('Bearer token')).resolves.toEqual({ video: null });
+    expect(airtable.record).not.toHaveBeenCalled();
+  });
+});

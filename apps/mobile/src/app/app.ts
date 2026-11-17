@@ -98,6 +98,7 @@ export class App implements OnInit, OnDestroy {
   protected readonly acceptanceComplete = signal(false);
   /** The agent's video, open in the viewer (only after the customer taps Watch). */
   protected readonly openVideo = signal<TripVideo | null>(null);
+  protected readonly loadingVideo = signal(false);
   protected readonly travellerProfiles = signal<TravellerProfile[]>([]);
   protected readonly travellersLoading = signal(false);
   protected readonly travellersError = signal('');
@@ -837,6 +838,8 @@ export class App implements OnInit, OnDestroy {
     this.activeView.set(view);
     this.trackEngagement('section_opened', view);
     if (view === 'account') { void this.loadCustomerAccount(); void this.loadTravellerProfiles(); }
+    // The loyalty balance belongs to the verified customer, so it comes from their account, not the trip snapshot.
+    if (view === 'payments' && this.trip()?.loyalty && !this.customerAccount() && !this.signedOut()) void this.loadCustomerAccount();
     const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
     window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
     requestAnimationFrame(() => document.querySelector<HTMLElement>('#main-content')?.focus({ preventScroll: true }));
@@ -1017,6 +1020,27 @@ export class App implements OnInit, OnDestroy {
 
   protected enquireAboutExtra(message: string): void { this.customerMessage.set(message); this.messageTopic.set('itinerary'); this.messageSent.set(false); this.selectView('help'); }
 
+  /**
+   * Opens a video only after Watch is tapped. The walkthrough is an Airtable attachment whose URL expires, so a
+   * fresh one is fetched first; offline (or if that fails) the saved one is tried, and the viewer says if it can't play.
+   */
+  protected async watchVideo(video: TripVideo): Promise<void> {
+    const session = this.session();
+    const isWalkthrough = video.kind === 'file' && this.trip()?.content?.walkthrough?.url === video.url;
+    if (!isWalkthrough || !session || !this.online()) { this.openVideo.set(video); return; }
+    const generation = this.tripGeneration;
+    this.loadingVideo.set(true);
+    try {
+      const fresh = (await this.withSession(session, (accessToken) => this.api.walkthrough(accessToken))).video;
+      if (!this.isCurrentTrip(generation)) return;
+      if (fresh) this.openVideo.set(fresh); else this.error.set('This video is no longer available.');
+    } catch {
+      if (this.isCurrentTrip(generation)) this.openVideo.set(video);
+    } finally {
+      if (this.isCurrentTrip(generation)) this.loadingVideo.set(false);
+    }
+  }
+
   /** The quick way to reach the agent from anywhere: the message form under Help. */
   protected messageAgent(): void {
     this.trackEngagement('action_clicked', 'message_agent');
@@ -1042,9 +1066,9 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  /** Age, nationality and DOB (only when the API sent it) for "Who's travelling". */
+  /** Age and nationality for "Who's travelling" (dates of birth are only in Account → Traveller details). */
   protected travellerFacts(traveller: TravellerSummary): string {
-    return [traveller.age !== null && traveller.age !== undefined ? `Age ${traveller.age}` : '', traveller.dateOfBirth ? `Born ${traveller.dateOfBirth.split('-').reverse().join('/')}` : '', traveller.nationality ?? ''].filter(Boolean).join(' · ');
+    return [traveller.age !== null && traveller.age !== undefined ? `Age ${traveller.age}` : '', traveller.nationality ?? ''].filter(Boolean).join(' · ');
   }
 
   /** "Ask us instead": a message about that exact extra, ready to send from Help. */
@@ -1233,6 +1257,7 @@ export class App implements OnInit, OnDestroy {
     this.acceptanceComplete.set(false);
     this.acceptanceSectionsOpened.set([]);
     this.openVideo.set(null);
+    this.loadingVideo.set(false);
     this.callbackTime.set('anytime');
     this.callbackState.set('idle');
     this.acceptanceNotice.set('');

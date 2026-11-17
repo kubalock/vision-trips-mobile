@@ -2,6 +2,7 @@ import { maskEmail as sharedMaskEmail } from '@vision-trips/contracts';
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import type { CustomerAccount, CustomerAccountTrip, CustomerLoyalty, LoyaltyTransaction, CustomerPreferences, OpenCustomerAccountTripResponse, UpdateCustomerPreferencesResponse } from '@vision-trips/contracts';
 import { createHmac } from 'node:crypto';
+import { withMediaLinks } from '../media/attachment-media.js';
 import { AirtableService, type AirtableRecord } from '../airtable/airtable.service.js';
 import { SessionsService, type SessionPrincipal } from '../sessions/sessions.service.js';
 import { bookingFields, customerFields, dateString, firstAttachmentThumbnail, firstString, loyaltyTransactionFields, memberFields, moneyValue, pick, strings, truthy } from '../trips/field-map.js';
@@ -131,7 +132,7 @@ export class CustomerAccountService {
   private assertLead(principal: SessionPrincipal): void { if (principal.fellowTraveller) throw new ForbiddenException('Customer account settings are only available to the lead customer.'); }
   private trip(principal: SessionPrincipal, record: AirtableRecord): CustomerAccountTrip {
     const departure = date(pick(record.fields, bookingFields.departure)); const returns = date(pick(record.fields, bookingFields.return));
-    return { accountTripId: this.id(principal.baseId, record.id), tripId: publicTripId(principal.baseId, record.id), reference: firstString(pick(record.fields, bookingFields.reference)) || 'Trip', name: firstString(pick(record.fields, bookingFields.name)) || 'Your trip', departureDate: departure, returnDate: returns, status: resolveStage(firstString(pick(record.fields, bookingFields.status)), departure, returns, date(pick(record.fields, bookingFields.quoteExpiry))), heroImageUrl: firstAttachmentThumbnail(pick(record.fields, bookingFields.hero)), current: record.id === principal.recordId };
+    return { accountTripId: this.id(principal.baseId, record.id), tripId: publicTripId(principal.baseId, record.id), reference: firstString(pick(record.fields, bookingFields.reference)) || 'Trip', name: firstString(pick(record.fields, bookingFields.name)) || 'Your trip', departureDate: departure, returnDate: returns, status: resolveStage(firstString(pick(record.fields, bookingFields.status)), departure, returns, date(pick(record.fields, bookingFields.quoteExpiry))), heroImageUrl: firstAttachmentThumbnail(pick(withMediaLinks(principal.baseId, 'Bookings', record).fields, bookingFields.hero)), current: record.id === principal.recordId };
   }
   private id(baseId: string, recordId: string): string { const secret = process.env.VISION_LINK_SECRET?.trim(); if (!secret) throw new ServiceUnavailableException('Customer accounts are not configured.'); return createHmac('sha256', secret).update(`${baseId}:${recordId}:customer-account`).digest('base64url').slice(0, 24); }
 }

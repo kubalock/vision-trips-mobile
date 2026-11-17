@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { AccessScope, TripSection, ItineraryImage, PaymentStatusResponse, CabinDetail, CruisePort, ItineraryItem, ItineraryKind, PassengerAllocation, PaymentItem, RoomDetail, TravellerSummary, TripDocument, TripSnapshot } from '@vision-trips/contracts';
 import { TRIP_SNAPSHOT_SCHEMA_VERSION } from '@vision-trips/contracts';
+import { withMediaLinks } from '../media/attachment-media.js';
 import { affiliateUrl, isPointsPayment, isSchemeFunding, mapAgent, mapContent, mapTripLoyalty, redeemedPoints, terminals, travellerDetails } from './trip-extras.js';
 import { createHash, createHmac } from 'node:crypto';
 import { AirtableService, type AirtableRecord } from '../airtable/airtable.service.js';
@@ -161,9 +162,13 @@ export class TripsService {
     const loyaltyTransactions = loyaltyTransactionIds.length ? await optional('loyalty', process.env.AIRTABLE_LOYALTY_TABLE?.trim() || 'Loyalty Transactions', loyaltyTransactionIds) : [];
     const portLocationIds = cruisePorts.flatMap((record) => recordIds(pick(record.fields, cruisePortFields.port)));
     const portLocations = await optional('itinerary_details', 'CMS [Locations]', portLocationIds);
-    const snapshot = this.mapSnapshot(baseId, booking, brand, accessScope, {
-      elements, payments, people, customers, upsells, communications, members, suppliers, airports, airlines, rooms, cabins, passengers, ships,
-      cruisePorts, locations: [...locations, ...portLocations], operators, brandTemplates, loyaltyTransactions,
+    // Image and video attachments get stable API media links instead of Airtable URLs that expire in saved trips.
+    // Customer Documentation (supplier files) keeps its own download path.
+    const media = (table: string, records: AirtableRecord[], skip: readonly string[] = []) => records.map((record) => withMediaLinks(baseId, table, record, skip));
+    const snapshot = this.mapSnapshot(baseId, withMediaLinks(baseId, 'Bookings', booking), brand.id ? withMediaLinks(baseId, 'Brands & Branches', brand) : brand, accessScope, {
+      elements: media('Bookings [Elements]', elements, elementFields.docs), payments, people, customers, upsells: media('Bookings [Upsells]', upsells), communications, members,
+      suppliers: media('Suppliers', suppliers), airports, airlines: media('CMS [Airlines]', airlines), rooms, cabins, passengers, ships: media('CMS [Cruise Ships]', ships),
+      cruisePorts, locations: media('CMS [Locations]', [...locations, ...portLocations]), operators: media('CMS [Cruise Operators]', operators), brandTemplates, loyaltyTransactions,
     });
     return incomplete.size ? markPartial(snapshot, [...incomplete]) : snapshot;
   }
@@ -429,7 +434,7 @@ export class TripsService {
       ...(payments ? { payments } : {}),
       documents: visibleDocuments,
       agent: mapAgent(booking, brand, safeText(bookingValue('agent')) || null),
-      loyalty: surpriseConcealed ? null : mapTripLoyalty({ booking, member: allRelated.members[0], customer: accessScope === 'primary_customer' ? allRelated.customers[0] : undefined, stage, returns, currency: payments?.currency ?? 'GBP' }),
+      loyalty: surpriseConcealed ? null : mapTripLoyalty({ booking, member: allRelated.members[0], stage, returns }),
       content: surpriseConcealed ? { included: [], notIncluded: [], includedSource: 'none', videoMessage: null, walkthrough: null } : mapContent(booking, itinerary, safeText(bookingValue('agent')) || null),
       capabilities: {
         acceptQuotation: accessScope === 'primary_customer' && stage === 'quote' && !quotationAccepted,
