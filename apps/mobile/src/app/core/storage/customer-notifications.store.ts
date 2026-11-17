@@ -65,7 +65,7 @@ export class CustomerNotificationsStore {
       const days = daysFromToday(nextPayment.dueDate);
       if (days <= 7) {
         const timing = days < 0 ? 'is overdue' : days === 0 ? 'is due today' : `is due in ${days} day${days === 1 ? '' : 's'}`;
-        await this.add(snapshot.tripId, 'balance_reminder', 'Balance reminder', `${nextPayment.label} ${timing}.`, `balance:${nextPayment.id}:${nextPayment.dueDate}:${days < 0 ? 'overdue' : days}`);
+        await this.add(snapshot.tripId, 'balance_reminder', /balance/i.test(nextPayment.label) ? 'Balance reminder' : 'Payment reminder', `${nextPayment.label} ${timing}.`, `balance:${nextPayment.id}:${nextPayment.dueDate}:${days < 0 ? 'overdue' : days}`);
       }
     }
 

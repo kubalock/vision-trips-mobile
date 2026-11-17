@@ -14,7 +14,7 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
           <li class="vt-booking-step" [class.is-complete]="step.status === 'complete'" [class.is-current]="step.status === 'current'" [class.is-upcoming]="step.status === 'upcoming'">
             <span class="vt-booking-step__node">@if (step.status === 'complete') { <vt-icon name="check" [size]="18" /> } @else { {{ $index + 1 }} }</span>
             <div class="vt-booking-step__content">
-              <div class="vt-booking-step__title"><h3>{{ step.title }}</h3>@if (step.date) { <time>{{ step.date | europeanDate }}</time> }</div>
+              <div class="vt-booking-step__title"><h3>{{ step.title }}</h3>@if (showDate(step)) { <time>{{ step.date | europeanDate }}</time> }</div>
               <p>{{ step.description }}</p>
             </div>
           </li>
@@ -118,6 +118,17 @@ export class BookingJourneySection {
   readonly related = input<RelatedQuotationSummary[]>([]);
   /** One alternative: side by side with this quotation; two or three: cards; four or more: comparison rows. */
   protected readonly layout = computed(() => { const others = this.related().filter((quote) => !quote.current).length; return others <= 1 ? 'pair' : others <= 3 ? 'cards' : 'rows'; });
+  /**
+   * A planned date that has already passed on a step that isn't done yet (a late quotation, an unticked task) would
+   * read as missed and appear out of order, so only upcoming or completed steps show their date.
+   */
+  protected showDate(step: BookingJourney['steps'][number]): boolean {
+    if (!step.date) return false;
+    if (step.status === 'complete') return true;
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    return step.date.slice(0, 10) >= today;
+  }
   protected nights(quote: RelatedQuotationSummary): number | null { return quote.nights ?? quote.durationDays ?? null; }
   protected perPerson(quote: RelatedQuotationSummary): string {
     try { return new Intl.NumberFormat('en-GB', { style: 'currency', currency: quote.currency }).format(quote.perPerson ?? 0); } catch { return `${quote.perPerson} ${quote.currency}`; }

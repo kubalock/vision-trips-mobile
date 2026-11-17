@@ -268,6 +268,7 @@ button { font: inherit; }
 .vt-app .vt-notification-row--success .vt-notification-row__icon { background: color-mix(in srgb, var(--ok) 12%, var(--surface)); color: var(--ok); }
 .vt-app .vt-notification-row__icon vt-icon { width: 20px; height: 20px; }
 .vt-app .vt-notification-row h3 { color: var(--ink); font-size: .86rem; line-height: 1.35; }
+.vt-app .vt-notification-row__new { display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: var(--r-pill); background: var(--accent-action); color: var(--accent-action-ink); font-family: var(--vt-font-family); font-size: .66rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; vertical-align: 2px; }
 .vt-app .vt-notification-row p { margin-top: 4px; color: var(--ink-2); font-size: .78rem; line-height: 1.45; }
 .vt-app .vt-notification-row time { display: block; margin-top: 7px; color: var(--ink-3); font-size: .69rem; font-weight: 600; }
 .vt-app .vt-notifications__empty { margin-top: 12px; padding: 28px 18px; border: 1px dashed var(--line-2); border-radius: var(--r); color: var(--ink-2); font-size: .82rem; line-height: 1.5; text-align: center; }
@@ -382,6 +383,12 @@ button { font: inherit; }
 .vt-app .vt-lower-section__header > p { margin: 0; color: var(--vt-accent-text); font-size: .7rem; font-weight: 850; letter-spacing: .14em; line-height: 1.2; text-transform: uppercase; }
 .vt-app .vt-lower-section__header h2 { margin: 10px 0 0; color: var(--ink); font-size: clamp(1.45rem, 5vw, 1.8rem); font-weight: 700; line-height: 1.15; }
 .vt-app .vt-tailor-grid { display: grid; gap: 12px; margin-top: 18px; }
+/* Phones: the suggestions scroll sideways (about 1.3 cards in view) instead of stacking six full-width cards. */
+@media (max-width: 639px) {
+  .vt-app .vt-tailor-grid { grid-auto-flow: column; grid-auto-columns: 76%; margin-inline: calc(-1 * var(--vt-flat-gutter, 16px)); padding: 2px var(--vt-flat-gutter, 16px) 10px; overflow-x: auto; overscroll-behavior-x: contain; scroll-padding-inline: var(--vt-flat-gutter, 16px); scroll-snap-type: x mandatory; scrollbar-width: none; }
+  .vt-app .vt-tailor-grid::-webkit-scrollbar { display: none; }
+  .vt-app .vt-tailor-card { scroll-snap-align: start; }
+}
 .vt-app .vt-tailor-card { display: flex; flex-direction: column; min-width: 0; padding: var(--card-pad); border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-card); transition: border-color .18s ease, box-shadow .18s ease, transform .14s ease; }
 .vt-app .vt-tailor-card:hover { border-color: color-mix(in srgb, var(--vt-accent-text) 30%, var(--line)); box-shadow: 0 7px 24px rgba(0, 0, 0, .06); transform: translateY(-1px); }
 .vt-app .vt-tailor-card h3 { margin: 0; color: var(--ink); font-size: 1rem; font-weight: 750; line-height: 1.35; }
@@ -837,6 +844,8 @@ button { font: inherit; }
 .vt-app .vt-doc-button__description { color: var(--ink-2); font-size: .84rem; line-height: 1.4; }
 .vt-app .vt-doc-button__meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; color: var(--ink-3); font-size: .73rem; font-weight: 600; line-height: 1.35; }
 .vt-app .vt-doc-button__meta small { color: var(--ok); font: inherit; }
+/* The file-type badge now sits on the meta line: keep its own badge look, not the green "Available offline" text. */
+.vt-app .vt-doc-button__meta small.vt-doc-badge--type { min-height: 18px; padding: 2px 6px; color: var(--vt-accent-text); font-size: .62rem; font-weight: 800; }
 .vt-app .vt-doc-badge { display: inline-flex; align-items: center; min-height: 20px; padding: 3px 7px; border-radius: var(--r-pill); font-size: .64rem; font-weight: 800; letter-spacing: .04em; line-height: 1; text-transform: uppercase; white-space: nowrap; }
 .vt-app .vt-doc-badge--type { background: color-mix(in srgb, var(--vt-accent) 9%, var(--surface)); color: var(--vt-accent-text); }
 .vt-app .vt-doc-badge--updated { background: color-mix(in srgb, var(--warn) 14%, var(--surface)); color: var(--warn); }
@@ -1982,7 +1991,21 @@ body.vt .vt-app .vt-returned-card { padding: 16px; }
 /* Account page: references stay on one line, the open trip says so instead of leaving an empty card, kickers match
    the rest of the app, and the three contact channels only sit side by side when there is room for them. */
 .vt-app .vt-account-trip__topline > div { min-width: 0; }
-.vt-app .vt-account-trip__ref { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.vt-app .vt-account-trip__ref { overflow-wrap: anywhere; }
+/* Status pill above the name (as on My Trips), so long names and references get the full card width. */
+.vt-app .vt-account-trip__topline { flex-direction: column; gap: 8px; }
+.vt-app .vt-account-trip__topline > .vt-account-status { order: -1; align-self: flex-start; }
+/* Trip cards sit inside the account card: a border is enough, no second shadow; a shorter photo on phones. */
+.vt-app .vt-account-trip { box-shadow: none; }
+@media (max-width: 639px) { .vt-app .vt-account-trip__image { height: 96px; } }
+/* Account loading placeholder: the shape of what's coming instead of a lone line of text. */
+.vt-app .vt-account-loading { display: grid; gap: 10px; }
+.vt-app .vt-skeleton { display: block; height: 12px; border-radius: var(--r-pill); background: linear-gradient(90deg, var(--surface-2) 0%, color-mix(in srgb, var(--ink) 8%, var(--surface-2)) 50%, var(--surface-2) 100%); background-size: 200% 100%; animation: vt-skeleton 1.4s ease-in-out infinite; }
+.vt-app .vt-skeleton--title { width: 55%; height: 18px; }
+.vt-app .vt-skeleton--short { width: 40%; }
+.vt-app .vt-skeleton--block { height: 96px; border-radius: var(--r); }
+@keyframes vt-skeleton { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .vt-app .vt-skeleton { animation: none; } }
 .vt-app .vt-account-trip__current { display: inline-flex; align-items: center; gap: 6px; margin: auto 0 0; padding-top: 12px; color: var(--vt-accent-text); font-size: .85rem; font-weight: 650; }
 body.vt .vt-app .vt-account-kicker { font-size: 0.75rem; line-height: 1rem; font-weight: 600; letter-spacing: .05em; }
 @media (min-width: 700px) and (max-width: 999px) {
@@ -2118,7 +2141,7 @@ body.vt .vt-app .vt-account-danger__icon { width: 40px; height: 40px; }
 .vt-app .vt-quotation-row__name { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .vt-app .vt-quotation-row__price { display: grid; text-align: right; }
 .vt-app .vt-quotation-row__price small { color: var(--ink-3); }
-.vt-app .vt-quotation-row .vt-quotation-card__action { min-height: 44px; }
+.vt-app .vt-quotation-row .vt-quotation-card__action { justify-self: end; width: 104px; min-height: 44px; }
 @media (max-width: 640px) {
   .vt-app .vt-quotation-row { grid-template-columns: 1fr auto; }
   .vt-app .vt-quotation-row__price { text-align: left; }

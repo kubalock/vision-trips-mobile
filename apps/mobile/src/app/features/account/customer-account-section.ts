@@ -39,7 +39,7 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
           <p class="vt-account-kicker">Your details</p>
           <h1>Account and preferences</h1>
         </header>
-        <div class="vt-account-card"><p class="vt-account-muted">Loading your account…</p></div>
+        <div class="vt-account-card vt-account-loading" aria-busy="true"><p class="vt-account-muted" role="status">Loading your account…</p><span class="vt-skeleton vt-skeleton--title"></span><span class="vt-skeleton"></span><span class="vt-skeleton vt-skeleton--short"></span><span class="vt-skeleton vt-skeleton--block"></span></div>
         <ng-container [ngTemplateOutlet]="pageExtras" />
       </section>
     }
@@ -85,7 +85,7 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
           <div class="vt-account-trips">
             @for (trip of data.trips; track trip.accountTripId) {
               <article class="vt-account-trip" [class.vt-account-trip--current]="trip.current">
-                @if (trip.heroImageUrl) { <img class="vt-account-trip__image" [src]="trip.heroImageUrl" alt="" loading="lazy" decoding="async" /> }
+                @if (trip.heroImageUrl) { <img class="vt-account-trip__image" [src]="trip.heroImageUrl" alt="" loading="lazy" decoding="async" (error)="$any($event.target).style.display = 'none'" /> }
                 <div class="vt-account-trip__body">
                   <div class="vt-account-trip__topline">
                     <div>

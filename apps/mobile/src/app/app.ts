@@ -152,6 +152,8 @@ export class App implements OnInit, OnDestroy {
   protected readonly displayedTrip = computed(() => this.showTripLibrary() || this.invitationToken() ? null : this.trip());
   protected readonly notifications = signal<CustomerNotification[]>([]);
   protected readonly showNotifications = signal(false);
+  /** Notifications that were unread when the panel opened: still marked "New" while it stays open. */
+  protected readonly newNotificationIds = signal<ReadonlySet<string>>(new Set());
   protected readonly deviceNotificationsEnabled = signal(false);
   protected readonly unreadNotifications = computed(() => this.notifications().filter((notification) => !notification.readAt).length);
   protected readonly externalContent = signal<ExternalTripContent | null>(null);
@@ -1386,6 +1388,7 @@ export class App implements OnInit, OnDestroy {
     if (this.showNotifications()) { this.closeNotifications(); return; }
     const tripId = this.trip()?.tripId;
     if (!tripId) return;
+    this.newNotificationIds.set(new Set(this.notifications().filter((notification) => !notification.readAt).map((notification) => notification.id)));
     this.showNotifications.set(true);
     this.customerNotifications.markAllRead(tripId);
     this.loadCustomerNotifications(tripId);

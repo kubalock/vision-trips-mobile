@@ -477,7 +477,7 @@ function mapBookingJourney(input: {
   const hasCruise = input.itinerary.some((item) => item.kind === 'cruise');
   const has = (kind: ItineraryKind) => input.itinerary.some((item) => item.kind === kind);
   const owesBalance = Boolean(input.payments && (!balanceKnown || input.payments.balance! > 0));
-  const balanceFaq = { id: 'balance', question: 'When is my balance due?', answer: balanceDate ? `Your current balance due date is ${balanceDate}. The Payments screen shows the latest amount and payment options.` : 'Open the Payments screen for the latest balance, or ask your travel expert to confirm the due date.' };
+  const balanceFaq = { id: 'balance', question: 'When is my balance due?', answer: balanceDate ? `Your current balance due date is ${europeanDay(balanceDate)}. The Payments screen shows the latest amount and payment options.` : 'Open the Payments screen for the latest balance, or ask your travel expert to confirm the due date.' };
   // After the trip only an outstanding balance can still matter (contact details are on the Home screen). No add-ons.
   if (returned) return { steps, faqs: owesBalance ? [balanceFaq] : [], suggestedExtras: [] };
   const faqs: TripSnapshot['bookingJourney']['faqs'] = [
@@ -503,6 +503,12 @@ function mapBookingJourney(input: {
 
 const TRAVELLED_STAGES: ReadonlyArray<TripSnapshot['stage']> = ['departure', 'travelling', 'returning', 'home', 'past', 'closed'];
 const RETURNED_STAGES: ReadonlyArray<TripSnapshot['stage']> = ['home', 'past', 'closed'];
+
+/** "2026-11-17" → "17/11/2026", the format the app uses everywhere; anything else is returned unchanged. */
+function europeanDay(value: string): string {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : value;
+}
 
 function shiftDate(value: string | null, days: number): string | null {
   if (!value) return null;

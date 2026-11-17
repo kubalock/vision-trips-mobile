@@ -45,15 +45,14 @@ interface DocumentGroup {
                     <span class="vt-doc-button__icon"><vt-icon name="file" [size]="21" /></span>
                     <span class="vt-doc-button__copy">
                       <span class="vt-doc-button__title">
-                        <strong>{{ document.title }}</strong>
-                        <small class="vt-doc-badge vt-doc-badge--type">{{ fileType(document) }}</small>
+                        <strong>{{ displayTitle(document) }}</strong>
                         @if (statuses()[document.id] === 'updated') {
                           <small class="vt-doc-badge vt-doc-badge--updated">Updated</small>
                         }
                       </span>
-                      <span class="vt-doc-button__description">{{ document.description }}</span>
+                      @if (showDescription(document)) { <span class="vt-doc-button__description">{{ document.description }}</span> }
                       <span class="vt-doc-button__meta">
-                        Updated {{ document.updatedAt | europeanDate }}
+                        <small class="vt-doc-badge vt-doc-badge--type">{{ fileType(document) }}</small> Updated {{ document.updatedAt | europeanDate }}
                         @if (statuses()[document.id] === 'saved') {
                           <small>Available offline</small>
                         }
@@ -75,11 +74,10 @@ interface DocumentGroup {
                     <span class="vt-doc-button__icon"><vt-icon name="file" [size]="21" /></span>
                     <span class="vt-doc-button__copy">
                       <span class="vt-doc-button__title">
-                        <strong>{{ document.title }}</strong>
-                        <small class="vt-doc-badge vt-doc-badge--type">{{ fileType(document) }}</small>
+                        <strong>{{ displayTitle(document) }}</strong>
                       </span>
-                      <span class="vt-doc-button__description">{{ document.description }}</span>
-                      <span class="vt-doc-button__meta">Updated {{ document.updatedAt | europeanDate }}</span>
+                      @if (showDescription(document)) { <span class="vt-doc-button__description">{{ document.description }}</span> }
+                      <span class="vt-doc-button__meta"><small class="vt-doc-badge vt-doc-badge--type">{{ fileType(document) }}</small> Updated {{ document.updatedAt | europeanDate }}</span>
                     </span>
                     <span class="vt-doc-badge vt-doc-badge--pending">{{ document.status === 'pending' ? 'Coming soon' : 'Unavailable' }}</span>
                   </div>
@@ -117,6 +115,18 @@ export class DocumentsSection {
     }
     return groups.filter((group) => group.documents.length > 0);
   });
+
+  /** "Your quotation (PDF)" reads "Your quotation": the file type is shown once, beside the date. */
+  displayTitle(document: TripDocument): string {
+    const type = this.fileType(document);
+    return document.title.replace(new RegExp(`\\s*\\(${type}\\)\\s*$`, 'i'), '') || document.title;
+  }
+
+  /** Hides a description that only repeats the title ("Quotation (Letter)" / "Your Quotation"). */
+  showDescription(document: TripDocument): boolean {
+    const plain = (text: string) => text.toLowerCase().replace(/\([^)]*\)/g, ' ').replace(/\byour\b/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
+    return Boolean(document.description?.trim()) && plain(document.description) !== plain(document.title);
+  }
 
   fileType(document: TripDocument): string {
     if (document.mimeType.toLowerCase().includes('pdf')) return 'PDF';
