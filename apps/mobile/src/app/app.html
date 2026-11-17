@@ -86,7 +86,7 @@
       @if (activeView() === 'home') {
         <article class="vt-hero" [class.has-image]="currentTrip.summary.heroImageUrl" [class.vt-hero--returned]="isReturned(currentTrip.stage)">
           @if (currentTrip.summary.heroImageUrl) { <img class="vt-hero__img" [src]="heroSource(currentTrip.summary, 800)" [attr.srcset]="img.srcset(currentTrip.summary.heroImage)" [attr.sizes]="img.sizes.hero" [attr.width]="currentTrip.summary.heroImage?.width ?? null" [attr.height]="currentTrip.summary.heroImage?.height ?? null" alt="" decoding="async" fetchpriority="high" /> }
-          <div class="vt-hero__body"><p class="vt-hero__kicker">{{ heroKicker(currentTrip) }}</p><h1 class="vt-hero__title">{{ currentTrip.summary.name }}</h1><p class="vt-hero__sub">{{ currentTrip.summary.reference }} · {{ tripDates(currentTrip.summary) }}</p>
+          <div class="vt-hero__body"><p class="vt-hero__kicker">{{ heroKicker(currentTrip) }}</p><h1 class="vt-hero__title">{{ currentTrip.summary.name }}</h1><p class="vt-hero__sub"><span class="vt-hero__ref">{{ currentTrip.summary.reference }}</span><span class="vt-hero__sep" aria-hidden="true"> · </span><span class="vt-hero__dates">{{ tripDates(currentTrip.summary) }}</span></p>
             <ul class="vt-hero__facts" role="list">@for (type of currentTrip.summary.holidayTypes; track type) { <li>{{ type }}</li> }@if (nightsLabel(currentTrip.summary.durationDays); as nights) { <li>{{ nights }}</li> }</ul>
             @if (!isReturned(currentTrip.stage)) {
               <p class="vt-small">{{ storedSecurely() ? (savedInBrowser ? 'Saved in this browser for offline viewing.' : 'Saved securely on this device.') : 'This trip has not been saved for offline viewing.' }}</p>

@@ -180,7 +180,11 @@ button { font: inherit; }
   .vt-app .vt-main { padding-top: 12px; }
   .vt-app .vt-hero { min-height: 360px; border-radius: var(--r-l); }
   .vt-app .vt-hero__body { padding: 22px 20px; gap: 8px; }
-  .vt-app .vt-hero__title { max-width: 13ch; }
+  .vt-app .vt-hero__title { max-width: 18ch; }
+  /* Phones: reference on its own line above the dates, instead of one long line that wraps mid-date. */
+  .vt-app .vt-hero__sub { display: grid; gap: 2px; }
+  .vt-app .vt-hero__sep { display: none; }
+  .vt-app .vt-hero__ref { font-size: .78em; font-weight: 650; letter-spacing: .04em; opacity: .9; }
   .vt-app .vt-hero__facts { gap: 6px; }
   .vt-app .vt-hero__facts li { padding: 6px 10px; font-size: .78rem; }
   .vt-app .vt-section { padding-top: 32px; }
@@ -274,13 +278,13 @@ button { font: inherit; }
 .vt-app .vt-notifications__empty { margin-top: 12px; padding: 28px 18px; border: 1px dashed var(--line-2); border-radius: var(--r); color: var(--ink-2); font-size: .82rem; line-height: 1.5; text-align: center; }
 @media (max-width: 520px) {
   .vt-app :is(.vt-main--home, .vt-main--itinerary, .vt-main--payments, .vt-main--documents, .vt-main--help, .vt-main--account) .vt-trip-status-card { align-items: stretch; }
-  .vt-app .vt-trip-status-card__refresh { min-width: 80px; }
+  .vt-app .vt-trip-status-card__refresh { min-width: 104px; }
 }
 @media (max-width: 380px) {
-  .vt-app .vt-trip-status-card { flex-direction: column; }
-  .vt-app .vt-trip-status-card__refresh { width: 100%; }
+  /* Small phones keep the button beside the status (wide enough for "Refreshing…"), so nothing jumps while it refreshes. */
+  .vt-app .vt-trip-status-card__refresh { min-width: 104px; padding-inline: 10px; }
   .vt-app .vt-top__actions { gap: 2px; padding: 3px; }
-  .vt-app .vt-top__actions .vt-iconbtn { width: 38px; height: 38px; min-width: 38px; }
+  .vt-app .vt-top__actions .vt-iconbtn { width: 44px; height: 44px; min-width: 44px; }
 }
 :root[data-theme="dark"] .vt-app .vt-top__actions { border-color: rgba(255, 255, 255, .08); background: color-mix(in srgb, var(--surface-2) 94%, #000); box-shadow: none; }
 :root[data-theme="dark"] .vt-app .vt-top__actions .vt-iconbtn,
@@ -409,8 +413,8 @@ button { font: inherit; }
 .vt-app .vt-home-info-card { margin: 24px var(--vt-flat-gutter) 0; padding: var(--card-pad); border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-card); }
 .vt-app .vt-home-info-card__kicker { margin: 0; color: var(--vt-accent-text); font-size: .7rem; font-weight: 850; letter-spacing: .15em; line-height: 1.2; text-transform: uppercase; }
 .vt-app .vt-home-info-card h2 { margin: 10px 0 0; color: var(--ink); font-size: 1.2rem; font-weight: 750; line-height: 1.3; }
-.vt-app .vt-home-up-next__date { margin: 10px 0 0; color: var(--ink-2); font-size: .84rem; font-weight: 650; }
-.vt-app .vt-home-up-next__countdown { display: inline-flex; margin: 12px 0 0; padding: 5px 9px; border-radius: var(--r-pill); background: var(--accent-status-bg); color: var(--vt-accent-text); font-size: .7rem; font-weight: 800; }
+.vt-app .vt-home-up-next__date { display: inline-block; margin: 8px 12px 0 0; color: var(--ink-2); font-size: .84rem; font-weight: 650; }
+.vt-app .vt-home-up-next__countdown { display: inline-flex; margin: 8px 0 0; padding: 5px 9px; border-radius: var(--r-pill); background: var(--accent-status-bg); color: var(--vt-accent-text); font-size: .7rem; font-weight: 800; }
 .vt-app .vt-home-about > p:not(.vt-home-info-card__kicker) { margin: 11px 0 0; color: var(--ink-2); font-size: .88rem; line-height: 1.65; }
 .vt-app .vt-home-about .vt-home-about__agent { color: var(--vt-accent-text); font-size: .78rem; font-weight: 800; }
 @media (min-width: 640px) {
@@ -978,6 +982,9 @@ button { font: inherit; }
 .vt-app .vt-account-fieldset { min-width: 0; margin: 22px 0 0; padding: 0; border: 0; }
 .vt-app .vt-account-fieldset legend { padding: 0; color: var(--ink); font-size: .93rem; font-weight: 750; }
 .vt-app .vt-account-fieldset--divided { padding-top: 21px; border-top: 1px solid var(--line); }
+/* A legend sits inside a fieldset's top border by default, leaving a stray rule beside the heading: keep it below. */
+.vt-app .vt-account-fieldset--divided > legend { float: left; width: 100%; }
+.vt-app .vt-account-fieldset--divided > legend + * { clear: both; }
 .vt-app .vt-account-field-hint { margin: 5px 0 0; color: var(--ink-3); font-size: .78rem; line-height: 1.45; }
 .vt-app .vt-channel-grid { display: grid; gap: 10px; margin-top: 12px; }
 .vt-app .vt-channel-tile { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 68px; padding: 12px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface-2); cursor: pointer; transition: border-color .18s ease, background-color .18s ease, transform .12s ease; }
@@ -1419,6 +1426,8 @@ body.vt .vt-app .vt-saved-trip__icon-button--danger:hover {
 
 /* Bottom navigation remains metadata-sized rather than adopting CTA sizing. */
 body.vt .vt-app .vt-nav button { font-size: 0.75rem; line-height: 1rem; font-weight: 600; }
+/* Inactive tabs one step darker than muted text (about 4.5:1 → 7:1); the active tab keeps its tint and indicator. */
+.vt-app .vt-nav button:not(.is-active) { color: var(--ink-2); }
 
 /* Preferences: compact chips, clear month states and a deliberate destructive action. */
 body.vt .vt-app .vt-selected-airport {
@@ -1459,6 +1468,9 @@ body.vt .vt-app .vt-selected-airport button:focus-visible {
 }
 body.vt .vt-app .vt-selected-airport button:focus-visible { box-shadow: 0 0 0 3px var(--tint-2); }
 body.vt .vt-app .vt-selected-airport button:active { transform: scale(.92); }
+/* The remove "×" stays small visually but gets a 44px touch area. */
+body.vt .vt-app .vt-selected-airport button { position: relative; }
+body.vt .vt-app .vt-selected-airport button::after { content: ""; position: absolute; inset: -6px; }
 
 body.vt .vt-app .vt-month-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
 body.vt .vt-app .vt-month-chip {
@@ -2209,3 +2221,6 @@ body.vt .vt-app :is(.vt-hero__title, h1, h2, .vt-page-title, .vt-countdown-card_
 
 /* Form controls never go below 16px: iOS Safari zooms the page when a smaller field is focused. */
 .vt-app :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea) { font-size: max(16px, 1rem); }
+
+/* Long titles break into even lines ("Prague City Break - / 15th Birthday", not "… Break - / 15th Birthday" with a stray word). */
+.vt-app :is(.vt-hero__title, .vt-page-title, h2) { text-wrap: balance; }
