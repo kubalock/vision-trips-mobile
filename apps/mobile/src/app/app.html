@@ -32,7 +32,6 @@
         </div>
       </div>
       @if (showNotifications()) {
-        <div class="vt-notifications-backdrop" aria-hidden="true" (click)="closeNotifications()"></div>
         <section id="customer-notifications" class="vt-notifications" role="dialog" aria-modal="false" aria-labelledby="customer-notifications-title">
           <header class="vt-notifications__header"><div><h2 id="customer-notifications-title" tabindex="-1">Notifications</h2><p>Updates and reminders for this trip</p></div><button type="button" class="vt-notifications__close" aria-label="Close notifications" (click)="closeNotifications()"><vt-icon name="close" [size]="20" /></button></header>
           <label class="vt-notifications__device"><input type="checkbox" [checked]="deviceNotificationsEnabled()" (change)="toggleDeviceNotifications($event)"><span class="vt-notifications__switch" aria-hidden="true"><span></span></span><span class="vt-notifications__device-copy"><strong>Device notifications</strong><span>Optional alerts on this phone or browser. You can change this permission in device settings.</span></span></label>
@@ -42,6 +41,8 @@
       }
     </div>
   </header>
+  <!-- Outside the header: its backdrop-filter would otherwise confine this fixed backdrop to the header's own box. -->
+  @if (showNotifications()) { <div class="vt-notifications-backdrop" aria-hidden="true" (click)="closeNotifications()"></div> }
   <main id="main-content" class="vt-wrap vt-main" [class.vt-main--home]="displayedTrip() && activeView() === 'home'" [class.vt-main--itinerary]="displayedTrip() && activeView() === 'itinerary'" [class.vt-main--payments]="displayedTrip() && activeView() === 'payments'" [class.vt-main--documents]="displayedTrip() && activeView() === 'documents'" [class.vt-main--help]="displayedTrip() && activeView() === 'help'" [class.vt-main--account]="displayedTrip() && activeView() === 'account'" [class.vt-main--trips]="showTripLibrary()" [class.vt-main--entry]="!displayedTrip() && !showTripLibrary()" tabindex="-1">
     <p class="vt-sr-only" role="status" aria-live="polite">{{ switchNotice() }}</p>
     @if (switchNotice() && !invitationToken()) {
@@ -142,7 +143,7 @@
                 @if (acceptanceUseOtherEmail()) {
                   <label for="acceptance-email"><span>Receipt email (for the signer)</span><input id="acceptance-email" type="email" autocomplete="email" maxlength="254" [value]="acceptanceEmail()" (input)="updateAcceptanceEmail($event)" aria-describedby="acceptance-email-note"></label>
                 }
-                <label class="vt-accept-item__confirm" for="acceptance-agree">
+                <label class="vt-accept-consent" for="acceptance-agree">
                   <input id="acceptance-agree" type="checkbox" [checked]="acceptanceAgreed()" (change)="toggleAcceptanceAgreed($event)">
                   <span>I confirm the traveller names and details are correct, and I accept this quotation and its booking conditions, including the cancellation terms.</span>
                 </label>
@@ -379,8 +380,9 @@
       </section>
     }
   </main>
+  <!-- Inside .vt-app so the scoped .vt-app styles (and brand colours) apply. -->
+  @if (openVideo(); as video) { <vt-video-viewer [video]="video" (closed)="openVideo.set(null)" /> }
+  @if (displayedTrip() && activeView() !== 'help' && !openVideo()) {
+    <button type="button" class="vt-message-fab" (click)="messageAgent()"><vt-icon name="message" [size]="18" /> Message {{ trip()?.agent?.name?.split(' ')?.[0] || 'us' }}</button>
+  }
 </div>
-@if (openVideo(); as video) { <vt-video-viewer [video]="video" (closed)="openVideo.set(null)" /> }
-@if (trip() && activeView() !== 'help' && !openVideo()) {
-  <button type="button" class="vt-message-fab" (click)="messageAgent()"><vt-icon name="message" [size]="18" /> Message {{ trip()?.agent?.name?.split(' ')?.[0] || 'us' }}</button>
-}

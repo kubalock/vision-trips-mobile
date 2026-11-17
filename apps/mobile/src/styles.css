@@ -1880,6 +1880,9 @@ body.vt .vt-app .vt-account-danger button:active { transform: scale(.97); }
 .vt-app .vt-accept-signature label { display: grid; gap: 6px; color: var(--ink-2); font-size: .8rem; font-weight: 650; }
 .vt-app .vt-accept-signature input { width: 100%; min-height: 48px; padding: 12px 14px; border: 1.5px solid var(--line-2); border-radius: var(--r-s); background: var(--surface); color: var(--ink); font-size: .95rem; }
 .vt-app .vt-accept-signature input:focus { border-color: var(--vt-accent); outline: none; box-shadow: 0 0 0 3px var(--tint-2); }
+/* The consent tick: a real 22px checkbox beside its sentence (not the full-width text-input style above). */
+.vt-app .vt-accept-signature .vt-accept-consent { display: flex; grid-column: 1 / -1; align-items: flex-start; gap: 12px; min-height: 44px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--ink); font-size: .86rem; font-weight: 650; line-height: 1.45; cursor: pointer; }
+.vt-app .vt-accept-signature .vt-accept-consent input { flex: 0 0 auto; width: 22px; height: 22px; min-height: 0; margin: 0; padding: 0; border: 0; box-shadow: none; accent-color: var(--vt-accent); cursor: pointer; }
 .vt-app :is(.vt-accept-card__submit, .vt-accept-card__secondary) { display: inline-flex; align-items: center; justify-content: center; gap: 9px; width: 100%; min-height: 50px; padding: 11px 20px; border-radius: var(--r-pill); font-size: .9rem; font-weight: 800; cursor: pointer; transition: filter .18s ease, transform .12s ease; }
 .vt-app .vt-accept-card__submit { border: 1px solid var(--accent-action); background: var(--accent-action); color: var(--accent-action-ink); box-shadow: 0 8px 20px color-mix(in srgb, var(--accent-action) 22%, transparent); }
 .vt-app .vt-accept-card__submit:hover:not(:disabled) { filter: brightness(.9); }
@@ -1992,7 +1995,8 @@ body.vt .vt-app .vt-account-danger__icon { width: 40px; height: 40px; }
   animation: vt-notifications-in .16s ease-out;
 }
 .vt-app .vt-top .vt-notifications .vt-notifications__list { max-height: none; overflow: visible; }
-.vt-app .vt-notifications-backdrop { position: fixed; inset: 0; z-index: 1; background: transparent; }
+/* A sibling of the sticky header (z 40): covers the page and the message button, leaves the header and panel above it. */
+.vt-app .vt-notifications-backdrop { position: fixed; inset: 0; z-index: 39; background: transparent; }
 .vt-app .vt-notifications__header h2:focus { outline: none; }
 @keyframes vt-notifications-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 @media (max-width: 639px) {
@@ -2033,6 +2037,8 @@ body.vt .vt-app .vt-account-danger__icon { width: 40px; height: 40px; }
 .vt-app .vt-quick-message { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin: 14px 0; padding: 12px 14px; border-radius: var(--r); background: var(--tint); color: var(--ink-2); }
 .vt-app .vt-quick-message p { margin: 0; }
 .vt-app .vt-quick-message button, .vt-app .vt-message-fab { display: inline-flex; align-items: center; gap: 8px; }
+/* Room under the last section so the floating button never covers it at the bottom of a page. */
+.vt-app:has(> .vt-message-fab) .vt-main { padding-bottom: 88px; }
 .vt-app .vt-message-fab { position: fixed; right: max(16px, env(safe-area-inset-right)); bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 30; box-shadow: var(--shadow-card); }
 .vt-app .vt-inclusions { margin: 14px 0; padding: 4px 16px; border: 1px solid var(--card-border, var(--line)); border-radius: var(--r); background: var(--surface); }
 .vt-app .vt-inclusions summary { display: flex; align-items: center; justify-content: space-between; min-height: 48px; font-weight: 700; cursor: pointer; list-style: none; }
@@ -2153,3 +2159,6 @@ body.vt .vt-app :is(.vt-hero__title, h1, h2, .vt-page-title, .vt-countdown-card_
 
 /* Dark mode: no coloured glow under buttons, which makes light brand buttons look harsh on the dark surface. */
 :root[data-theme="dark"] .vt-app :is(.vt-primary-action, .vt-btn--primary, .vt-account-trip__action, .vt-accept-card__submit, .vt-help-send, .vt-video-card__watch, .vt-message-fab, .vt-pay__action, .vt-custom-payment__submit) { box-shadow: none; }
+
+/* Form controls never go below 16px: iOS Safari zooms the page when a smaller field is focused. */
+.vt-app :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea) { font-size: max(16px, 1rem); }
