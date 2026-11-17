@@ -117,6 +117,19 @@ describe('CustomerAccountService identity', () => {
     });
   });
 
+  it('keeps an existing list of more than ten airports when saving, but never lets it grow or take new ones', async () => {
+    const tables = world();
+    const many = ['Aberdeen Airport', 'Belfast International Airport', 'Birmingham Airport', 'Bristol Airport', 'Cardiff Airport', 'East Midlands Airport', 'Edinburgh Airport', 'Glasgow Airport', 'Leeds Bradford Airport', 'Liverpool John Lennon Airport', 'London Gatwick', 'London Heathrow'];
+    tables[BASE_A]!.Customers![GRACE]!['Preferred Departure Airport(s)'] = many;
+    const { account, airtable } = setup(tables);
+    const prefs = (preferredAirports: string[]) => ({ emailMarketing: false, smsMarketing: false, postalMarketing: false, preferredAirports, preferredMonths: [] });
+    await expect(account.update(principal(), prefs(many))).resolves.toMatchObject({ saved: true });
+    await expect(account.update(principal(), prefs(many.slice(1)))).resolves.toMatchObject({ saved: true });
+    await expect(account.update(principal(), prefs([...many.slice(1), 'Manchester Airport']))).rejects.toThrow('Remove some before adding another');
+    await expect(account.update(principal(), prefs([...many, 'Manchester Airport']))).rejects.toThrow();
+    expect(airtable.updateRecord).toHaveBeenCalledTimes(2);
+  });
+
   it('never lets one Customer on a shared Booking read or change the other’s account', async () => {
     const { account, airtable } = setup();
     const impostor = await account.account(principal({ customerRecordId: IMPOSTOR }));

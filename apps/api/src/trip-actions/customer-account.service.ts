@@ -19,6 +19,8 @@ const AIRPORTS = ['Belfast International Airport', 'Birmingham Airport', 'Bourne
  * customer-identity.ts for the full policy. The Account page lists Bookings linked to that Customer; opening one
  * issues a Booking-scoped session for the same verified Customer, without another invitation or code.
  */
+const MAX_AIRPORTS = 10;
+
 @Injectable()
 export class CustomerAccountService {
   private readonly logger = new Logger(CustomerAccountService.name);
@@ -46,7 +48,10 @@ export class CustomerAccountService {
     if (typeof input.emailMarketing !== 'boolean' || typeof input.smsMarketing !== 'boolean' || typeof input.postalMarketing !== 'boolean') throw new BadRequestException('Choose each contact preference.');
     const identity = await resolveCustomerIdentity(this.airtable, principal);
     const currentAirports = accountPreferences(identity.root, identity.members).preferredAirports;
-    const airports = cleanList(input.preferredAirports, 10, [...AIRPORTS, ...currentAirports], 'departure airports');
+    // Ten is the limit for new choices. A customer whose record already holds more (set by staff in Airtable) can keep
+    // or trim that list, so saving a marketing switch never fails over airports they didn't touch; adding to it can't.
+    const airports = cleanList(input.preferredAirports, Math.max(MAX_AIRPORTS, currentAirports.length), [...AIRPORTS, ...currentAirports], 'departure airports');
+    if (airports.length > MAX_AIRPORTS && airports.some((airport) => !currentAirports.includes(airport))) throw new BadRequestException(`Choose up to ${MAX_AIRPORTS} departure airports. Remove some before adding another.`);
     const months = cleanList(input.preferredMonths, 12, MONTHS, 'travel months');
     const preferences: CustomerPreferences = { emailMarketing: input.emailMarketing, smsMarketing: input.smsMarketing, postalMarketing: input.postalMarketing, preferredAirports: airports, preferredMonths: months };
     // Only the verified Customer and records explicitly grouped with it; never records that merely share an email.

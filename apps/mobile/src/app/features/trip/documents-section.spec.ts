@@ -18,3 +18,25 @@ describe('DocumentsSection wording', () => {
     expect(section().showDescription(doc('Booking Confirmation (Letter)', ''))).toBe(false);
   });
 });
+
+describe('DocumentsSection download', () => {
+  const ready = (id: string, title: string): TripDocument => ({ id, title, description: '', kind: 'confirmation', url: null, offlineAvailable: true, status: 'ready', downloadAction: id, version: '1', updatedAt: '2026-11-17', mimeType: 'application/pdf' });
+
+  it('downloads only from the labelled button, never from tapping the card', () => {
+    const fixture = TestBed.createComponent(DocumentsSection);
+    fixture.componentRef.setInput('documents', [ready('quote', 'Your quotation (PDF)'), ready('guarantee', 'Safe Seat Plan guarantee')]);
+    fixture.componentRef.setInput('statuses', { guarantee: 'saved' });
+    const downloads: string[] = [];
+    fixture.componentInstance.download.subscribe((document) => downloads.push(document.id));
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    const cards = [...element.querySelectorAll<HTMLElement>('.vt-doc-button')];
+    expect(cards.every((card) => card.tagName === 'DIV')).toBe(true);
+    cards[0]!.querySelector('strong')!.click();
+    expect(downloads).toEqual([]);
+    const buttons = [...element.querySelectorAll<HTMLButtonElement>('.vt-doc-download')];
+    expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual(['Download Your quotation', 'Open Safe Seat Plan guarantee']);
+    buttons[0]!.click();
+    expect(downloads).toEqual(['quote']);
+  });
+});

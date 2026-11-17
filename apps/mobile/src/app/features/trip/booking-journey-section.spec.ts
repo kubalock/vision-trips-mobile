@@ -50,11 +50,13 @@ describe('BookingJourneySection quotation layouts', () => {
   const alternatives = (count: number): RelatedQuotationSummary[] => [quotations[0]!, ...Array.from({ length: count }, (_, index) => ({
     ...quotations[1]!, comparisonId: `alt-${index}`, name: `Option ${index}`, nights: 7, perPerson: 749.5,
   }))];
+  let last: { detectChanges: () => void } | null = null;
   const render = (related: RelatedQuotationSummary[]) => {
     const fixture = TestBed.createComponent(BookingJourneySection);
     fixture.componentRef.setInput('journey', journey);
     fixture.componentRef.setInput('related', related);
     fixture.detectChanges();
+    last = fixture;
     return fixture.nativeElement as HTMLElement;
   };
 
@@ -64,6 +66,8 @@ describe('BookingJourneySection quotation layouts', () => {
     expect(three.querySelectorAll('.vt-quotation-card')).toHaveLength(4);
     expect(three.querySelector('.vt-quotation-grid--pair')).toBeNull();
     const many = render(alternatives(5));
+    many.querySelector<HTMLButtonElement>('.vt-quotation-compare__more')!.click();
+    last!.detectChanges();
     expect(many.querySelectorAll('.vt-quotation-row')).toHaveLength(6);
     expect(many.querySelector('.vt-quotation-card')).toBeNull();
     expect(many.textContent).toContain('7 nights');
@@ -72,6 +76,36 @@ describe('BookingJourneySection quotation layouts', () => {
     const unpriced = render([quotations[0]!, { ...quotations[1]!, total: null }]);
     expect(unpriced.textContent).toContain('Price to be confirmed');
     expect(unpriced.querySelectorAll('.vt-quotation-card')[1]?.textContent).not.toContain('£0');
+  });
+});
+
+describe('BookingJourneySection on Home', () => {
+  it('starts a long list with the open quotation and two others, and shows the rest on request', () => {
+    const related = [{ ...quotations[1]!, comparisonId: 'a', name: 'Option A' }, quotations[0]!, ...Array.from({ length: 4 }, (_, index) => ({ ...quotations[1]!, comparisonId: `b-${index}`, name: `Option B${index}` }))];
+    const fixture = TestBed.createComponent(BookingJourneySection);
+    fixture.componentRef.setInput('journey', journey);
+    fixture.componentRef.setInput('related', related);
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    const rows = () => [...element.querySelectorAll('.vt-quotation-row')];
+    expect(rows()).toHaveLength(3);
+    expect(rows().some((row) => row.classList.contains('is-current'))).toBe(true);
+    const more = element.querySelector<HTMLButtonElement>('.vt-quotation-compare__more')!;
+    expect(more.textContent).toContain('Show all 6 quotations');
+    more.click(); fixture.detectChanges();
+    expect(rows()).toHaveLength(6);
+    expect(element.querySelector('.vt-quotation-compare__more')).toBeNull();
+  });
+
+  it('draws only the blocks it is given, so Home can place each one', () => {
+    const fixture = TestBed.createComponent(BookingJourneySection);
+    fixture.componentRef.setInput('journey', journey);
+    fixture.componentRef.setInput('related', quotations);
+    fixture.componentRef.setInput('blocks', ['compare']);
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('.vt-quotation-compare')).not.toBeNull();
+    expect(element.querySelector('.vt-booking-journey-card')).toBeNull();
   });
 });
 

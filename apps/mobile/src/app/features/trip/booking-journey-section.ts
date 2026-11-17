@@ -1,12 +1,15 @@
-import { Component, computed, input, output } from '@angular/core';
+import { Component, computed, input, output, signal } from '@angular/core';
 import type { BookingJourney, RelatedQuotationSummary, TripStage } from '@vision-trips/contracts';
 import { VtIcon } from '../../shared/lucide-icon';
 import { EuropeanDatePipe } from '../../shared/european-date.pipe';
+
+export type BookingJourneyBlock = 'journey' | 'tailor' | 'compare' | 'faq';
 
 @Component({
   selector: 'app-booking-journey-section',
   imports: [EuropeanDatePipe, VtIcon],
   template: `
+    @if (has('journey')) {
     <section class="vt-booking-journey-card" aria-labelledby="booking-journey-title">
       <header class="vt-booking-journey-card__header"><p>Your booking journey</p><h2 id="booking-journey-title">{{ returned() ? 'From booking to home' : 'What happens next' }}</h2></header>
       <ol class="vt-booking-timeline">
@@ -21,8 +24,9 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
         }
       </ol>
     </section>
+    }
 
-    @if (journey().suggestedExtras.length) {
+    @if (has('tailor') && journey().suggestedExtras.length) {
       <section class="vt-tailor-section" aria-labelledby="tailor-trip-title">
         <header class="vt-lower-section__header"><p>Tailor your trip</p><h2 id="tailor-trip-title">You might also like</h2></header>
         <div class="vt-tailor-grid">
@@ -37,7 +41,7 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
       </section>
     }
 
-    @if (related().length > 1) {
+    @if (has('compare') && related().length > 1) {
       <section class="vt-quotation-compare" aria-labelledby="quotation-compare-title">
         <header class="vt-quotation-compare__header">
           <p class="vt-quotation-compare__eyebrow">Your quotations</p>
@@ -47,7 +51,7 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
         @if (layout() === 'rows') {
           <!-- Four or more alternatives: compact comparison rows that stack on a phone. -->
           <ul class="vt-quotation-rows" role="list">
-            @for (quote of related(); track quote.comparisonId) {
+            @for (quote of visibleQuotes(); track quote.comparisonId) {
               <li class="vt-quotation-row" [class.is-current]="quote.current">
                 <div class="vt-quotation-row__name"><strong>{{ quote.name }}</strong>@if (quote.current) { <span class="vt-quotation-card__current">Open now</span> }</div>
                 <span>{{ (quote.departureDate | europeanDate) || 'Dates to be confirmed' }}@if (nights(quote) !== null) { · {{ nights(quote) }} {{ nights(quote) === 1 ? 'night' : 'nights' }} }</span>
@@ -58,6 +62,9 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
               </li>
             }
           </ul>
+          @if (visibleQuotes().length < related().length) {
+            <button type="button" class="vt-quotation-compare__more" (click)="showAllQuotes.set(true)">Show all {{ related().length }} quotations <vt-icon name="chevron-down" [size]="16" /></button>
+          }
         } @else {
         <div class="vt-quotation-grid" [class.vt-quotation-grid--pair]="layout() === 'pair'">
           @for (quote of related(); track quote.comparisonId) {
@@ -95,7 +102,7 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
       </section>
     }
 
-    @if (journey().faqs.length) {
+    @if (has('faq') && journey().faqs.length) {
       <section class="vt-faq-card" aria-labelledby="trip-faq-title">
         <header class="vt-lower-section__header"><p>Based on this booking</p><h2 id="trip-faq-title">Questions you may have</h2></header>
         <div class="vt-faq-list">
@@ -111,12 +118,23 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
   `,
 })
 export class BookingJourneySection {
+  /** Which of the four blocks this instance draws, so Home can place each where it fits the story. All by default. */
+  readonly blocks = input<readonly BookingJourneyBlock[]>(['journey', 'tailor', 'compare', 'faq']);
+  protected has(block: BookingJourneyBlock): boolean { return this.blocks().includes(block); }
   readonly journey = input.required<BookingJourney>();
   /** The trip's stage; after return the card looks back ("From booking to home") instead of ahead. */
   readonly stage = input<TripStage | null>(null);
   protected readonly returned = computed(() => ['home', 'past', 'closed'].includes(this.stage() ?? ''));
   readonly related = input<RelatedQuotationSummary[]>([]);
   /** One alternative: side by side with this quotation; two or three: cards; four or more: comparison rows. */
+  protected readonly showAllQuotes = signal(false);
+  /** A long list of quotations starts with the open one and two others, so it doesn't take over Home. */
+  protected readonly visibleQuotes = computed(() => {
+    const all = this.related();
+    if (this.showAllQuotes() || this.layout() !== 'rows') return all;
+    const others = all.filter((quote) => !quote.current).slice(0, 2);
+    return all.filter((quote) => quote.current || others.includes(quote));
+  });
   protected readonly layout = computed(() => { const others = this.related().filter((quote) => !quote.current).length; return others <= 1 ? 'pair' : others <= 3 ? 'cards' : 'rows'; });
   /**
    * A planned date that has already passed on a step that isn't done yet (a late quotation, an unticked task) would

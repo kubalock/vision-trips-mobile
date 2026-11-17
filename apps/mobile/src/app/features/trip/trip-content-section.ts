@@ -1,11 +1,11 @@
 import { Component, computed, input, output } from '@angular/core';
-import { formatPoints, type TripSnapshot, type TripVideo } from '@vision-trips/contracts';
+import type { TripSnapshot, TripVideo } from '@vision-trips/contracts';
 import { VtIcon } from '../../shared/lucide-icon';
 
 /**
  * Quotation and booking content from PHP 2.0: the agent's walkthrough and video message as compact cards (nothing
- * loads until Watch), what's included and not included, a quick way to message the agent near the top of a
- * quotation, and a second "Accept and pay deposit" beside the price so nobody has to scroll back up.
+ * loads until Watch), what's included and not included, and a quick way to message the agent near the top of a
+ * quotation. The price and "Accept and pay deposit" live in the Payments section only.
  */
 @Component({
   selector: 'app-trip-content-section',
@@ -44,47 +44,14 @@ import { VtIcon } from '../../shared/lucide-icon';
         </details>
       }
     }
-
-    @if (trip().quotation.canAccept && trip().payments; as payments) {
-      <section class="vt-accept-strip" aria-label="Price and acceptance">
-        <div>
-          <span>Total price</span>
-          <strong>{{ money(payments.total, payments.currency) }}</strong>
-          @if (perPerson() !== null) { <small>{{ money(perPerson(), payments.currency) }} per person</small> }
-          @if (loyaltyLine(); as line) { <small class="vt-accept-strip__loyalty">★ {{ line }}</small> }
-        </div>
-        <div class="vt-accept-strip__actions">
-          <button type="button" class="vt-primary-action" (click)="accept.emit()">Accept and pay deposit</button>
-          <button type="button" class="vt-link-button" (click)="message.emit()">Ask a question</button>
-        </div>
-      </section>
-    }
   `,
 })
 export class TripContentSection {
   readonly trip = input.required<TripSnapshot>();
   readonly watch = output<TripVideo>();
   readonly message = output<void>();
-  readonly accept = output<void>();
 
   protected readonly isQuote = computed(() => this.trip().stage === 'quote');
   protected readonly videos = computed(() => [this.trip().content?.walkthrough, this.trip().content?.videoMessage].filter((video): video is TripVideo => Boolean(video)));
   protected readonly agentLabel = computed(() => this.trip().agent?.name?.split(' ')[0] || this.trip().experience.agentName?.split(' ')[0] || null);
-  /** Shown only with more than one traveller; the booking's own figure first, never an invented 0. */
-  protected readonly perPerson = computed(() => {
-    const payments = this.trip().payments;
-    const travellers = this.trip().summary.totalTravellers;
-    if (!payments || travellers < 2) return null;
-    if (payments.perPerson !== null && payments.perPerson !== undefined) return payments.perPerson;
-    return payments.total !== null && payments.total > 0 ? Math.round(payments.total / travellers * 100) / 100 : null;
-  });
-  protected readonly loyaltyLine = computed(() => {
-    const loyalty = this.trip().loyalty;
-    return loyalty?.pointsEarned ? `Book with us and earn ${formatPoints(loyalty.pointsEarned)}` : null;
-  });
-
-  protected money(amount: number | null | undefined, currency: string): string {
-    if (amount === null || amount === undefined) return 'Unavailable';
-    try { return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(amount); } catch { return `${amount.toFixed(2)} ${currency}`; }
-  }
 }

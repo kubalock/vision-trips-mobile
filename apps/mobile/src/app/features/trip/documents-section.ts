@@ -35,13 +35,8 @@ interface DocumentGroup {
             @for (document of group.documents; track document.id) {
               <li>
                 @if (document.downloadAction) {
-                  <button
-                    type="button"
-                    class="vt-doc-button"
-                    [disabled]="downloadingId() === document.id"
-                    [attr.aria-label]="'Download ' + document.title"
-                    (click)="download.emit(document)"
-                  >
+                  <!-- The card is information; only the labelled button downloads, so reading the list never starts a download. -->
+                  <div class="vt-doc-button">
                     <span class="vt-doc-button__icon"><vt-icon name="file" [size]="21" /></span>
                     <span class="vt-doc-button__copy">
                       <span class="vt-doc-button__title">
@@ -58,14 +53,21 @@ interface DocumentGroup {
                         }
                       </span>
                     </span>
-                    <span class="vt-doc-button__action" aria-hidden="true">
+                    <button
+                      type="button"
+                      class="vt-doc-download"
+                      [disabled]="downloadingId() === document.id"
+                      [attr.aria-label]="actionLabel(document) + ' ' + displayTitle(document)"
+                      [title]="actionLabel(document)"
+                      (click)="download.emit(document)"
+                    >
                       @if (downloadingId() === document.id) {
                         <vt-icon class="animate-spin" name="loader" [size]="19" />
                       } @else {
-                        <vt-icon name="download" [size]="19" />
+                        <vt-icon [name]="statuses()[document.id] === 'saved' ? 'file' : 'download'" [size]="19" />
                       }
-                    </span>
-                  </button>
+                    </button>
+                  </div>
                   @if (failure()?.id === document.id) {
                     <section class="vt-status-card vt-retry" data-tone="warn" role="alert"><span class="vt-status-card__icon" aria-hidden="true"><vt-icon name="alert" [size]="20" /></span><div class="vt-status-card__copy"><strong>{{ document.title }} didn’t download</strong><p>{{ failure()?.message }}</p><button type="button" class="vt-status-card__action" [disabled]="downloadingId() === document.id" (click)="download.emit(document)">Try again</button></div></section>
                   }
@@ -126,6 +128,11 @@ export class DocumentsSection {
   showDescription(document: TripDocument): boolean {
     const plain = (text: string) => text.toLowerCase().replace(/\([^)]*\)/g, ' ').replace(/\byour\b/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
     return Boolean(document.description?.trim()) && plain(document.description) !== plain(document.title);
+  }
+
+  /** A saved copy opens from the device; anything else is downloaded first. */
+  actionLabel(document: TripDocument): string {
+    return this.statuses()[document.id] === 'saved' ? 'Open' : 'Download';
   }
 
   fileType(document: TripDocument): string {

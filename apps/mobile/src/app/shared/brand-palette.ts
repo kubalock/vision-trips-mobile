@@ -22,11 +22,13 @@ export function brandPalette(brandColor: string | null | undefined, theme: Brand
   const surface = SURFACE[theme];
   const brand = normalizeHex(brandColor) ?? DEFAULT_BRAND;
   const towards = theme === 'light' ? '#000000' : '#ffffff';
-  const accent = adjustUntil(brand, towards, (color) => contrast(color, surface) >= 3);
+  // Dark theme lifts the brand along its own hue: mixing a navy with white would land on a flat grey (#667180).
+  const readable = (good: (color: string) => boolean) => theme === 'dark' ? lightenInHue(brand, good) : adjustUntil(brand, towards, good);
+  const accent = readable((color) => contrast(color, surface) >= 3);
   const tint = mix(accent, surface, theme === 'light' ? 0.09 : 0.14);
   const tint2 = mix(accent, surface, theme === 'light' ? 0.16 : 0.24);
   // Accent text also sits on its own tints (status pills, the current journey step), so it must pass there too.
-  const accentText = adjustUntil(brand, towards, (color) => [surface, tint, tint2].every((background) => contrast(color, background) >= 4.5));
+  const accentText = readable((color) => [surface, tint, tint2].every((background) => contrast(color, background) >= 4.5));
   // Dark theme: like the default teal (#43B7A7 on near-black ink), buttons use a light version of the brand with dark text.
   // Dark theme buttons: the brand's own hue made light enough for dark text (lightening in HSL keeps it vivid; mixing
   // with white would turn a navy or deep green into a flat grey that reads as disabled). A brand with almost no colour
@@ -75,6 +77,23 @@ function fromHsl(hue: number, saturation: number, lightness: number): string {
   const m = lightness - chroma / 2;
   const [r, g, b] = hue < 60 ? [chroma, x, 0] : hue < 120 ? [x, chroma, 0] : hue < 180 ? [0, chroma, x] : hue < 240 ? [0, x, chroma] : hue < 300 ? [x, 0, chroma] : [chroma, 0, x];
   return `#${[r, g, b].map((value) => Math.round((value + m) * 255).toString(16).padStart(2, '0')).join('')}`;
+}
+
+/**
+ * The lightest-needed version of the brand's own hue that passes `good`. Saturation is held to 35–65%, so a deep navy
+ * reads as blue rather than grey and a vivid brand doesn't glare on the dark surface. Colourless brands (black, grey)
+ * have no hue to keep and are mixed towards white as before.
+ */
+function lightenInHue(brand: string, good: (color: string) => boolean): string {
+  if (good(brand)) return brand;
+  const [hue, saturation, lightness] = hsl(brand);
+  if (saturation < 0.12) return adjustUntil(brand, '#ffffff', good);
+  const vivid = Math.min(0.65, Math.max(saturation, 0.35));
+  for (let next = lightness; next <= 0.96; next += 0.02) {
+    const candidate = fromHsl(hue, vivid, next);
+    if (good(candidate)) return candidate;
+  }
+  return adjustUntil(brand, '#ffffff', good);
 }
 
 function adjustUntil(color: string, towards: string, good: (color: string) => boolean): string {

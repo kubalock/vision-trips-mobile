@@ -24,11 +24,6 @@ describe('TripContentSection', () => {
     expect(element.querySelector('video, iframe')).toBeNull();
   });
 
-  it('puts a second "Accept and pay deposit" beside the price on an acceptable quotation', () => {
-    const element = render(trip({ quotation: { status: 'available', canAccept: true }, payments: { currency: 'GBP', total: 3000, paid: 0, balance: 3000, items: [], customPayments: { enabled: false, minimum: 0, maximum: 0 } } }));
-    expect(element.querySelector('.vt-accept-strip')?.textContent).toContain('Accept and pay deposit');
-    expect(element.textContent).toContain('£1,500.00 per person');
-  });
 });
 
 describe('video embeds', () => {

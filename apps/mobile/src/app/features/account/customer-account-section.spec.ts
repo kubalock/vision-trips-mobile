@@ -31,6 +31,17 @@ describe('CustomerAccountSection preferences', () => {
     expect(section.draft()).toMatchObject({ smsMarketing: true, preferredAirports: ['Manchester'] });
   });
 
+  it('explains a saved list of more than ten airports and still saves other changes with it intact', () => {
+    const many = Array.from({ length: 12 }, (_, index) => `Airport ${index + 1}`);
+    const { fixture, section, saved, element, saveButton } = setup(account({ preferredAirports: many }));
+    expect(element.querySelector('#airport-limit-hint')?.textContent).toContain('You have 12 airports saved');
+    expect(element.querySelector<HTMLInputElement>('.vt-airport-search input')?.disabled).toBe(true);
+
+    section.channel('emailMarketing', checked(true)); fixture.detectChanges();
+    saveButton().closest('form')!.dispatchEvent(new Event('submit'));
+    expect(saved.at(-1)?.preferredAirports).toEqual(many);
+  });
+
   it('only allows saving when something changed, and not while a save is running', () => {
     const { fixture, section, saved, saveButton } = setup();
     expect(saveButton().disabled).toBe(true);
@@ -143,5 +154,24 @@ describe('CustomerAccountSection trip cards', () => {
     expect(current.querySelector('button')).toBeNull();
     expect(element.querySelector('.vt-account-trip__ref')?.getAttribute('title')).toBe('TTA-GREGG-0000429G');
   });
-});
 
+  it('shows the open trip and the next two, with a button for the rest', () => {
+    const trips = [card({ accountTripId: 'cur', current: true }), ...Array.from({ length: 6 }, (_, index) => card({ accountTripId: `t${index}`, name: `Trip ${index}` }))];
+    const { fixture, element } = setup({ ...account(), trips } as unknown as CustomerAccount);
+    fixture.detectChanges();
+    const shown = () => element.querySelectorAll('.vt-account-trip');
+    expect(shown()).toHaveLength(3);
+    expect(element.querySelector('.vt-account-trip--current')).not.toBeNull();
+    const more = element.querySelector<HTMLButtonElement>('.vt-account-trips__more')!;
+    expect(more.textContent).toContain('Show all 7 trips');
+    more.click(); fixture.detectChanges();
+    expect(shown()).toHaveLength(7);
+    expect(element.querySelector('.vt-account-trips__more')).toBeNull();
+  });
+
+  it('has no button when there are three trips or fewer', () => {
+    const { fixture, element } = setup({ ...account(), trips: [card({ accountTripId: 'a' }), card({ accountTripId: 'b' })] } as unknown as CustomerAccount);
+    fixture.detectChanges();
+    expect(element.querySelector('.vt-account-trips__more')).toBeNull();
+  });
+});

@@ -37,6 +37,19 @@ describe('brandPalette', () => {
     expect(gg - Math.max(gr, gb)).toBeGreaterThan(40);
   });
 
+  it('keeps a navy brand blue, not grey, for dark-mode accents and links', () => {
+    const channels = (hex: string) => [1, 3, 5].map((offset) => parseInt(hex.slice(offset, offset + 2), 16));
+    const navy = brandPalette('#00122c', 'dark');
+    for (const color of [navy.accent, navy.accentText]) {
+      const [r, , b] = channels(color);
+      expect(b - r).toBeGreaterThan(50);
+    }
+    expect(contrast(navy.accent, '#1b1e20')).toBeGreaterThanOrEqual(3);
+    expect(contrast(navy.accentText, '#1b1e20')).toBeGreaterThanOrEqual(4.5);
+    // A brand that already passes is left exactly as it is.
+    expect(brandPalette('#7dd3fc', 'dark').accent).toBe('#7dd3fc');
+  });
+
   it('keeps accent text readable on its own tints (status pills, current step)', () => {
     for (const theme of ['light', 'dark'] as const) for (const brand of ['#00122c', '#0F766E', '#FFE14D', '#777777']) {
       const palette = brandPalette(brand, theme);

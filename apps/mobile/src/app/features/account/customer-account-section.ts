@@ -1,4 +1,4 @@
-import { Component, computed, effect, input, linkedSignal, output, untracked } from '@angular/core';
+import { Component, computed, effect, input, linkedSignal, output, signal, untracked } from '@angular/core';
 import { formatPoints, type LoyaltyTransactionType, type CustomerAccount, type CustomerAccountTrip, type CustomerPreferences } from '@vision-trips/contracts';
 import { stageLabel, tripDateRange } from '../../shared/trip-format';
 import { NgTemplateOutlet } from '@angular/common';
@@ -83,7 +83,7 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
           </header>
           <p class="vt-account-intro">Your trips with {{ brandName() || 'this travel company' }}, for the customer verified as {{ data.emailHint }}. Trips in your account aren’t saved on this device until you open them.</p>
           <div class="vt-account-trips">
-            @for (trip of data.trips; track trip.accountTripId) {
+            @for (trip of visibleTrips(data.trips); track trip.accountTripId) {
               <article class="vt-account-trip" [class.vt-account-trip--current]="trip.current">
                 @if (trip.heroImageUrl) { <img class="vt-account-trip__image" [src]="trip.heroImageUrl" alt="" loading="lazy" decoding="async" (error)="$any($event.target).style.display = 'none'" /> }
                 <div class="vt-account-trip__body">
@@ -107,6 +107,9 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
               </article>
             } @empty { <p class="vt-account-empty">No linked trips were found.</p> }
           </div>
+          @if (data.trips.length > visibleTrips(data.trips).length) {
+            <button type="button" class="vt-account-trips__more" (click)="showAllTrips.set(true)">Show all {{ data.trips.length }} trips <vt-icon name="chevron-down" [size]="16" /></button>
+          }
         </section>
 
         @let prefs = draft()!;
@@ -148,7 +151,12 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
             </header>
             <fieldset class="vt-account-fieldset">
               <legend>Preferred departure airports</legend>
-              <p class="vt-account-field-hint">Search and choose up to ten airports.</p>
+              @let airportCount = prefs.preferredAirports.length;
+              <p class="vt-account-field-hint" id="airport-limit-hint">
+                @if (airportCount > 10) { You have {{ airportCount }} airports saved, more than the usual ten. They stay as they are when you save. To add a different one, remove some until you have fewer than ten. }
+                @else if (airportCount === 10) { Ten chosen, the most you can add. Remove one to choose another. }
+                @else { Search and choose up to ten airports. }
+              </p>
               <div class="vt-airport-combobox">
                 <div class="vt-airport-search">
                   <vt-icon name="plane" [size]="18" />
@@ -156,11 +164,12 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
                     type="search"
                     role="combobox"
                     aria-label="Search departure airports"
+                    aria-describedby="airport-limit-hint"
                     aria-autocomplete="list"
                     aria-controls="airport-options"
                     [attr.aria-expanded]="airportSearchOpen"
                     [value]="airportQuery"
-                    [placeholder]="prefs.preferredAirports.length >= 10 ? 'Maximum of 10 selected' : 'Search airports…'"
+                    [placeholder]="airportCount > 10 ? 'More than ten saved' : airportCount === 10 ? 'Remove one to add another' : 'Search airports…'"
                     [disabled]="prefs.preferredAirports.length >= 10"
                     (focus)="airportSearchOpen = true"
                     (input)="setAirportQuery($event)"
@@ -222,6 +231,9 @@ export class CustomerAccountSection {
   /** The saved trip's session has ended: show how to sign in again instead of account details. */
   readonly signedOut = input(false);
   readonly help = output<void>();
+  /** The open trip and the next two (the API sorts current, upcoming, quotations, then past); the rest on request. */
+  protected readonly showAllTrips = signal(false);
+  protected visibleTrips(trips: CustomerAccountTrip[]): CustomerAccountTrip[] { return this.showAllTrips() ? trips : trips.slice(0, 3); }
   readonly account = input<CustomerAccount | null>(null); readonly loading = input(false); readonly saving = input(false); readonly savedNotice = input(''); readonly openingTripId = input<string | null>(null); readonly error = input('');
   readonly save = output<CustomerPreferences>(); readonly openTrip = output<string>(); readonly signOut = output<void>(); readonly removeAll = output<void>(); readonly retry = output<void>();
   /** Public trip IDs saved in My Trips, so the list can tell "saved on this device" from "available in your account". */

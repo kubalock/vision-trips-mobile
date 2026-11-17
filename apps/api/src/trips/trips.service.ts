@@ -326,7 +326,7 @@ export class TripsService {
     if (accessScope === 'primary_customer') {
       if (!['quote', 'quote_expired'].includes(stage)) documents.push(document(`${tripId}:front-file`, 'Booking front file', 'Printable booking overview, travellers, itinerary and payments', 'front_file', 'front-file', versions.frontFile, sourceUpdatedAt));
       if (protection.guaranteeAvailable) documents.push(document(`${tripId}:guarantee`, 'Safe Seat Plan guarantee', 'Travel Trust Association financial guarantee certificate', 'guarantee', 'guarantee', versions.protection, sourceUpdatedAt));
-      for (const template of mapLetterTemplates(allRelated.brandTemplates, tripId)) documents.push(document(`${tripId}:letter:${template.id}`, template.name, template.subject || 'Personal letter from your travel expert', 'letter', `letter:${template.id}`, contentVersion(template, summary, travellers), sourceUpdatedAt));
+      for (const template of mapLetterTemplates(allRelated.brandTemplates, tripId).filter((letter) => letterFitsStage(letter.name, stage))) documents.push(document(`${tripId}:letter:${template.id}`, template.name, template.subject || 'Personal letter from your travel expert', 'letter', `letter:${template.id}`, contentVersion(template, summary, travellers), sourceUpdatedAt));
       for (const payment of payments?.items.filter((item) => item.status === 'paid') ?? []) {
         documents.push(document(`${tripId}:receipt:${payment.id}`, `Payment receipt · ${payment.label}`, `${payment.completedDate ?? 'Payment received'} · ${formatMoney(payment.amount, payment.currency)}`, 'receipt', `receipt:${payment.id}`, contentVersion(payment), payment.completedDate ?? sourceUpdatedAt));
       }
@@ -569,6 +569,19 @@ function mapBrandProfile(brandValue: (key: keyof typeof brandFields) => unknown,
     whyChooseHeader: safeText(brandValue('whyHeader')) || null,
     whyChooseSubheader: safeText(brandValue('whySubheader')) || null,
   };
+}
+
+/**
+ * Brand letter templates are shared by every booking, so a letter is only offered at the stage it's written for: a
+ * quotation letter while quoting, booking, amendment and schedule-change letters once booked, and a cancellation letter
+ * only on a cancelled booking. Letters whose name doesn't say (a personal note) are always offered.
+ */
+export function letterFitsStage(name: string, stage: TripSnapshot['stage']): boolean {
+  const quoting = stage === 'quote' || stage === 'quote_expired';
+  if (/cancel/i.test(name)) return stage === 'cancelled';
+  if (/quot/i.test(name)) return quoting;
+  if (/confirm|amend|schedule|balance|ticket|final|itinerary change/i.test(name)) return !quoting && stage !== 'closed';
+  return true;
 }
 
 function mapLetterTemplates(records: AirtableRecord[], tripId: string): TripSnapshot['brand']['profile']['letterTemplates'] {

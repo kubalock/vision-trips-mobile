@@ -95,8 +95,10 @@
             @if (calendarError()) { <section class="vt-status-card vt-retry" data-tone="warn" role="alert"><span class="vt-status-card__icon" aria-hidden="true"><vt-icon name="alert" [size]="20" /></span><div class="vt-status-card__copy"><strong>Calendar file not created</strong><p>{{ calendarError() }}</p><button type="button" class="vt-status-card__action" [disabled]="creatingCalendar()" (click)="downloadCalendar()">Try again</button></div></section> }
           </div>
         </article>
+        @if (currentTrip.stage === 'cancelled') { <section class="vt-section vt-notice vt-notice--bad"><p class="font-semibold">This booking has been cancelled.</p>@if (currentTrip.bookingStatus.cancellationReason) { <p class="mt-2 text-sm">{{ currentTrip.bookingStatus.cancellationReason }}</p> }</section> }
         <app-stage-experience-section [trip]="currentTrip" [external]="externalContent()" (planNext)="planNextTrip()" />
-        @if (currentTrip.bookingJourney; as journey) { <app-booking-journey-section [journey]="journey" [stage]="currentTrip.stage" [related]="relatedQuotations()" [openingId]="openingRelatedId()" (enquire)="enquireAboutExtra($event)" (open)="openRelatedQuotation($event)" /> }
+        <!-- Quotation: what you get, then the price and Accept, before anything else competes for attention. -->
+        <app-trip-content-section [trip]="currentTrip" (watch)="watchVideo($event)" (message)="messageAgent()" />
         @if (acceptanceComplete()) {
           <section class="vt-accept-card vt-accept-card--done" aria-labelledby="accept-done-title">
             <div class="vt-accept-done">
@@ -112,6 +114,7 @@
         } @else if (currentTrip.quotation.canAccept) {
           <section class="vt-accept-card" id="accept-quotation" aria-labelledby="accept-title">
             <header class="vt-lower-section__header"><p>Ready to book?</p><h2 id="accept-title">Accept this quotation</h2></header>
+            @if (currentTrip.payments; as payments) { @if (payments.total) { <p class="vt-accept-card__price"><span>Total price</span><strong>{{ money(payments.total, payments.currency) }}</strong>@if (currentTrip.summary.totalTravellers > 1 && payments.perPerson) { <small>{{ money(payments.perPerson, payments.currency) }} per person</small> }</p> } }
             <p class="vt-accept-card__lead">The key information and terms are below — open any section to read it. Accepting doesn’t confirm the booking: your travel agent does that after checking with the suppliers.</p>
             @if (signedOut()) {
               <vt-sign-in-again action="accept this quotation" [brandName]="currentTrip.brand.name" [showHelp]="true" (help)="getNewTripLink()" />
@@ -153,14 +156,14 @@
             }
           </section>
         }
-        <app-trip-content-section [trip]="currentTrip" (watch)="watchVideo($event)" (message)="messageAgent()" (accept)="goToAcceptance()" />
+        <!-- The trip itself: what's next, the agent's note, how booking works and who is going. -->
         @if (!isReturned(currentTrip.stage) && (currentTrip.timeline.nextItemTitle || currentTrip.timeline.daysUntilDeparture !== null)) {
           <section class="vt-home-info-card vt-home-up-next"><p class="vt-home-info-card__kicker">Up next</p><h2>{{ currentTrip.timeline.nextItemTitle || 'Your trip is coming up' }}</h2>@if (currentTrip.timeline.nextItemDate) { <p class="vt-home-up-next__date">{{ currentTrip.timeline.nextItemDate | europeanDate }}{{ currentTrip.timeline.nextItemTime ? ' at ' + currentTrip.timeline.nextItemTime : '' }}</p> }@if (currentTrip.timeline.daysUntilDeparture !== null && currentTrip.timeline.daysUntilDeparture > 0) { <p class="vt-home-up-next__countdown">{{ currentTrip.timeline.daysUntilDeparture }} days until departure</p> }</section>
         }
         @if (currentTrip.experience.overview || currentTrip.experience.personalisedMessage) {
           <section class="vt-home-info-card vt-home-about"><p class="vt-home-info-card__kicker">Trip summary</p><h2>About your trip</h2>@if (currentTrip.experience.personalisedMessage) { <p>{{ currentTrip.experience.personalisedMessage }}</p> }@if (currentTrip.experience.overview) { <p>{{ currentTrip.experience.overview }}</p> }@if (currentTrip.experience.agentName) { <p class="vt-home-about__agent">Planned by {{ currentTrip.experience.agentName }}</p> }</section>
         }
-        @if (currentTrip.stage === 'cancelled') { <section class="vt-section vt-notice vt-notice--bad"><p class="font-semibold">This booking has been cancelled.</p>@if (currentTrip.bookingStatus.cancellationReason) { <p class="mt-2 text-sm">{{ currentTrip.bookingStatus.cancellationReason }}</p> }</section> }
+        @if (currentTrip.bookingJourney; as journey) { <app-booking-journey-section [blocks]="['journey']" [journey]="journey" [stage]="currentTrip.stage" [related]="relatedQuotations()" [openingId]="openingRelatedId()" (enquire)="enquireAboutExtra($event)" (open)="openRelatedQuotation($event)" /> }
         @if (currentTrip.travellers.length) {
           <section class="vt-travellers-card" aria-labelledby="travellers-title">
             <header class="vt-lower-section__header"><p>Your party</p><h2 id="travellers-title">{{ isReturned(currentTrip.stage) ? 'Travelled' : 'Travelling' }}</h2></header>
@@ -187,9 +190,14 @@
             }
           </section>
         }
+        <!-- Other quotations sent to this customer. -->
+        @if (currentTrip.bookingJourney; as journey) { <app-booking-journey-section [blocks]="['compare']" [journey]="journey" [stage]="currentTrip.stage" [related]="relatedQuotations()" [openingId]="openingRelatedId()" (enquire)="enquireAboutExtra($event)" (open)="openRelatedQuotation($event)" /> }
+        <!-- The destination, then optional extras and questions, then the agency. -->
         <app-external-content-section [content]="externalContent()" [loading]="externalContentLoading()" [failed]="externalContentFailed()" (refresh)="loadExternalContent()" (watch)="watchVideo($event)" />
         <app-destinations-section [destinations]="displayedDestinations()" />
+        @if (currentTrip.bookingJourney; as journey) { <app-booking-journey-section [blocks]="['tailor']" [journey]="journey" [stage]="currentTrip.stage" [related]="relatedQuotations()" [openingId]="openingRelatedId()" (enquire)="enquireAboutExtra($event)" (open)="openRelatedQuotation($event)" /> }
         <app-extras-section [extras]="currentTrip.extras" (enquire)="askAboutExtra($event)" (book)="bookExtra($event)" />
+        @if (currentTrip.bookingJourney; as journey) { <app-booking-journey-section [blocks]="['faq']" [journey]="journey" [stage]="currentTrip.stage" [related]="relatedQuotations()" [openingId]="openingRelatedId()" (enquire)="enquireAboutExtra($event)" (open)="openRelatedQuotation($event)" /> }
         <app-communications-section [communications]="currentTrip.communications" />
         <app-brand-support-section [trip]="currentTrip" [rating]="externalContent()?.agencyRating" />
       } @else if (activeView() === 'itinerary') {
@@ -216,11 +224,14 @@
               <div class="vt-agent-card__body">
                 <strong>{{ agent.name || 'Your travel expert' }}</strong>
                 @if (agent.branchName) { <small>Your travel expert at {{ agent.branchName }}</small> }
-                <div class="vt-agent-card__links">
-                  @if (agent.branchPhone) { <a [href]="agent.branchPhone"><vt-icon name="phone" [size]="15" /> Call the branch</a> }
-                  @if (agent.email) { <a [href]="'mailto:' + agent.email"><vt-icon name="mail" [size]="15" /> <span class="vt-email">{{ agent.email.split('@')[0] }}@<wbr>{{ agent.email.split('@').slice(1).join('@') }}</span></a> }
-                  <button type="button" class="vt-link-button" (click)="messageAgent()"><vt-icon name="message" [size]="15" /> Message {{ agent.name?.split(' ')?.[0] || 'us' }}</button>
-                </div>
+                @let agentPhone = agent.branchPhone && !samePhone(agent.branchPhone, currentTrip.support.phone) ? agent.branchPhone : null;
+                @let agentEmail = agent.email && !currentTrip.capabilities.sendMessage && agent.email !== currentTrip.support.email ? agent.email : null;
+                @if (agentPhone || agentEmail) {
+                  <div class="vt-agent-card__links">
+                    @if (agentPhone) { <a [href]="agentPhone"><vt-icon name="phone" [size]="15" /> Call the branch</a> }
+                    @if (agentEmail) { <a [href]="'mailto:' + agentEmail"><vt-icon name="mail" [size]="15" /> <span class="vt-email">{{ agentEmail.split('@')[0] }}@<wbr>{{ agentEmail.split('@').slice(1).join('@') }}</span></a> }
+                  </div>
+                }
               </div>
             </article>
           }
@@ -292,6 +303,9 @@
       <app-invitation-flow [token]="token" [online]="online()" [activeBrandName]="trip()?.brand?.name ?? null" (authorized)="invitationAuthorized($event)" (cancelled)="invitationCancelled()" />
     } @else if (showTripLibrary()) {
       <section class="vt-trip-library">
+        @if (trip(); as openTrip) {
+          <button type="button" class="vt-trip-library__back" (click)="backToTrip()"><vt-icon name="chevron-left" [size]="18" /><span>Back to {{ openTrip.summary.name }}</span></button>
+        }
         @if (error() && !trip()) { <div class="vt-status-card vt-trip-library__notice" data-tone="warn" role="alert"><span class="vt-status-card__icon" aria-hidden="true"><vt-icon name="alert" [size]="20" /></span><div class="vt-status-card__copy"><strong>That link didn’t work</strong><p>{{ error() }}</p></div><button type="button" class="vt-status-card__close" aria-label="Dismiss" (click)="dismissError()"><vt-icon name="close" [size]="18" /></button></div> }
         <header class="vt-trip-library__header">
           <div><p class="vt-page-kicker vt-trip-library__kicker">Saved on this device</p><h1 class="vt-page-title">My trips</h1><p class="vt-page-description">Open any trip saved on this device, even offline.@if (multipleBrands()) { Trips from different travel companies are kept separate — each has its own sign-in.}</p></div>
@@ -383,7 +397,8 @@
   </main>
   <!-- Inside .vt-app so the scoped .vt-app styles (and brand colours) apply. -->
   @if (openVideo(); as video) { <vt-video-viewer [video]="video" (closed)="openVideo.set(null)" /> }
-  @if (displayedTrip() && activeView() !== 'help' && !openVideo()) {
+  <!-- Not on an open quotation: Home already has "Questions about this quotation? Message …" and Help has the form. -->
+  @if (displayedTrip() && displayedTrip()?.stage !== 'quote' && activeView() !== 'help' && !openVideo()) {
     <button type="button" class="vt-message-fab" (click)="messageAgent()"><vt-icon name="message" [size]="18" /> Message {{ trip()?.agent?.name?.split(' ')?.[0] || 'us' }}</button>
   }
 </div>

@@ -48,6 +48,7 @@ type AppearancePreference = Appearance | 'system';
 
 import { TripContentSection } from './features/trip/trip-content-section';
 import { VideoViewer } from './shared/video-viewer';
+import { samePhone } from './shared/same-phone';
 import { TravellerDetailsSection } from './features/account/traveller-details-section';
 import { withEarlierEnrichment } from './core/api/external-merge';
 @Component({
@@ -885,6 +886,9 @@ export class App implements OnInit, OnDestroy {
     return this.stageLabel(trip.stage);
   }
 
+  protected money(amount: number, currency: string): string {
+    try { return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(amount); } catch { return `${amount.toFixed(2)} ${currency}`; }
+  }
   protected tripDates(summary: TripSnapshot['summary'], unknown?: string): string { return tripDateRange(summary.departureDate, summary.returnDate, unknown); }
   protected nightsLabel(nights: number | null): string | null { return nightsText(nights); }
 
@@ -903,6 +907,10 @@ export class App implements OnInit, OnDestroy {
     }
     if (this.showNotifications()) {
       this.showNotifications.set(false);
+      return;
+    }
+    if (this.showTripLibrary() && this.trip()) {
+      this.backToTrip(); // Without this, Back on My Trips reopened My Trips and never left it.
       return;
     }
     if (this.trip() && this.activeView() !== 'home') {
@@ -1060,6 +1068,9 @@ export class App implements OnInit, OnDestroy {
   }
 
   /** The quick way to reach the agent from anywhere: the message form under Help. */
+  /** Help shows one route per number: the agent's branch line is hidden when it rings the company's own number. */
+  protected readonly samePhone = samePhone;
+
   protected messageAgent(): void {
     this.trackEngagement('action_clicked', 'message_agent');
     this.messageSent.set(false);
@@ -1139,6 +1150,19 @@ export class App implements OnInit, OnDestroy {
   protected openAnotherTrip(): void {
     this.showNotifications.set(false);
     this.showTripLibrary.set(this.savedTripList().length > 0);
+  }
+
+  /** Leaves My Trips for the trip that is still open behind it, on the tab the traveller was using. */
+  protected backToTrip(): void {
+    const current = this.trip();
+    if (!current) return;
+    // At start-up with several saved trips, the last one is loaded offline behind My Trips: open it properly instead,
+    // so it refreshes and loads its weather, quotations and acceptance terms, as "Open trip" would.
+    const saved = this.savedTripList().find((entry) => entry.snapshot.tripId === current.tripId);
+    if (current.freshness.status === 'offline' && this.online() && saved) { void this.openSavedTrip(saved); return; }
+    this.showTripLibrary.set(false);
+    window.scrollTo({ top: 0 });
+    requestAnimationFrame(() => document.querySelector<HTMLElement>('#main-content')?.focus({ preventScroll: true }));
   }
 
   protected addAnotherTrip(): void {
