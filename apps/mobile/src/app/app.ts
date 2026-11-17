@@ -35,6 +35,7 @@ import { VtLogoMark } from './shared/logo-mark';
 import { VtSignInAgain } from './shared/sign-in-again';
 import { incompleteSectionsText, withLastKnownGood } from './core/api/partial-snapshot';
 import { brandPalette } from './shared/brand-palette';
+import { memberFontsUrl, themeStyle } from './shared/theme-style';
 import { EuropeanDatePipe, formatEuropeanDate } from './shared/european-date.pipe';
 import { isReturnedStage, monthYear, nightsText, stageLabel, tripDateRange } from './shared/trip-format';
 
@@ -187,12 +188,24 @@ export class App implements OnInit, OnDestroy {
     const theme = this.trip()?.brand?.theme;
     const palette = brandPalette(theme?.primaryColor, this.appearance());
     return {
+      // Fonts, weights, axes, wash, corners, buttons and spacing as on the website; brand colours below.
+      ...themeStyle(theme),
       '--vt-accent': palette.accent, '--vt-accent-text': palette.accentText, '--vt-accent-text-dark': palette.accentText,
       '--accent-action': palette.action, '--accent-action-ink': palette.actionInk, '--accent-ink': palette.actionInk,
       '--tint': palette.tint, '--tint-2': palette.tint2, '--link': palette.accentText,
-      '--vt-accent-2': theme?.secondaryColor || '#115e59', '--vt-wash': palette.accent,
-      '--vt-hero-a': theme?.secondaryColor || '#134e4a', '--vt-hero-b': palette.accent,
+      '--vt-accent-2': theme?.secondaryColor || '#115e59',
     };
+  });
+  protected readonly capsKickers = computed(() => this.trip()?.brand?.theme?.capsKickers === true);
+  /** A member's own Vision web fonts, when they aren't bundled: one stylesheet, swapped when the trip changes. */
+  private readonly memberFontsEffect = effect(() => {
+    const url = memberFontsUrl(this.trip()?.brand?.theme);
+    const existing = document.getElementById('vt-member-fonts') as HTMLLinkElement | null;
+    if (!url) { existing?.remove(); return; }
+    if (existing?.href === url) return;
+    const link = existing ?? Object.assign(document.createElement('link'), { id: 'vt-member-fonts', rel: 'stylesheet' });
+    link.href = url;
+    if (!existing) document.head.appendChild(link);
   });
   private readonly applyAppearanceEffect = effect(() => this.applyAppearance(this.appearance()));
   private readonly sessions = inject(SessionManager);
@@ -875,7 +888,7 @@ export class App implements OnInit, OnDestroy {
 
   private applyAppearance(appearance: Appearance): void {
     document.documentElement.dataset['theme'] = appearance;
-    const color = appearance === 'dark' ? '#121415' : '#f4f4f1';
+    const color = appearance === 'dark' ? '#121415' : '#f6f6f5';
     document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]').forEach((meta) => { meta.content = color; });
   }
 

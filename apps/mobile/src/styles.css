@@ -1,4 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 /* Map Tailwind's radius scale onto the design tokens below so utility classes stay on-system. */
@@ -8,7 +7,7 @@
   --radius-3xl: var(--r-l);
 }
 
-:root { --vt-accent: #0f766e; --vt-accent-2: #115e59; --vt-accent-text: #0f766e; --vt-accent-text-dark: #5eead4; --accent-ink: #fff; --vt-font-family: 'Montserrat', system-ui, -apple-system, 'Segoe UI', sans-serif; --vt-display: var(--vt-font-family); --vt-display-weight: 600; --vt-body: var(--vt-font-family); --vt-wash: #0f766e; --vt-hero-a: #134e4a; --vt-hero-b: #0f766e; --vt-soft: 0; }
+:root { --vt-accent: #0f766e; --vt-accent-2: #115e59; --vt-accent-text: #0f766e; --vt-accent-text-dark: #5eead4; --accent-ink: #fff; --vt-font-family: 'Instrument Sans Variable', 'Instrument Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; --vt-display: 'Fraunces Variable', 'Fraunces', Georgia, serif; --vt-display-weight: 500; --vt-axes: "SOFT" 0, "WONK" 0; --vt-display-stretch: 100%; --vt-track: -0.01em; --btn-r: 999px; --vt-space: 1; --vt-body: var(--vt-font-family); --vt-wash: #0f766e; --vt-hero-a: #134e4a; --vt-hero-b: #0f766e; --vt-soft: 0; }
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
 
@@ -2126,3 +2125,31 @@ body.vt .vt-app .vt-account-danger__icon { width: 40px; height: 40px; }
 .vt-app .vt-route-map summary { display: flex; align-items: center; justify-content: space-between; min-height: 52px; padding: 0 16px; font-weight: 700; cursor: pointer; list-style: none; }
 .vt-app .vt-route-map summary span { display: inline-flex; align-items: center; gap: 8px; }
 .vt-app .vt-agency-rating { display: flex; align-items: center; gap: 6px; margin: 12px 0 0; color: var(--ink-2); }
+
+
+/* --- Website typography (PHP plugin vision.css "Display type"), kept last so it wins over per-view weights --------- */
+body.vt .vt-app :is(.vt-hero__title, h1, h2, .vt-page-title, .vt-countdown-card__unit strong, .vt-weather-card__top strong, .vt-accept-strip strong, .vt-payment-summary__total strong) {
+  font-family: var(--vt-display); font-weight: var(--vt-display-weight); font-optical-sizing: auto;
+  font-variation-settings: var(--vt-axes); font-stretch: var(--vt-display-stretch); letter-spacing: var(--vt-track);
+}
+.vt-app.kicker-caps :is(.vt-hero__kicker, .vt-el__kind, .vt-page-kicker, .vt-lower-section__header > p) { text-transform: uppercase; letter-spacing: .12em; font-size: .78rem; }
+.vt-app :is(.vt-primary-action, .vt-btn, .vt-accept-card__submit, .vt-video-card__watch, .vt-message-fab) { border-radius: var(--btn-r); }
+
+/* Any primary action without a view-specific style still looks like the primary button (low specificity: views win). */
+.vt-app :where(.vt-primary-action, .vt-video-card__watch, .vt-quick-message button, .vt-message-fab):not(:disabled) {
+  border: 1px solid var(--accent-action); background: var(--accent-action); color: var(--accent-action-ink);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent-action) 22%, transparent);
+}
+/* Disabled actions read as disabled in both themes, never as a muted version of the brand button. */
+.vt-app :is(.vt-primary-action, .vt-accept-card__submit, .vt-video-card__watch, .vt-message-fab):disabled {
+  border-color: var(--line-2); background: var(--surface-2); color: var(--ink-3); box-shadow: none; cursor: not-allowed; filter: none;
+}
+
+/* Neutral page background. The website tints its off-white with the theme colour, but the background is resolved once
+   for the whole page (before any trip's theme applies), so in the app it always picked up the default teal and read as
+   green. The app uses a plain neutral instead: brand and theme colour stay on the hero, buttons and accents. */
+:root[data-theme="light"] { --paper: #F6F6F5; --wash-bg: #F6F6F5; }
+:root[data-theme="dark"] { --wash-bg: var(--paper); }
+
+/* Dark mode: no coloured glow under buttons, which makes light brand buttons look harsh on the dark surface. */
+:root[data-theme="dark"] .vt-app :is(.vt-primary-action, .vt-btn--primary, .vt-account-trip__action, .vt-accept-card__submit, .vt-help-send, .vt-video-card__watch, .vt-message-fab, .vt-pay__action, .vt-custom-payment__submit) { box-shadow: none; }

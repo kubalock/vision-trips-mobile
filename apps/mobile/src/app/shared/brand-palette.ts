@@ -25,7 +25,10 @@ export function brandPalette(brandColor: string | null | undefined, theme: Brand
   const accent = adjustUntil(brand, towards, (color) => contrast(color, surface) >= 3);
   const accentText = adjustUntil(brand, towards, (color) => contrast(color, surface) >= 4.5);
   // Dark theme: like the default teal (#43B7A7 on near-black ink), buttons use a light version of the brand with dark text.
-  const action = theme === 'dark' ? adjustUntil(brand, '#ffffff', (color) => contrast(color, DARK_INK) >= 7) : accent;
+  // Dark theme buttons: the brand's own hue made light enough for dark text (lightening in HSL keeps it vivid; mixing
+  // with white would turn a navy or deep green into a flat grey that reads as disabled). A brand with almost no colour
+  // (black, grey) gets a near-white button, which stands out most on the dark surface.
+  const action = theme === 'dark' ? darkModeAction(brand) : accent;
   const actionInk = theme === 'dark' ? DARK_INK : contrast(action, '#ffffff') >= 4.5 ? '#ffffff' : contrast(action, DARK_INK) >= contrast(action, '#ffffff') ? DARK_INK : '#ffffff';
   return {
     accent, accentText, action, actionInk,
@@ -37,6 +40,39 @@ export function brandPalette(brandColor: string | null | undefined, theme: Brand
 export function contrast(a: string, b: string): number {
   const [lighter, darker] = [luminance(a), luminance(b)].sort((x, y) => y - x);
   return (lighter + 0.05) / (darker + 0.05);
+}
+
+const NEAR_WHITE = '#f2f1ec';
+
+function darkModeAction(brand: string): string {
+  const [hue, saturation, lightness] = hsl(brand);
+  if (saturation < 0.12) return NEAR_WHITE;
+  // Keep the hue but calm the saturation: a deep, fully saturated brand (navy #00122c) would otherwise become an
+  // electric blue that glares on the dark surface. 30–45% reads as the brand, muted, and never as a disabled grey.
+  const vivid = Math.min(0.45, Math.max(saturation, 0.3));
+  for (let next = Math.max(lightness, 0.45); next <= 0.92; next += 0.02) {
+    const candidate = fromHsl(hue, vivid, next);
+    if (contrast(candidate, DARK_INK) >= 7) return candidate;
+  }
+  return NEAR_WHITE;
+}
+
+function hsl(color: string): [number, number, number] {
+  const [r, g, b] = rgb(color).map((value) => value / 255) as [number, number, number];
+  const max = Math.max(r, g, b); const min = Math.min(r, g, b); const lightness = (max + min) / 2;
+  if (max === min) return [0, 0, lightness];
+  const delta = max - min;
+  const saturation = lightness > 0.5 ? delta / (2 - max - min) : delta / (max + min);
+  const hue = max === r ? ((g - b) / delta + (g < b ? 6 : 0)) : max === g ? (b - r) / delta + 2 : (r - g) / delta + 4;
+  return [hue * 60, saturation, lightness];
+}
+
+function fromHsl(hue: number, saturation: number, lightness: number): string {
+  const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
+  const x = chroma * (1 - Math.abs(((hue / 60) % 2) - 1));
+  const m = lightness - chroma / 2;
+  const [r, g, b] = hue < 60 ? [chroma, x, 0] : hue < 120 ? [x, chroma, 0] : hue < 180 ? [0, chroma, x] : hue < 240 ? [0, x, chroma] : hue < 300 ? [x, 0, chroma] : [chroma, 0, x];
+  return `#${[r, g, b].map((value) => Math.round((value + m) * 255).toString(16).padStart(2, '0')).join('')}`;
 }
 
 function adjustUntil(color: string, towards: string, good: (color: string) => boolean): string {

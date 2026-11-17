@@ -9,7 +9,7 @@
    The member's colour is the only accent. Themes (body.theme-* / motif-* / density-*) change type, surfaces and ornament, never the accent. */
 
 :root {
-  --vt-font-family: 'Montserrat', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --vt-font-family: 'Instrument Sans Variable', 'Instrument Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --vt-body: var(--vt-font-family);
   --vt-display: var(--vt-font-family);
   --vt-display-weight: 600;

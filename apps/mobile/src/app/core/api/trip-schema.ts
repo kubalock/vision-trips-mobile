@@ -87,6 +87,11 @@ const theme = record({
   radius: oneOf(['crisp', 'soft', 'round'], 'soft'),
   motif: text,
   spacingScale: z.catch(z.number().check(z.positive()), 1),
+  // Website typography (v4); older snapshots simply don't have it and get the default theme's values.
+  displayWeight: z.catch(z.optional(z.number()), undefined), displayStretch: z.catch(z.optional(z.number()), undefined),
+  displaySoft: z.catch(z.optional(z.number()), undefined), displayWonk: z.catch(z.optional(z.number()), undefined),
+  tracking: z.catch(z.optional(z.number()), undefined), wash: z.catch(z.optional(z.string()), undefined),
+  buttonRadius: z.catch(z.optional(z.string()), undefined), capsKickers: z.catch(z.optional(z.boolean()), undefined),
 });
 
 const brandProfile = record({

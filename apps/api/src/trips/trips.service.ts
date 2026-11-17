@@ -359,7 +359,10 @@ export class TripsService {
         logoUrl: firstAttachmentUrl(brandValue('logo')),
         theme: themeTokens({
           tags,
+          holidayTypes: strings(bookingValue('holidayTypes')),
+          sector: firstString(bookingValue('sector')),
           configuredTheme: firstString(brandValue('theme')),
+          brandTone: firstString(brandValue('tone')),
           primaryColor: firstString(brandValue('colour')),
           secondaryColor: firstString(brandValue('colour2')),
           displayFont: firstString(brandValue('fontDisplay')),

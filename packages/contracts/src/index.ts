@@ -22,6 +22,20 @@ export interface ThemeTokens {
   radius: 'crisp' | 'soft' | 'round';
   motif: string;
   spacingScale: number;
+  /** Display typography, as on the website (PHP plugin Theme.php). All optional for older snapshots. */
+  displayWeight?: number;
+  /** Width axis in percent (Bricolage Grotesque, Fredoka). */
+  displayStretch?: number;
+  /** Fraunces SOFT (0–100) and WONK (0/1) axes. */
+  displaySoft?: number;
+  displayWonk?: number;
+  /** Letter spacing in em. */
+  tracking?: number;
+  /** The theme's surface colour, used for the hero gradient. */
+  wash?: string;
+  buttonRadius?: string;
+  /** Upper-case small kickers. */
+  capsKickers?: boolean;
 }
 
 export interface TripSummary {

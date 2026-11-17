@@ -26,6 +26,10 @@
               }
             ],
             "styles": [
+              "@fontsource-variable/fraunces/full.css",
+              "@fontsource-variable/bricolage-grotesque/standard.css",
+              "@fontsource-variable/fredoka/standard.css",
+              "@fontsource-variable/instrument-sans/standard.css",
               "src/styles/vision-base.css",
               "src/styles.css"
             ]
