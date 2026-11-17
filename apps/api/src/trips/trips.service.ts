@@ -117,7 +117,9 @@ export class TripsService {
       const result = await this.airtable.optionalRecords(baseId, table, missing);
       if (result.unavailable) { incomplete.add(section); return []; }
       if (ttl) for (const record of result.records) this.references.set(`${baseId}:${table}:${record.id}`, record, ttl);
-      return [...known, ...result.records];
+      // Linked-record order (as in Airtable), whichever records came from the cache.
+      const byId = new Map([...known, ...result.records].map((record) => [record.id, record]));
+      return ids.flatMap((id) => { const record = byId.get(id); return record ? [record] : []; });
     };
     const [brand, members, elements, payments, people, customers, upsells, communications] = await Promise.all([
       // A booking without a Brand (or whose Brand record is gone) uses default branding. A Brand that couldn't be read

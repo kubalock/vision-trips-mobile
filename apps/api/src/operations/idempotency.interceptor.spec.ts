@@ -1,6 +1,6 @@
 import { NotFoundException, type CallHandler, type ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { firstValueFrom, of } from 'rxjs';
+import { firstValueFrom, from } from 'rxjs';
 import type { AirtableRecord, AirtableService } from '../airtable/airtable.service.js';
 import { DurableAuthStore } from '../sessions/durable-auth.store.js';
 import { SessionsService, type SessionGrant } from '../sessions/sessions.service.js';
@@ -31,21 +31,58 @@ describe('IdempotencyInterceptor', () => {
     const sessions = new SessionsService(store, new TripEntitlementsService(airtable as unknown as AirtableService, store));
     const interceptor = new IdempotencyInterceptor(store, new Reflector(), sessions);
     let calls = 0;
-    const handler: CallHandler = { handle: () => of({ url: `https://pay.example/${++calls}` }) };
-    const send = (accessToken: string | null, handlerName: keyof Routes = 'paymentLink', key = KEY) => {
+    let hold: Promise<void> | null = null;
+    const handler: CallHandler = { handle: () => from((async () => { const n = ++calls; if (hold) await hold; return { url: `https://pay.example/${n}` }; })()) };
+    const send = (accessToken: string | null, handlerName: keyof Routes = 'paymentLink', key = KEY, paymentId = 'pay_1') => {
       const headers: Record<string, string> = { 'idempotency-key': key, ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}) };
-      const request = { method: 'POST', path: '/v1/trips/current/payments/pay_1/link', route: { path: '/v1/trips/current/payments/:paymentId/link' }, body: {}, get: (name: string) => headers[name.toLowerCase()] };
+      const request = { method: 'POST', path: `/v1/trips/current/payments/${paymentId}/link`, route: { path: '/v1/trips/current/payments/:paymentId/link' }, params: { paymentId }, query: {}, body: {}, get: (name: string) => headers[name.toLowerCase()] };
       const context = { switchToHttp: () => ({ getRequest: () => request }), getHandler: () => Routes.prototype[handlerName], getClass: () => Routes } as unknown as ExecutionContext;
       return firstValueFrom(interceptor.intercept(context, handler));
     };
-    const grant = (baseId = BASE_A): SessionGrant => ({ baseId, recordId: BOOKING, fellowTraveller: false, customerRecordId: GRACE, assurance: 'otp' });
-    return { sessions, records, send, grant, calls: () => calls };
+    const grant = (baseId = BASE_A, overrides: Partial<SessionGrant> = {}): SessionGrant => ({ baseId, recordId: BOOKING, fellowTraveller: false, customerRecordId: GRACE, assurance: 'otp', ...overrides });
+    return { sessions, records, send, grant, calls: () => calls, holdHandler: (until: Promise<void>) => { hold = until; } };
   }
 
-  it('replays the stored response to the same active session', async () => {
+  it('replays the stored response to the same active session, also after its access token was renewed', async () => {
     const context = setup();
     const session = context.sessions.issue(context.grant());
     await expect(context.send(session.accessToken)).resolves.toEqual({ url: 'https://pay.example/1' });
+    await expect(context.send(session.accessToken)).resolves.toEqual({ url: 'https://pay.example/1' });
+    const renewed = await context.sessions.refresh(session.refreshToken);
+    await expect(context.send(renewed.accessToken)).resolves.toEqual({ url: 'https://pay.example/1' });
+    expect(context.calls()).toBe(1);
+  });
+
+  it.each([
+    ['a fellow-traveller session', { fellowTraveller: true }],
+    ['a legacy (unverified) session', { assurance: 'legacy' }],
+    ['another session of the same verified Customer', {}],
+  ] as const)('never hands %s of the same Customer the response stored for the lead session', async (_name, overrides) => {
+    const context = setup();
+    await context.send(context.sessions.issue(context.grant()).accessToken);
+    const other = context.sessions.issue(context.grant(BASE_A, overrides as Partial<SessionGrant>));
+    await expect(context.send(other.accessToken)).resolves.toEqual({ url: 'https://pay.example/2' });
+    expect(context.calls()).toBe(2);
+  });
+
+  it('treats the same key for another payment item as a different request, not a replay of the first link', async () => {
+    const context = setup();
+    const session = context.sessions.issue(context.grant());
+    await context.send(session.accessToken, 'paymentLink', KEY, 'pay_1');
+    await expect(context.send(session.accessToken, 'paymentLink', KEY, 'pay_2')).rejects.toMatchObject({ status: 409 });
+    expect(context.calls()).toBe(1);
+  });
+
+  it('answers idempotency_in_progress while the same operation is still running, and the stored reply afterwards', async () => {
+    const context = setup();
+    const session = context.sessions.issue(context.grant());
+    let finish!: () => void;
+    context.holdHandler(new Promise<void>((resolve) => { finish = resolve; }));
+    const first = context.send(session.accessToken);
+    await vi.waitFor(() => expect(context.calls()).toBe(1));
+    await expect(context.send(session.accessToken)).rejects.toMatchObject({ status: 409, response: { code: 'idempotency_in_progress' } });
+    finish();
+    await expect(first).resolves.toEqual({ url: 'https://pay.example/1' });
     await expect(context.send(session.accessToken)).resolves.toEqual({ url: 'https://pay.example/1' });
     expect(context.calls()).toBe(1);
   });

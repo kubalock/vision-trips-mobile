@@ -4,7 +4,7 @@ import type { Request } from 'express';
 import { createHash } from 'node:crypto';
 import { Observable, catchError, from, of, switchMap, tap, throwError } from 'rxjs';
 import { DurableAuthStore } from '../sessions/durable-auth.store.js';
-import { SessionsService, type SessionPrincipal } from '../sessions/sessions.service.js';
+import { SessionsService } from '../sessions/sessions.service.js';
 import { IDEMPOTENT } from './idempotent.js';
 import { NO_STORED_REPLAY } from './no-stored-replay.js';
 
@@ -24,17 +24,20 @@ export class IdempotencyInterceptor implements NestInterceptor {
     const authorization = request.get('authorization');
     // Authenticate first: no stored response is even looked up for a missing, expired or revoked session.
     return from(this.sessions.authorize(authorization)).pipe(switchMap((principal) => {
-      const scope = [request.method, request.route?.path || request.path, ...owner(principal)].join(':');
-      const requestHash = createHash('sha256').update(JSON.stringify(request.body ?? null)).digest('base64url');
+      // Without a session ID there is nothing safe to tie a stored response to: run the request without replay.
+      if (!principal.sessionId) return next.handle();
+      const scope = [request.method, request.route?.path || request.path, principal.baseId, principal.recordId, `session:${principal.sessionId}`].join(':');
+      // Path parameters and query are part of the request: /payments/pay_1/link and /payments/pay_2/link share a route.
+      const requestHash = createHash('sha256').update(JSON.stringify({ params: request.params ?? {}, query: request.query ?? {}, body: request.body ?? null })).digest('base64url');
       const existing = this.store.idempotency(scope, key);
       if (existing) {
         if (existing.requestHash !== requestHash) throw new ConflictException('This idempotency key was already used for a different request.');
-        if (existing.status !== 'complete' || existing.responseJson === null) throw new ConflictException('An identical request is already being processed.');
+        if (existing.status !== 'complete' || existing.responseJson === null) throw inProgress();
         const stored = JSON.parse(existing.responseJson) as unknown;
         // Replaying skips the controller and its own checks, so re-check Airtable now, as a fresh request would.
         return from(this.sessions.authorize(authorization, { fresh: true })).pipe(switchMap(() => of(stored)));
       }
-      if (!this.store.beginIdempotency(scope, key, requestHash)) throw new ConflictException('An identical request is already being processed.');
+      if (!this.store.beginIdempotency(scope, key, requestHash)) throw inProgress();
       return next.handle().pipe(
         tap((response) => this.store.completeIdempotency(scope, key, response)),
         catchError((error: unknown) => { this.store.releaseIdempotency(scope, key); return throwError(() => error); }),
@@ -43,7 +46,10 @@ export class IdempotencyInterceptor implements NestInterceptor {
   }
 }
 
-/** Who a stored response belongs to: the booking and verified Customer, or the session itself when there is none. */
-function owner(principal: SessionPrincipal): string[] {
-  return [principal.baseId, principal.recordId, principal.customerRecordId ? `customer:${principal.customerRecordId}` : `session:${principal.sessionId ?? 'unknown'}`];
+/**
+ * The same operation is still running. Not a refusal: the client keeps its key and tries again with it, so it gets
+ * the stored reply once the work finishes instead of starting it a second time.
+ */
+function inProgress(): ConflictException {
+  return new ConflictException({ statusCode: 409, code: 'idempotency_in_progress', message: 'An identical request is already being processed.' });
 }

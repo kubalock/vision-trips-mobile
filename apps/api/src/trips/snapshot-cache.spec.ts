@@ -8,6 +8,7 @@ describe('TripsService snapshot caching', () => {
   const id = (n: number) => `rec${String(n).padStart(14, '0')}`;
   const BRAND = id(9);
   const AIRPORT = id(10);
+  const NAMES: Record<string, string> = { [id(11)]: 'Rome', [id(12)]: 'Paris' };
   const booking: AirtableRecord = {
     id: id(1), createdTime: '2026-11-01T10:00:00.000Z',
     fields: { Status: 'Confirmed', 'Brands & Branches': [BRAND], 'Bookings [Elements]': [id(3)], 'Bookings [Payments]': [id(4)], Customers: [id(6)] },
@@ -29,7 +30,7 @@ describe('TripsService snapshot caching', () => {
         id: recordId,
         fields: table === 'Bookings [Payments]' ? { Amount: 100, Status: state.paymentStatus, 'Customer Payment Type': 'Deposit Payment' }
           : table === 'Bookings [Elements]' ? { Type: 'Flight', 'Dep. Airport Name': [AIRPORT] }
-            : { Name: recordId },
+            : { Name: NAMES[recordId] ?? recordId },
       }));
     });
     const calls = (table: string) => [...record.mock.calls, ...list.mock.calls].filter((call) => call[1] === table).length;
@@ -104,5 +105,20 @@ describe('TripsService snapshot caching', () => {
     expect(calls('CMS [Airports]')).toBe(1);
     expect(second.brand.name).toBe(first.brand.name);
     expect(second.itinerary[0].from).toBe(first.itinerary[0].from);
+  });
+
+  it('keeps Airtable’s linked-record order when only some destinations come from the cache', async () => {
+    const { airtable } = fakeAirtable();
+    const trips = new TripsService(airtable);
+    const [rome, paris] = [id(11), id(12)];
+    const withDestinations = (destinations: string[]) => vi.spyOn(airtable, 'record').mockImplementation(async (_base, table, recordId) => table === 'Brands & Branches'
+      ? { id: recordId, fields: { 'Brand Name': 'Sunway Travel' } }
+      : { ...booking, fields: { ...booking.fields, Destinations: destinations } });
+    withDestinations([paris]);
+    await trips.snapshot(base, booking.id, 'primary_customer'); // Caches only the second destination.
+    trips.invalidate(base, booking.id);
+    withDestinations([rome, paris]);
+    const snapshot = await trips.snapshot(base, booking.id, 'primary_customer');
+    expect(snapshot.destinations.map((destination) => destination.name)).toEqual(['Rome', 'Paris']);
   });
 });

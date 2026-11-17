@@ -1474,6 +1474,7 @@ export function customerErrorMessage(error: unknown, fallback: string): string {
   if (error.status === 401) return 'For your security, please open your trip link again to continue.';
   // A partial save is a 503 too, but the traveller needs to know some changes did save and to save again.
   if (error.error?.code === 'preferences_partially_saved') return 'Some of your changes were saved, but not all of them. Please save again to finish.';
+  if (error.error?.code === 'idempotency_in_progress') return 'Your earlier request is still being processed. Please wait a moment, then try again.';
   if (error.error?.code === 'account_group_too_large') return 'Your account can’t be shown right now. Please contact your travel agent.';
   if (error.status >= 500) return 'Our booking system is busy right now. Please try again in a minute.';
   const raw = error.error?.message;

@@ -25,6 +25,30 @@ describe('OperationKeys', () => {
     await keys.run('pay:trp_1', 20, async (key) => { seen.push(key); return 'ok'; });
     expect(new Set(seen).size).toBe(3);
   });
+
+  it('asks again with the same key while the server is still running the first attempt, and keeps the key if it still is', async () => {
+    const keys = TestBed.inject(OperationKeys);
+    keys.retryDelaysMs = [0, 0];
+    const inProgress = () => new HttpErrorResponse({ status: 409, error: { code: 'idempotency_in_progress' } });
+    const seen: string[] = [];
+    let answers = 0;
+    await expect(keys.run('accept:trp_1', 'Grace', async (key) => { seen.push(key); if (++answers < 3) throw inProgress(); return 'stored'; })).resolves.toBe('stored');
+    expect(new Set(seen).size).toBe(1);
+
+    seen.length = 0;
+    await expect(keys.run('accept:trp_2', 'Grace', async (key) => { seen.push(key); throw inProgress(); })).rejects.toMatchObject({ status: 409 });
+    await keys.run('accept:trp_2', 'Grace', async (key) => { seen.push(key); return 'stored'; });
+    expect(seen).toHaveLength(4); // Three tries, then the traveller's own retry...
+    expect(new Set(seen).size).toBe(1); // ...all with the one key, so the operation never runs twice.
+  });
+
+  it('still forgets the key after any other 409 (a key reused for a different request)', async () => {
+    const keys = TestBed.inject(OperationKeys);
+    const seen: string[] = [];
+    await expect(keys.run('pay:trp_1', 10, async (key) => { seen.push(key); throw new HttpErrorResponse({ status: 409, error: { message: 'different request' } }); })).rejects.toBeTruthy();
+    await keys.run('pay:trp_1', 10, async (key) => { seen.push(key); return 'ok'; });
+    expect(seen[1]).not.toBe(seen[0]);
+  });
 });
 
 describe('Idempotency-Key headers', () => {
