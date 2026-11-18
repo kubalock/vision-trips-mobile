@@ -45,4 +45,19 @@ describe('Home order', () => {
     expect(show('quote')).toBeNull();
     expect(show('confirmed')).not.toBeNull();
   });
+
+  it('says "Departs tomorrow" rather than "1 days until departure"', async () => {
+    const fixture = TestBed.createComponent(App);
+    await fixture.whenStable();
+    const app = fixture.componentInstance as unknown as { trip: { set: (value: unknown) => void } };
+    const element = fixture.nativeElement as HTMLElement;
+    const countdown = (days: number) => {
+      app.trip.set(parseTripSnapshot({ schemaVersion: 4, tripId: 'trp_1', stage: 'countdown', accessScope: 'primary_customer', summary: { name: 'Prague', reference: 'R' }, timeline: { daysUntilDeparture: days, nextItemTitle: 'Flight' } }));
+      fixture.detectChanges();
+      return element.querySelector('.vt-home-up-next__countdown')?.textContent?.trim();
+    };
+    expect(countdown(1)).toBe('Departs tomorrow');
+    expect(countdown(5)).toBe('5 days until departure');
+  });
 });
+

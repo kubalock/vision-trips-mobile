@@ -13,7 +13,7 @@ interface DayGroup {
   date: string;
   dateLabel: string;
   dayLabel: string;
-  items: Array<{ item: ItineraryItem; typeLabel: string; showTypeLabel: boolean; showRoute: boolean; notes: NoteBlocks | null; passengerLines: string[] }>;
+  items: Array<{ item: ItineraryItem; typeLabel: string; showTypeLabel: boolean; showRoute: boolean; notes: NoteBlocks | null; longNotes: boolean; passengerLines: string[] }>;
 }
 
 /** Agent notes split into an opening paragraph and the " - " bullet points that often follow it. */
@@ -50,12 +50,14 @@ export interface NoteBlocks {
                         @if (item.startTime) { <time class="vt-chip">{{ item.startTime }}</time> }
                       </div>
                       @if (entry.showRoute) { <p class="vt-el__route flex items-center gap-1">{{ item.from }}@if (item.to) { <vt-icon name="arrow-right" [size]="15" /> {{ item.to }} }</p> }
-                      @if (item.kind === 'flight' && flightCodes(item); as codes) { <p class="vt-el__meta vt-el__codes">{{ codes }}</p> }
-                      @if (item.carrier || item.flightNumber) { <p class="vt-el__meta">{{ item.carrier }} {{ item.flightNumber }}</p> }
+                      @if (item.kind === 'flight') {
+                        @if (flightLine(item); as line) { <p class="vt-el__meta vt-el__codes">{{ line }}</p> }
+                      } @else if (item.carrier || item.flightNumber) { <p class="vt-el__meta">{{ item.carrier }} {{ item.flightNumber }}</p> }
                       @if (item.address) { <p class="vt-el__meta">{{ item.address }}</p> }
-                      @if (item.details.length) {
+                      @let details = shownDetails(item);
+                      @if (details.length) {
                         <dl class="vt-itinerary-meta">
-                          @for (detail of item.details; track $index) { <div [class.is-long]="detail.value.length > 32"><dt>{{ detail.label }}</dt><dd [attr.aria-label]="detailStars(detail) ? detail.value + ' stars' : null">{{ detailStars(detail) || detail.value }}</dd></div> }
+                          @for (detail of details; track $index) { <div [class.is-long]="detail.value.length > 32"><dt>{{ detail.label }}</dt><dd [attr.aria-label]="detailStars(detail) ? detail.value + ' stars' : null">{{ detailStars(detail) || detail.value }}</dd></div> }
                         </dl>
                       }
                       @for (room of item.rooms; track $index) {
@@ -72,7 +74,7 @@ export interface NoteBlocks {
                         </details>
                       }
                       @if (item.cruisePorts.length) {
-                        <details class="vt-itinerary-disclosure vt-cruise-stops" (toggle)="toggled('ports:' + item.id, $event)"><summary><span>Cruise itinerary <em>{{ item.cruisePorts.length }} stops</em></span><vt-icon name="chevron-down" [size]="18" /></summary>
+                        <details class="vt-itinerary-disclosure vt-cruise-stops" (toggle)="toggled('ports:' + item.id, $event)"><summary><span>Cruise itinerary <em>{{ item.cruisePorts.length }} {{ item.cruisePorts.length === 1 ? 'stop' : 'stops' }}</em></span><vt-icon name="chevron-down" [size]="18" /></summary>
                           <!-- Port lists can run to 100+ stops: build them only once the traveller opens the list. -->
                           @if (opened().has('ports:' + item.id)) { <ol class="vt-cruise-timeline">
                           @for (port of item.cruisePorts; track $index) { <li><span class="vt-cruise-timeline__node" aria-hidden="true"></span><div><p class="vt-cruise-timeline__title">{{ port.day ? 'Day ' + port.day + ' · ' : '' }}{{ port.port }}</p>@if (port.arrivalTime || port.departureTime) { <p class="vt-cruise-timeline__time">{{ port.arrivalTime }}{{ port.departureTime ? ' – ' + port.departureTime : '' }}</p> }@if (port.description) { <p class="vt-cruise-timeline__description">{{ port.description }}</p> }</div></li> }
@@ -80,7 +82,11 @@ export interface NoteBlocks {
                       }
                       @if (item.supplier || item.reference) { <dl class="vt-itinerary-reference">@if (item.supplier) { <div><dt>Supplier</dt><dd>{{ item.supplier.name }}</dd></div> }@if (item.reference) { <div><dt>Booking reference</dt><dd>{{ item.reference }}</dd></div> }</dl> }
                       @if (item.emergencyContact; as emergency) { <a class="mt-4 flex items-center justify-between rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-900" [href]="telephoneLink(emergency.phone)"><span>{{ emergency.name }}</span><span>{{ emergency.phone }}</span></a> }
-                      @if (entry.notes; as notes) { <div class="vt-itinerary-notes">@if (notes.intro) { <p>{{ notes.intro }}</p> }@if (notes.points.length) { <ul>@for (point of notes.points; track $index) { <li>{{ point }}</li> }</ul> }</div> }
+                      @if (entry.notes; as notes) {
+                        @let clamped = entry.longNotes && !opened().has('notes:' + item.id);
+                        <div class="vt-itinerary-notes" [id]="'notes-' + item.id" [class.is-clamped]="clamped">@if (notes.intro) { <p>{{ notes.intro }}</p> }@if (notes.points.length) { <ul>@for (point of notes.points; track $index) { <li>{{ point }}</li> }</ul> }</div>
+                        @if (entry.longNotes) { <button type="button" class="vt-itinerary-notes__more" [attr.aria-expanded]="!clamped" [attr.aria-controls]="'notes-' + item.id" (click)="toggleNotes(item.id)">{{ clamped ? 'Read more' : 'Show less' }}<vt-icon [name]="clamped ? 'chevron-down' : 'chevron-up'" [size]="16" /></button> }
+                      }
                     </div>
                   </li>
                 }
@@ -121,6 +127,12 @@ export class ItinerarySection {
   showLater(): void { this.windowEnd.update((end) => Math.min(this.days().length, end + ITINERARY_DAY_WINDOW)); }
   showEarlier(): void { this.windowStart.update((start) => Math.max(0, start - ITINERARY_DAY_WINDOW)); }
 
+  /** Long notes (a weather tip, a sales message) show their first lines until the traveller asks for the rest. */
+  toggleNotes(itemId: string): void {
+    const key = `notes:${itemId}`;
+    this.opened.update((keys) => { const next = new Set(keys); if (next.has(key)) next.delete(key); else next.add(key); return next; });
+  }
+
   toggled(key: string, event: Event): void {
     if (!(event.target as HTMLDetailsElement).open || this.opened().has(key)) return;
     this.opened.update((keys) => new Set(keys).add(key));
@@ -137,6 +149,22 @@ export class ItinerarySection {
    * The line beneath the airport names: codes and terminals as booked ("LHR T5 → PFO T1"). Terminals come from the
    * booking (or its notes); live flight data never replaces them here.
    */
+  /** A flight's essentials on one line — "LHR T3 → PRG T1 · British Airways BA854 · Outbound" — instead of three sparse rows. */
+  protected flightLine(item: ItineraryItem): string {
+    const flight = [item.carrier, item.flightNumber].filter(Boolean).join(' ');
+    return [this.flightCodes(item), flight, this.direction(item)?.value].filter(Boolean).join(' · ');
+  }
+
+  /** A flight's direction is already on its one-line summary, so it isn't repeated as a labelled detail. */
+  protected shownDetails(item: ItineraryItem): ItineraryItem['details'] {
+    const direction = item.kind === 'flight' ? this.direction(item) : undefined;
+    return direction ? item.details.filter((detail) => detail !== direction) : item.details;
+  }
+
+  private direction(item: ItineraryItem) {
+    return item.details.find((detail) => /^direction$/i.test(detail.label) && detail.value.length <= 20);
+  }
+
   protected flightCodes(item: ItineraryItem): string {
     const end = (code: string | null, terminal: string | null | undefined) => [code, terminal].filter(Boolean).join(' ');
     const from = end(item.fromCode, item.departureTerminal); const to = end(item.toCode, item.arrivalTerminal);
@@ -162,7 +190,7 @@ export function groupByDay(items: ItineraryItem[]): DayGroup[] {
     dayLabel: firstDate && date !== TO_BE_CONFIRMED ? `Day ${daysBetween(firstDate, date) + 1}` : 'Trip plan',
     items: groupItems.map((item) => {
       const typeLabel = customerTypeLabel(item);
-      return { item, typeLabel, showTypeLabel: typeLabel.trim().toLocaleLowerCase() !== item.title.trim().toLocaleLowerCase(), showRoute: showRoute(item), notes: noteBlocks(item.notes), passengerLines: item.passengers.map(passengerLine) };
+      return { item, typeLabel, showTypeLabel: typeLabel.trim().toLocaleLowerCase() !== item.title.trim().toLocaleLowerCase(), showRoute: showRoute(item), notes: noteBlocks(item.notes), longNotes: (item.notes?.trim().length ?? 0) > LONG_NOTES, passengerLines: item.passengers.map(passengerLine) };
     }),
   }));
 }
@@ -197,6 +225,9 @@ function showRoute(item: ItineraryItem): boolean {
   const title = item.title.toLocaleLowerCase();
   return !(item.from && item.to && title.includes(item.from.toLocaleLowerCase()) && title.includes(item.to.toLocaleLowerCase()));
 }
+
+/** Notes longer than this (about six lines on a phone) are collapsed behind "Read more". */
+const LONG_NOTES = 360;
 
 /** Splits " - First point. - Second point." runs (two or more) into a list; other notes stay as one paragraph. */
 export function noteBlocks(notes: string | null | undefined): NoteBlocks | null {

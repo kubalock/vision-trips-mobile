@@ -792,6 +792,7 @@ export class App implements OnInit, OnDestroy {
     this.trip.set(response.snapshot);
     this.session.set(response.session);
     this.showTripLibrary.set(false);
+    this.scrollToTop();
     this.switchNotice.set(switchMessage(previous, response.snapshot, nextIdentity, takesOver));
     void this.loadExternalContent();
     void this.loadRelatedQuotations();
@@ -1053,6 +1054,7 @@ export class App implements OnInit, OnDestroy {
   protected async watchVideo(video: TripVideo): Promise<void> {
     const session = this.session();
     const isWalkthrough = video.kind === 'file' && this.trip()?.content?.walkthrough?.url === video.url;
+    if (this.loadingVideo()) return; // A second tap while the fresh link loads.
     if (!isWalkthrough || !session || !this.online()) { this.openVideo.set(video); return; }
     const generation = this.tripGeneration;
     this.loadingVideo.set(true);
@@ -1067,10 +1069,10 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  /** The quick way to reach the agent from anywhere: the message form under Help. */
   /** Help shows one route per number: the agent's branch line is hidden when it rings the company's own number. */
   protected readonly samePhone = samePhone;
 
+  /** The quick way to reach the agent from anywhere: the message form under Help. */
   protected messageAgent(): void {
     this.trackEngagement('action_clicked', 'message_agent');
     this.messageSent.set(false);
@@ -1150,6 +1152,7 @@ export class App implements OnInit, OnDestroy {
   protected openAnotherTrip(): void {
     this.showNotifications.set(false);
     this.showTripLibrary.set(this.savedTripList().length > 0);
+    this.scrollToTop(); // My Trips is a new page: start at its top, where "Back to …" is.
   }
 
   /** Leaves My Trips for the trip that is still open behind it, on the tab the traveller was using. */
@@ -1161,7 +1164,7 @@ export class App implements OnInit, OnDestroy {
     const saved = this.savedTripList().find((entry) => entry.snapshot.tripId === current.tripId);
     if (current.freshness.status === 'offline' && this.online() && saved) { void this.openSavedTrip(saved); return; }
     this.showTripLibrary.set(false);
-    window.scrollTo({ top: 0 });
+    this.scrollToTop();
     requestAnimationFrame(() => document.querySelector<HTMLElement>('#main-content')?.focus({ preventScroll: true }));
   }
 
@@ -1175,7 +1178,12 @@ export class App implements OnInit, OnDestroy {
   protected async openSavedTrip(saved: SavedTrip): Promise<void> {
     this.error.set('');
     this.showTripLibrary.set(false);
+    this.scrollToTop(); // A trip opens at its hero, not at the library's scroll position.
     await this.activateSavedTrip(saved, this.online());
+  }
+
+  private scrollToTop(): void {
+    window.scrollTo({ top: 0, behavior: 'instant' });
   }
 
   protected selectAll(event: Event): void {
@@ -1452,7 +1460,8 @@ export class App implements OnInit, OnDestroy {
   }
 
   private loadCustomerNotifications(tripId: string): void {
-    this.notifications.set(this.customerNotifications.list(tripId));
+    const open = this.trip();
+    this.notifications.set(this.customerNotifications.list(tripId, open?.tripId === tripId ? open : null));
   }
 
   protected async loadExternalContent(showLoading = true): Promise<void> {

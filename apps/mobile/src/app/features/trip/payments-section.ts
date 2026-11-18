@@ -29,10 +29,10 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
             <span>Paid</span>
             <strong [class.vt-money--unavailable]="payments().paid === null">{{ money(payments().paid, payments().currency) }}</strong>
           </div>
-          <div class="vt-payment-summary__balance" [class.is-paid]="payments().balance !== null && payments().balance! <= 0">
+          <div class="vt-payment-summary__balance" [class.is-paid]="payments().balance !== null && payments().balance! <= 0" [class.is-overdue]="hasOverdue() && payments().balance !== null && payments().balance! > 0" [class.is-unknown]="payments().balance === null" [class.is-quote]="awaitingAcceptance() && !hasOverdue()">
             <span>Balance</span>
             <strong [class.vt-money--unavailable]="payments().balance === null">{{ money(payments().balance, payments().currency) }}</strong>
-            <small>{{ payments().balance === null ? 'Ask your travel agent' : payments().balance! > 0 ? 'Outstanding' : 'Paid in full' }}</small>
+            <small>{{ payments().balance === null ? 'Ask your travel agent' : payments().balance! > 0 ? (hasOverdue() ? 'Overdue' : awaitingAcceptance() ? 'On acceptance' : 'Outstanding') : 'Paid in full' }}</small>
           </div>
         </div>
         <div class="vt-payment-progress__footer">
@@ -63,7 +63,7 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
         </header>
         <ul class="vt-payments" role="list">
           @for (payment of payments().items; track payment.id) {
-            <li class="vt-pay" [class.is-paid]="payment.status === 'paid'" [class.is-overdue]="payment.status === 'overdue'" [class.is-refund]="payment.status === 'refund'" [class.is-resort]="payment.status === 'local'">
+            <li class="vt-pay" [class.is-paid]="payment.status === 'paid'" [class.is-overdue]="isOverdue(payment)" [class.is-refund]="payment.status === 'refund'" [class.is-resort]="payment.status === 'local'">
               <div class="vt-pay__main">
                 <span class="vt-pay__label">{{ payment.label }}</span>
                 @if (payment.kind === 'points') {
@@ -73,7 +73,7 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
                 }
                 @if (payment.dueDate) {
                   @let due = dueState(payment);
-                  <span class="vt-pay__date" [class.is-overdue]="due === 'overdue'" [class.is-today]="due === 'today'">{{ due === 'overdue' ? 'Overdue · was due' : due === 'today' ? 'Due today ·' : 'Due' }} {{ payment.dueDate | europeanDate }}</span>
+                  <span class="vt-pay__date" [class.is-overdue]="due === 'overdue'" [class.is-today]="due === 'today'">{{ due === 'overdue' ? 'Overdue · was due' : due === 'today' ? 'Due today ·' : due === 'lapsed' ? 'Was due' : 'Due' }} {{ payment.dueDate | europeanDate }}{{ due === 'lapsed' ? ' · your travel expert will confirm new dates when you accept' : '' }}</span>
                 }
               </div>
               @if (awaitingAcceptance() && isFirstOutstanding(payment.id)) {
@@ -84,7 +84,7 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
               } @else if (payment.kind === 'points') {
                 <span class="vt-pay__status vt-pay__status--paid">Loyalty points</span>
               } @else {
-                <span class="vt-pay__status" [class.vt-pay__status--paid]="payment.status === 'paid'" [class.vt-pay__status--overdue]="payment.status === 'overdue'">{{ statusLabel(payment.status) }}</span>
+                <span class="vt-pay__status" [class.vt-pay__status--paid]="payment.status === 'paid'" [class.vt-pay__status--due]="payment.status === 'outstanding' && !awaitingAcceptance()" [class.vt-pay__status--overdue]="isOverdue(payment)">{{ awaitingAcceptance() && (payment.status === 'outstanding' || payment.status === 'overdue') ? 'On acceptance' : statusLabel(payment.status) }}</span>
               }
             </li>
           } @empty {
@@ -145,6 +145,10 @@ export class PaymentsSection {
     const total = this.payments().total;
     return total !== null && total > 0 ? Math.round(total / this.travellerCount() * 100) / 100 : null;
   });
+  /** The summary pill and the row pills use the same states: paid (green), due (amber), overdue (red), other (grey). */
+  protected hasOverdue(): boolean { return this.payments().items.some((item) => this.isOverdue(item)); }
+  /** Nothing is owed on a quotation until it is accepted, so it is never overdue (even from an older saved copy). */
+  protected isOverdue(payment: PaymentSummary['items'][number]): boolean { return payment.status === 'overdue' && !this.awaitingAcceptance(); }
   protected isFirstOutstanding(id: string): boolean { return this.payments().items.find((item) => item.status === 'outstanding' || item.status === 'overdue')?.id === id; }
   protected pointsLabel(points: number): string { return formatPoints(points); }
   readonly payCustom = output<number>();
@@ -158,12 +162,16 @@ export class PaymentsSection {
     try { return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(amount); } catch { return `${amount.toFixed(2)} ${currency}`; }
   }
   /** Overdue as the booking says; "today" for anything still owed on its due date (local calendar day). */
-  protected dueState(payment: PaymentSummary['items'][number]): 'overdue' | 'today' | null {
-    if (payment.status === 'overdue') return 'overdue';
-    if (payment.status !== 'outstanding' || !payment.dueDate) return null;
+  /** On a quotation awaiting acceptance a past date is "lapsed": shown neutrally, since nothing is owed yet. */
+  protected dueState(payment: PaymentSummary['items'][number]): 'overdue' | 'today' | 'lapsed' | null {
+    if (payment.status !== 'outstanding' && payment.status !== 'overdue') return null;
+    if (!payment.dueDate) return null;
     const now = new Date();
     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    return payment.dueDate.slice(0, 10) === today ? 'today' : null;
+    const due = payment.dueDate.slice(0, 10);
+    if (this.awaitingAcceptance()) return due < today ? 'lapsed' : due === today ? 'today' : null;
+    if (payment.status === 'overdue') return 'overdue';
+    return due === today ? 'today' : null;
   }
   protected statusLabel(status: PaymentSummary['items'][number]['status']): string { return status === 'local' ? 'Pay locally' : status; }
   protected updateCustom(event: Event): void { this.customAmount.set((event.target as HTMLInputElement).value); }

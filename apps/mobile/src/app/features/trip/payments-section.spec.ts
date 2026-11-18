@@ -27,6 +27,33 @@ describe('PaymentsSection', () => {
     expect(text).toContain('Not available');
   });
 
+  it('gives the summary and each row the same pill for the same state', () => {
+    const row = (id: string, status: string) => ({ id, label: id, amount: 100, currency: 'GBP', status, dueDate: null, completedDate: null, canPay: false, actionUrl: null });
+    const element = render(summary({ total: 300, paid: 100, balance: 200, items: [row('Deposit', 'paid'), row('Instalment', 'overdue'), row('Balance', 'outstanding')] } as Partial<PaymentSummary>));
+    const pills = [...element.querySelectorAll('.vt-pay__status')].map((pill) => [pill.textContent?.trim(), pill.className.replace('vt-pay__status ', '').trim()]);
+    expect(pills).toEqual([['paid', 'vt-pay__status--paid'], ['overdue', 'vt-pay__status--overdue'], ['outstanding', 'vt-pay__status--due']]);
+    const balance = element.querySelector('.vt-payment-summary__balance')!;
+    expect(balance.classList.contains('is-overdue')).toBe(true);
+    expect(balance.querySelector('small')?.textContent?.trim()).toBe('Overdue');
+  });
+
+  it('never shows a quotation awaiting acceptance as overdue, even from an older saved copy', () => {
+    const fixture = TestBed.createComponent(PaymentsSection);
+    const row = (id: string, status: string) => ({ id, label: id, amount: 100, currency: 'GBP', status, dueDate: '2020-01-01', completedDate: null, canPay: false, actionUrl: null });
+    fixture.componentRef.setInput('payments', summary({ total: 200, paid: 0, balance: 200, items: [row('Deposit', 'outstanding'), row('Balance', 'overdue')] } as Partial<PaymentSummary>));
+    fixture.componentRef.setInput('stage', 'quote');
+    fixture.componentRef.setInput('awaitingAcceptance', true);
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('.is-overdue')).toBeNull();
+    expect(element.querySelector('.vt-pay__status--overdue')).toBeNull();
+    expect(element.querySelector('.vt-pay__status')?.textContent?.trim()).toBe('On acceptance');
+    expect(element.querySelector('.vt-payment-summary__balance small')?.textContent?.trim()).toBe('On acceptance');
+    expect(element.querySelector('.vt-payment-summary__balance')?.classList.contains('is-quote')).toBe(true);
+    expect(element.querySelector('.vt-pay__date')?.textContent).toContain('Was due 01/01/2020');
+    expect(element.textContent).not.toMatch(/overdue/i);
+  });
+
   it('shows known figures in the booking currency', () => {
     const text = render(summary({ currency: 'EUR', total: 1000, paid: 250, balance: 750 })).textContent ?? '';
     expect(text).toContain('€1,000.00');

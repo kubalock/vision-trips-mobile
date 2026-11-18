@@ -59,7 +59,7 @@ describe('returned-trip home screen', () => {
     expect(hero.textContent).not.toContain('—');
     expect(hero.textContent).not.toContain('0 nights');
     expect(hero.textContent).not.toContain('Add to calendar');
-    expect(element.querySelector('.vt-freshness--quiet')?.textContent).toContain('Updated');
+    expect(element.querySelector('.vt-freshness--quiet')?.textContent).toContain('Booking last changed');
     expect(element.textContent).not.toContain('Trip up to date');
     expect(element.textContent).toContain('Plan your next trip');
   });

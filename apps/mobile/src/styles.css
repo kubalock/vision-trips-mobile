@@ -184,7 +184,7 @@ button { font: inherit; }
   /* Phones: reference on its own line above the dates, instead of one long line that wraps mid-date. */
   .vt-app .vt-hero__sub { display: grid; gap: 2px; }
   .vt-app .vt-hero__sep { display: none; }
-  .vt-app .vt-hero__ref { font-size: .78em; font-weight: 650; letter-spacing: .04em; opacity: .9; }
+  .vt-app .vt-hero__ref { font-size: max(.75rem, .78em); font-weight: 650; letter-spacing: .04em; opacity: .9; }
   .vt-app .vt-hero__facts { gap: 6px; }
   .vt-app .vt-hero__facts li { padding: 6px 10px; font-size: .78rem; }
   .vt-app .vt-section { padding-top: 32px; }
@@ -1434,6 +1434,12 @@ body.vt .vt-app .vt-saved-trip__icon-button--danger:hover {
 
 /* Bottom navigation remains metadata-sized rather than adopting CTA sizing. */
 body.vt .vt-app .vt-nav button { font-size: 0.75rem; line-height: 1rem; font-weight: 600; }
+/* Five tabs share the width: on narrow phones with larger text the labels are capped (about 12px at 360px) so "Documents"
+   still fits its tab instead of running into its neighbours; the tab never scrolls or clips. */
+@media (max-width: 420px) {
+  body.vt .vt-app .vt-nav button { font-size: clamp(10px, 3.3vw, 0.75rem); letter-spacing: -.01em; }
+  body.vt .vt-app .vt-nav button span:not(.vt-nav__icon) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
 /* Inactive tabs one step darker than muted text (about 4.5:1 → 7:1); the active tab keeps its tint and indicator. */
 .vt-app .vt-nav button:not(.is-active) { color: var(--ink-2); }
 
@@ -2154,7 +2160,7 @@ body.vt .vt-app .vt-account-danger__icon { width: 40px; height: 40px; }
 .vt-app .vt-upsell-card__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
 .vt-app .vt-upsell-card__actions button { margin-top: 0; min-height: 44px; }
 .vt-app .vt-upsell-card__book { background: var(--accent-action) !important; color: var(--accent-action-ink) !important; border-color: transparent !important; }
-.vt-app :is(.vt-quotation-compare__more, .vt-account-trips__more) { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; margin-top: 8px; padding: 0 4px; border: 0; background: none; color: var(--vt-accent-text); font-weight: 650; cursor: pointer; }
+.vt-app :is(.vt-quotation-compare__more, .vt-account-trips__more, .vt-selected-airports__more) { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; margin-top: 8px; padding: 0 4px; border: 0; background: none; color: var(--vt-accent-text); font-weight: 650; cursor: pointer; }
 .vt-app .vt-quotation-grid--pair { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
 .vt-app .vt-quotation-rows { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .vt-app .vt-quotation-row { display: grid; grid-template-columns: 2fr 1.5fr 1fr auto; align-items: center; gap: 8px 12px; padding: 12px; border: 1px solid var(--line); border-radius: var(--r-s); background: var(--surface); }
@@ -2281,7 +2287,7 @@ body.vt .vt-app .vt-quotation-compare__eyebrow { margin: 0; color: var(--vt-acce
   body.vt .vt-app .vt-contact-card__icon > vt-icon { width: 19px; height: 19px; }
   body.vt .vt-app .vt-contact-card__arrow { display: none; }
   body.vt .vt-app .vt-contact-card__copy strong { flex-wrap: nowrap; }
-  body.vt .vt-app .vt-contact-card__copy strong small { min-height: 20px; padding: 2px 7px; font-size: .62rem; }
+  body.vt .vt-app .vt-contact-card__copy strong small { min-height: 20px; padding: 2px 7px; font-size: .7rem; }
   body.vt .vt-app .vt-contact-card__copy > span { font-size: .84rem; }
 }
 
@@ -2301,3 +2307,47 @@ body.vt .vt-app .vt-quotation-compare__eyebrow { margin: 0; color: var(--vt-acce
   body.vt .vt-app .vt-account-card__header { grid-template-columns: minmax(0, 1fr); }
   body.vt .vt-app .vt-account-card__header > .vt-account-card__icon { display: none; }
 }
+
+/* Watch while a fresh walkthrough link is fetched: the button says so instead of seeming to ignore the tap. */
+.vt-app .vt-video-card__watch { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.vt-app .vt-video-card__watch .vt-spin { display: inline-flex; animation: vt-spin 1s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .vt-app .vt-video-card__watch .vt-spin { animation: none; } }
+
+/* Payment status pills: one shape and one colour per state, in the summary and on every row.
+   Paid green, due amber, overdue red, anything else (pay locally, ask your agent) grey. */
+body.vt .vt-app :is(.vt-pay__status, .vt-payment-summary__stats small) { min-height: 24px; padding: 5px 9px; border-radius: var(--r-pill); font-size: .75rem; font-weight: 800; letter-spacing: .04em; line-height: 1; text-transform: uppercase; }
+.vt-app .vt-pay__status--due, .vt-app .vt-payment-summary__balance small { background: color-mix(in srgb, var(--warn) 13%, var(--surface)); color: var(--warn); }
+.vt-app :is(.vt-pay__status--overdue, .vt-payment-summary__balance.is-overdue small) { background: color-mix(in srgb, var(--bad) 12%, var(--surface)); color: var(--bad); }
+.vt-app :is(.vt-pay__status--paid, .vt-payment-summary__balance.is-paid small) { background: color-mix(in srgb, var(--ok) 13%, var(--surface)); color: var(--ok); }
+.vt-app :is(.vt-payment-summary__balance.is-unknown, .vt-payment-summary__balance.is-quote) small { background: color-mix(in srgb, var(--ink-3) 10%, var(--surface)); color: var(--ink-2); }
+
+/* The file-type badge ("PDF") reads as a badge in both themes: in dark mode a 9% tint was almost the card colour. */
+.vt-app .vt-doc-badge--type { background: color-mix(in srgb, var(--vt-accent) 14%, var(--surface-2)); }
+/* Dark: the tint stays strong enough to read as a badge, and the text is the main ink (about 10:1) because the brand's
+   accent text on its own tint falls under 4.5:1 for darker brands. */
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .vt-app .vt-doc-badge--type { background: color-mix(in srgb, var(--vt-accent) 28%, var(--surface-2)); color: var(--ink); } }
+:root[data-theme="dark"] .vt-app .vt-doc-badge--type { background: color-mix(in srgb, var(--vt-accent) 28%, var(--surface-2)); color: var(--ink); }
+
+/* The video viewer's Close button keeps its full 44 × 44 target next to a long title. */
+.vt-app .vt-video-viewer__close { flex: 0 0 44px; min-width: 44px; }
+
+/* Watch while its link loads: busy but still focusable, so it looks pressed rather than unavailable. */
+.vt-app .vt-video-card__watch[aria-disabled="true"] { cursor: progress; opacity: .85; }
+
+/* Metadata never drops under 12px (it still scales with the text-size setting): freshness line, notification times,
+   journey step dates, "Lead traveller", the "Travel only" badge, My Trips brand and reference, the hero's trip tags,
+   "N% paid" and the payment schedule count. */
+body.vt .vt-app :is(
+  .vt-trip-status-card__copy > div > div, .vt-notification-row time, .vt-booking-step__title time,
+  .vt-traveller__lead, .vt-contact-card__copy strong small, .vt-saved-trip__brand, .vt-saved-trip h3 + p,
+  .vt-hero__facts li, .vt-payment-progress__meta, .vt-payment-progress__meta strong, .vt-payment-card__heading > span
+) { font-size: max(.75rem, 12px); }
+
+/* Full 44 × 44 targets: an airport chip's Remove button (negative margins keep the chip its usual height) and the
+   account's sign-out and remove-data buttons. */
+body.vt .vt-app .vt-selected-airport button { width: 44px; height: 44px; min-width: 44px; min-height: 44px; margin: -5px -4px -5px -6px; }
+body.vt .vt-app .vt-account-danger button { min-height: 44px; }
+
+/* Long itinerary notes: about six lines, fading out, then "Read more". The full text stays in the page for screen readers. */
+.vt-app .vt-itinerary-notes.is-clamped { max-height: calc(1.6em * 6 + 14px); overflow: hidden; -webkit-mask-image: linear-gradient(#000 70%, transparent); mask-image: linear-gradient(#000 70%, transparent); }
+.vt-app .vt-itinerary-notes__more { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; margin-top: 2px; padding: 0 2px; border: 0; background: none; color: var(--vt-accent-text); font: inherit; font-size: .875rem; font-weight: 650; cursor: pointer; }

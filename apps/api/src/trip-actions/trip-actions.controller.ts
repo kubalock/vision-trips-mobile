@@ -145,9 +145,13 @@ export class TripActionsController {
   @ApiBearerAuth()
   async walkthrough(@Headers('authorization') authorization: string | undefined): Promise<WalkthroughResponse> {
     const principal = await this.live(authorization);
-    const snapshot = await this.trips.snapshot(principal.baseId, principal.recordId, principal.fellowTraveller ? 'fellow_traveller' : 'primary_customer', { maxAgeMs: SNAPSHOT_CACHE_MS });
+    // Fetched side by side: when the cached snapshot has expired, rebuilding it takes seconds, and waiting for that
+    // before asking for the Booking made Watch feel stuck. The video is still withheld while a surprise is concealed.
+    const [snapshot, booking] = await Promise.all([
+      this.trips.snapshot(principal.baseId, principal.recordId, principal.fellowTraveller ? 'fellow_traveller' : 'primary_customer', { maxAgeMs: SNAPSHOT_CACHE_MS }),
+      this.airtable.record(principal.baseId, process.env.AIRTABLE_BOOKINGS_TABLE?.trim() || 'Bookings', principal.recordId),
+    ]);
     if (snapshot.experience.surprise.concealed) return { video: null };
-    const booking = await this.airtable.record(principal.baseId, process.env.AIRTABLE_BOOKINGS_TABLE?.trim() || 'Bookings', principal.recordId);
     return { video: walkthroughVideo(pick(booking.fields, bookingFields.videoWalkthrough), snapshot.agent?.name ?? snapshot.experience.agentName) };
   }
 

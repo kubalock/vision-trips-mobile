@@ -42,6 +42,24 @@ describe('CustomerAccountSection preferences', () => {
     expect(saved.at(-1)?.preferredAirports).toEqual(many);
   });
 
+  it('shows eight saved airports with a button for the rest, and never hides one just added', () => {
+    const many = Array.from({ length: 9 }, (_, index) => `Airport ${index + 1}`);
+    const { fixture, element } = setup(account({ preferredAirports: many }));
+    const chips = () => element.querySelectorAll('.vt-selected-airport');
+    expect(chips()).toHaveLength(8);
+    const more = element.querySelector<HTMLButtonElement>('.vt-selected-airports__more')!;
+    expect(more.textContent).toContain('Show all 9 airports');
+    more.click(); fixture.detectChanges();
+    expect(chips()).toHaveLength(9);
+    expect(element.querySelector('.vt-selected-airports__more')).toBeNull();
+  });
+
+  it('shows an airport just added even when the list was collapsed', () => {
+    const { fixture, section, element } = setup(account({ preferredAirports: Array.from({ length: 8 }, (_, index) => `Airport ${index + 1}`) }));
+    section.addAirport('Manchester'); fixture.detectChanges();
+    expect([...element.querySelectorAll('.vt-selected-airport')].map((chip) => chip.textContent?.trim()).at(-1)).toBe('Manchester');
+  });
+
   it('only allows saving when something changed, and not while a save is running', () => {
     const { fixture, section, saved, saveButton } = setup();
     expect(saveButton().disabled).toBe(true);

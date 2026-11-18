@@ -187,13 +187,16 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
                 }
               </div>
               <div class="vt-selected-airports" aria-label="Selected departure airports">
-                @for (airport of prefs.preferredAirports; track airport) {
+                @for (airport of visibleAirports(prefs.preferredAirports); track airport) {
                   <span class="vt-selected-airport">
                     <span>{{ airport }}</span>
                     <button type="button" [attr.aria-label]="'Remove ' + airport" (click)="removeAirport(airport)"><vt-icon name="close" [size]="14" /></button>
                   </span>
                 } @empty { <span class="vt-selected-airports__empty">No airports selected yet</span> }
               </div>
+              @if (prefs.preferredAirports.length > visibleAirports(prefs.preferredAirports).length) {
+                <button type="button" class="vt-selected-airports__more" (click)="showAllAirports.set(true)">Show all {{ prefs.preferredAirports.length }} airports <vt-icon name="chevron-down" [size]="16" /></button>
+              }
             </fieldset>
             <fieldset class="vt-account-fieldset vt-account-fieldset--divided">
               <legend>Preferred travel months</legend>
@@ -233,6 +236,9 @@ export class CustomerAccountSection {
   readonly help = output<void>();
   /** The open trip and the next two (the API sorts current, upcoming, quotations, then past); the rest on request. */
   protected readonly showAllTrips = signal(false);
+  /** A long airport list (some customers have 20+ from the old system) shows its first eight until asked for the rest. */
+  protected readonly showAllAirports = signal(false);
+  protected visibleAirports(airports: string[]): string[] { return this.showAllAirports() ? airports : airports.slice(0, 8); }
   protected visibleTrips(trips: CustomerAccountTrip[]): CustomerAccountTrip[] { return this.showAllTrips() ? trips : trips.slice(0, 3); }
   readonly account = input<CustomerAccount | null>(null); readonly loading = input(false); readonly saving = input(false); readonly savedNotice = input(''); readonly openingTripId = input<string | null>(null); readonly error = input('');
   readonly save = output<CustomerPreferences>(); readonly openTrip = output<string>(); readonly signOut = output<void>(); readonly removeAll = output<void>(); readonly retry = output<void>();
@@ -268,7 +274,7 @@ export class CustomerAccountSection {
   channel(key: 'emailMarketing' | 'smsMarketing' | 'postalMarketing', event: Event): void { const checked = (event.target as HTMLInputElement).checked; this.edit((draft) => ({ ...draft, [key]: checked })); }
   setAirportQuery(event: Event): void { this.airportQuery = (event.target as HTMLInputElement).value; this.airportSearchOpen = true; }
   filteredAirports(data: CustomerAccount, prefs: CustomerPreferences): string[] { const query = this.airportQuery.trim().toLocaleLowerCase(); return data.airportOptions.filter((airport) => !prefs.preferredAirports.includes(airport) && (!query || airport.toLocaleLowerCase().includes(query))).slice(0, 8); }
-  addAirport(airport: string): void { this.edit((draft) => draft.preferredAirports.length >= 10 ? draft : { ...draft, preferredAirports: [...new Set([...draft.preferredAirports, airport])].slice(0, 10) }); this.airportQuery = ''; this.airportSearchOpen = false; }
+  addAirport(airport: string): void { this.edit((draft) => draft.preferredAirports.length >= 10 ? draft : { ...draft, preferredAirports: [...new Set([...draft.preferredAirports, airport])].slice(0, 10) }); this.airportQuery = ''; this.airportSearchOpen = false; this.showAllAirports.set(true); /* The new chip goes last: never hide it. */ }
   removeAirport(airport: string): void { this.edit((draft) => ({ ...draft, preferredAirports: draft.preferredAirports.filter((item) => item !== airport) })); }
   toggleMonth(month: string, event: Event): void { const checked = (event.target as HTMLInputElement).checked; this.edit((draft) => ({ ...draft, preferredMonths: checked ? [...new Set([...draft.preferredMonths, month])] : draft.preferredMonths.filter((item) => item !== month) })); }
   isPastTrip(trip: CustomerAccountTrip): boolean { return ['closed', 'cancelled', 'home', 'past'].includes(trip.status); }

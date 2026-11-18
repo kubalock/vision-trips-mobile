@@ -9,7 +9,7 @@ export type BookingJourneyBlock = 'journey' | 'tailor' | 'compare' | 'faq';
   selector: 'app-booking-journey-section',
   imports: [EuropeanDatePipe, VtIcon],
   template: `
-    @if (has('journey')) {
+    @if (has('journey') && journey().steps.length) {
     <section class="vt-booking-journey-card" aria-labelledby="booking-journey-title">
       <header class="vt-booking-journey-card__header"><p>Your booking journey</p><h2 id="booking-journey-title">{{ returned() ? 'From booking to home' : 'What happens next' }}</h2></header>
       <ol class="vt-booking-timeline">

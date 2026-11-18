@@ -61,10 +61,10 @@
         </section>
       } @else {
         @if (isReturned(currentTrip.stage) && currentTrip.freshness.status === 'fresh') {
-          <p class="vt-freshness vt-freshness--quiet"><span>Updated {{ currentTrip.freshness.sourceUpdatedAt | europeanDate: 'dateTime' }}</span><button type="button" class="vt-freshness__refresh" [disabled]="refreshing() || !online() || signedOut()" (click)="refreshCurrentTrip()">{{ refreshing() ? 'Refreshing…' : 'Refresh' }}</button></p>
+          <p class="vt-freshness vt-freshness--quiet"><span>Booking last changed {{ currentTrip.freshness.sourceUpdatedAt | europeanDate: 'dateTime' }}</span><button type="button" class="vt-freshness__refresh" [disabled]="refreshing() || !online() || signedOut()" (click)="refreshCurrentTrip()">{{ refreshing() ? 'Refreshing…' : 'Refresh' }}</button></p>
         } @else {
         <aside class="vt-freshness vt-trip-status-card" [class.vt-freshness--fresh]="currentTrip.freshness.status === 'fresh'" [class.vt-freshness--stale]="currentTrip.freshness.status === 'stale'" [class.vt-freshness--offline]="currentTrip.freshness.status === 'offline'" [class.vt-freshness--partial]="currentTrip.freshness.status === 'partial'">
-          <div class="vt-trip-status-card__copy"><span class="vt-trip-status-card__indicator" aria-hidden="true"></span><div><strong>{{ currentTrip.freshness.status === 'fresh' ? 'Trip up to date' : currentTrip.freshness.status === 'offline' ? 'Offline — showing saved trip' : currentTrip.freshness.status === 'partial' ? 'Trip updated, with gaps' : 'Trip may be out of date' }}</strong><div>{{ incompleteSectionsText(currentTrip) ?? 'Last updated ' + (currentTrip.freshness.sourceUpdatedAt | europeanDate: 'dateTime') }}</div></div></div>
+          <div class="vt-trip-status-card__copy"><span class="vt-trip-status-card__indicator" aria-hidden="true"></span><div><strong>{{ currentTrip.freshness.status === 'fresh' ? 'Trip up to date' : currentTrip.freshness.status === 'offline' ? 'Offline — showing saved trip' : currentTrip.freshness.status === 'partial' ? 'Trip updated, with gaps' : 'Trip may be out of date' }}</strong><div>{{ incompleteSectionsText(currentTrip) ?? 'Booking last changed ' + (currentTrip.freshness.sourceUpdatedAt | europeanDate: 'dateTime') }}</div></div></div>
           <button type="button" class="vt-trip-status-card__refresh" [disabled]="refreshing() || !online() || signedOut()" (click)="refreshCurrentTrip()">{{ refreshing() ? 'Refreshing…' : 'Refresh' }}</button>
         </aside>
         }
@@ -98,7 +98,7 @@
         @if (currentTrip.stage === 'cancelled') { <section class="vt-section vt-notice vt-notice--bad"><p class="font-semibold">This booking has been cancelled.</p>@if (currentTrip.bookingStatus.cancellationReason) { <p class="mt-2 text-sm">{{ currentTrip.bookingStatus.cancellationReason }}</p> }</section> }
         <app-stage-experience-section [trip]="currentTrip" [external]="externalContent()" (planNext)="planNextTrip()" />
         <!-- Quotation: what you get, then the price and Accept, before anything else competes for attention. -->
-        <app-trip-content-section [trip]="currentTrip" (watch)="watchVideo($event)" (message)="messageAgent()" />
+        <app-trip-content-section [trip]="currentTrip" [opening]="loadingVideo() ? (currentTrip.content?.walkthrough?.url ?? null) : null" (watch)="watchVideo($event)" (message)="messageAgent()" />
         @if (acceptanceComplete()) {
           <section class="vt-accept-card vt-accept-card--done" aria-labelledby="accept-done-title">
             <div class="vt-accept-done">
@@ -158,7 +158,7 @@
         }
         <!-- The trip itself: what's next, the agent's note, how booking works and who is going. -->
         @if (!isReturned(currentTrip.stage) && (currentTrip.timeline.nextItemTitle || currentTrip.timeline.daysUntilDeparture !== null)) {
-          <section class="vt-home-info-card vt-home-up-next"><p class="vt-home-info-card__kicker">Up next</p><h2>{{ currentTrip.timeline.nextItemTitle || 'Your trip is coming up' }}</h2>@if (currentTrip.timeline.nextItemDate) { <p class="vt-home-up-next__date">{{ currentTrip.timeline.nextItemDate | europeanDate }}{{ currentTrip.timeline.nextItemTime ? ' at ' + currentTrip.timeline.nextItemTime : '' }}</p> }@if (currentTrip.timeline.daysUntilDeparture !== null && currentTrip.timeline.daysUntilDeparture > 0) { <p class="vt-home-up-next__countdown">{{ currentTrip.timeline.daysUntilDeparture }} days until departure</p> }</section>
+          <section class="vt-home-info-card vt-home-up-next"><p class="vt-home-info-card__kicker">Up next</p><h2>{{ currentTrip.timeline.nextItemTitle || 'Your trip is coming up' }}</h2>@if (currentTrip.timeline.nextItemDate) { <p class="vt-home-up-next__date">{{ currentTrip.timeline.nextItemDate | europeanDate }}{{ currentTrip.timeline.nextItemTime ? ' at ' + currentTrip.timeline.nextItemTime : '' }}</p> }@if (currentTrip.timeline.daysUntilDeparture !== null && currentTrip.timeline.daysUntilDeparture > 0) { <p class="vt-home-up-next__countdown">{{ currentTrip.timeline.daysUntilDeparture === 1 ? 'Departs tomorrow' : currentTrip.timeline.daysUntilDeparture + ' days until departure' }}</p> }</section>
         }
         @if (currentTrip.experience.overview || currentTrip.experience.personalisedMessage) {
           <section class="vt-home-info-card vt-home-about"><p class="vt-home-info-card__kicker">Trip summary</p><h2>About your trip</h2>@if (currentTrip.experience.personalisedMessage) { <p>{{ currentTrip.experience.personalisedMessage }}</p> }@if (currentTrip.experience.overview) { <p>{{ currentTrip.experience.overview }}</p> }@if (currentTrip.experience.agentName) { <p class="vt-home-about__agent">Planned by {{ currentTrip.experience.agentName }}</p> }</section>

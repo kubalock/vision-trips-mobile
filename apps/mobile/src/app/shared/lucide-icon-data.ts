@@ -10,6 +10,7 @@ export const BriefcaseBusiness: LucideIconData = {"name":"briefcase-business","s
 export const CalendarPlus: LucideIconData = {"name":"calendar-plus","size":24,"node":[["path",{"d":"M16 18h6","key":"987eiv"}],["path",{"d":"M16 2v3","key":"otl347"}],["path",{"d":"M19 15v6","key":"10aioa"}],["path",{"d":"M21 11.5V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h8.3","key":"jgwkxf"}],["path",{"d":"M3 9h18","key":"1pudct"}],["path",{"d":"M8 2v3","key":"1ioesn"}]]};
 export const Check: LucideIconData = {"name":"check","size":24,"node":[["path",{"d":"M20 6 9 17l-5-5","key":"1gmf2c"}]]};
 export const ChevronDown: LucideIconData = {"name":"chevron-down","size":24,"node":[["path",{"d":"m6 9 6 6 6-6","key":"qrunsl"}]]};
+export const ChevronUp: LucideIconData = {"name":"chevron-up","size":24,"node":[["path",{"d":"m18 15-6-6-6 6","key":"153udz"}]]};
 export const ChevronLeft: LucideIconData = {"name":"chevron-left","size":24,"node":[["path",{"d":"m15 18-6-6 6-6","key":"1wnfg3"}]]};
 export const ChevronRight: LucideIconData = {"name":"chevron-right","size":24,"node":[["path",{"d":"m9 18 6-6-6-6","key":"mthhwq"}]]};
 export const CircleDot: LucideIconData = {"name":"circle-dot","size":24,"node":[["circle",{"cx":"12","cy":"12","r":"1","key":"41hilf"}],["circle",{"cx":"12","cy":"12","r":"10","key":"1mglay"}]]};

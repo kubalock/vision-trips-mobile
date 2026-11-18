@@ -19,8 +19,16 @@ const ENABLED_KEY = 'vision-trips:notifications:device-enabled';
 
 @Injectable({ providedIn: 'root' })
 export class CustomerNotificationsStore {
-  list(tripId: string): CustomerNotification[] {
-    return this.read(tripId).sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  /**
+   * The trip's notifications, newest first. Pass the open trip so that, while it is a quotation awaiting acceptance,
+   * "overdue" payment reminders saved earlier are hidden: nothing is owed yet. They stay stored, so they show again
+   * if the booking goes ahead with the payment still late.
+   */
+  list(tripId: string, trip?: Pick<TripSnapshot, 'stage' | 'quotation'> | null): CustomerNotification[] {
+    const hideOverdue = trip?.stage === 'quote' && !trip.quotation?.accepted;
+    return this.read(tripId)
+      .filter((notification) => !(hideOverdue && notification.kind === 'balance_reminder' && notification.id.endsWith(':overdue')))
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   }
 
   deviceEnabled(): boolean {
@@ -63,9 +71,11 @@ export class CustomerNotificationsStore {
       .sort((left, right) => (left.dueDate ?? '').localeCompare(right.dueDate ?? ''))[0];
     if (nextPayment?.dueDate) {
       const days = daysFromToday(nextPayment.dueDate);
-      if (days <= 7) {
+      // A quotation not yet accepted owes nothing, so a lapsed due date is not a reminder.
+      const awaitingAcceptance = snapshot.stage === 'quote' && !snapshot.quotation?.accepted;
+      if (days <= 7 && !(awaitingAcceptance && days < 0)) {
         const timing = days < 0 ? 'is overdue' : days === 0 ? 'is due today' : `is due in ${days} day${days === 1 ? '' : 's'}`;
-        await this.add(snapshot.tripId, 'balance_reminder', /balance/i.test(nextPayment.label) ? 'Balance reminder' : 'Payment reminder', `${nextPayment.label} ${timing}.`, `balance:${nextPayment.id}:${nextPayment.dueDate}:${days < 0 ? 'overdue' : days}`);
+        await this.add(snapshot.tripId, 'balance_reminder', reminderTitle(nextPayment.label), `${nextPayment.label} ${timing}.`, `balance:${nextPayment.id}:${nextPayment.dueDate}:${days < 0 ? 'overdue' : days}`);
       }
     }
 
@@ -112,7 +122,7 @@ export class CustomerNotificationsStore {
   private read(tripId: string): CustomerNotification[] {
     try {
       const value = JSON.parse(localStorage.getItem(this.key(tripId)) || '[]') as unknown;
-      return Array.isArray(value) ? value.filter(isCustomerNotification) : [];
+      return Array.isArray(value) ? value.filter(isCustomerNotification).map(withCurrentTitle) : [];
     } catch { return []; }
   }
 
@@ -127,6 +137,22 @@ function isCustomerNotification(value: unknown): value is CustomerNotification {
   if (!value || typeof value !== 'object') return false;
   const item = value as Partial<CustomerNotification>;
   return typeof item.id === 'string' && typeof item.tripId === 'string' && typeof item.title === 'string' && typeof item.createdAt === 'string';
+}
+
+/** A reminder is a "Balance reminder" only for the balance; a deposit or instalment is a "Payment reminder". */
+function reminderTitle(label: string): string {
+  return /balance/i.test(label) ? 'Balance reminder' : 'Payment reminder';
+}
+
+/**
+ * Reminders saved by older versions were all titled "Balance reminder", even for a deposit. The body starts with the
+ * payment's label ("Deposit is overdue."), so the title is worked out again when shown instead of trusting the stored one.
+ */
+function withCurrentTitle(notification: CustomerNotification): CustomerNotification {
+  if (notification.kind !== 'balance_reminder' || typeof notification.body !== 'string') return notification;
+  const label = notification.body.replace(/ is (overdue|due today|due in \d+ days?)\.$/, '');
+  const title = reminderTitle(label);
+  return title === notification.title ? notification : { ...notification, title };
 }
 
 function daysFromToday(date: string): number {

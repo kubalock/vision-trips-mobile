@@ -18,7 +18,10 @@ import { VtIcon } from '../../shared/lucide-icon';
           <span class="vt-video-card__play"><vt-icon name="play" [size]="18" /></span>
         </span>
         <p class="vt-video-card__title">{{ video.title }}</p>
-        <button type="button" class="vt-video-card__watch" (click)="watch.emit(video)">Watch</button>
+        <!-- Busy, not disabled: a disabled button drops keyboard focus, and the viewer returns focus to where it was opened from. -->
+        <button type="button" class="vt-video-card__watch" [attr.aria-disabled]="opening() !== null ? 'true' : null" [attr.aria-busy]="opening() === video.url" (click)="opening() === null && watch.emit(video)">
+          @if (opening() === video.url) { <vt-icon name="loader" [size]="16" class="vt-spin" /> Opening… } @else { Watch }
+        </button>
       </article>
     }
 
@@ -48,6 +51,8 @@ import { VtIcon } from '../../shared/lucide-icon';
 })
 export class TripContentSection {
   readonly trip = input.required<TripSnapshot>();
+  /** The URL of the video being fetched after Watch was tapped (a fresh walkthrough link): its button says so. */
+  readonly opening = input<string | null>(null);
   readonly watch = output<TripVideo>();
   readonly message = output<void>();
 

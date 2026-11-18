@@ -133,6 +133,7 @@ describe('TripsService', () => {
     expect(snapshot.brand.profile).toMatchObject({ teamPhotoUrl: 'https://files.example/team.jpg', mapUrl: 'https://maps.google.com/?q=Example+Travel', whyBook: [{ title: 'Independent expertise', text: 'Advice built around you.' }] });
     expect(snapshot.brand.profile.gallery?.[0]).toMatchObject({ url: 'https://files.example/inspiration.jpg' });
     expect(snapshot.protection).toMatchObject({ scheme: 'atol', atolNumber: '1234' });
+    expect(snapshot.protection.summary).toContain('See your ATOL certificate');
     expect(snapshot.bookingStatus.supplierConfirmationsReceived).toBe(true);
     expect(snapshot.bookingStatus.tasks.travelDocuments).toBe(true);
     expect(snapshot.quotation.status).toBe('not_applicable');
@@ -164,6 +165,9 @@ describe('TripsService', () => {
 
     expect(snapshot.quotation.reviewSections.map((section) => section.id)).toEqual(['package', 'names', 'important', 'protection', 'terms']);
     expect(snapshot.quotation.reviewSections.find((section) => section.id === 'terms')?.links).toContainEqual({ label: 'Accommodation terms', url: 'https://example.com/terms' });
+    // Nothing is booked yet: no certificate or confirmation exists to "see".
+    expect(snapshot.protection.summary).not.toMatch(/^See |See your/);
+    expect(snapshot.protection.summary).toContain('once you book');
   });
 
   it('removes financial capabilities from fellow-traveller snapshots', () => {

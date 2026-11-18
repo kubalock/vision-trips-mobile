@@ -82,7 +82,11 @@ export class TravellerDetailsSection {
   protected fieldsIn(group: 'passport' | 'licence' | 'kin') { return TRAVELLER_FIELDS.filter((field) => field.group === group); }
   protected hasChanges(): boolean { return Object.keys(this.changes()).length > 0; }
   protected summary(traveller: TravellerProfile): string {
-    return traveller.passport.expiryDate ? `Passport ${traveller.passport.numberHint ?? ''} expires ${traveller.passport.expiryDate.split('-').reverse().join('/')}`.replace('  ', ' ') : 'No passport details yet';
+    const { numberHint, expiryDate } = traveller.passport;
+    if (expiryDate) return `Passport ${numberHint ?? ''} expires ${expiryDate.split('-').reverse().join('/')}`.replace('  ', ' ');
+    // A number on file without an expiry date is still a passport on file: say what's missing, not that nothing is there.
+    if (numberHint) return `Passport ${numberHint} · add the expiry date`;
+    return 'No passport details yet';
   }
   /** Numbers are never prefilled: the masked ending is only a hint. */
   protected placeholder(traveller: TravellerProfile, key: EditableKey): string | null {

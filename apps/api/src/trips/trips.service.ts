@@ -302,7 +302,7 @@ export class TripsService {
     const extras = mapExtras(allRelated.upsells, graph.suppliers, tripId, hideSupplierInfo);
     const communications = mapCommunications(allRelated.communications, tripId, accessScope);
     const brandName = firstString(brandValue('name')) || 'Your travel company';
-    const protection = mapProtection(bookingValue, itinerary, brand, allRelated.members[0], graph.suppliers);
+    const protection = mapProtection(bookingValue, itinerary, brand, allRelated.members[0], graph.suppliers, stage);
     const summary = {
       reference: firstString(bookingValue('reference')) || 'Your trip', name: firstString(bookingValue('name')) || 'Your trip',
       departureDate: departure, returnDate: returns, heroImageUrl: firstAttachmentUrl(bookingValue('hero')), heroImage: heroImage(firstAttachmentImage(bookingValue('hero'))), gallery: attachmentImages(bookingValue('gallery')),
@@ -485,7 +485,7 @@ function mapBookingJourney(input: {
     ...(owesBalance ? [balanceFaq] : []),
     { id: 'documents', question: 'When will I receive my travel documents?', answer: input.tasks.travelDocuments ? 'Your available documents are already in the Documents wallet.' : 'Final documents are normally added after supplier reconfirmation, usually around 7–14 days before departure.' },
     ...(hasFlight ? [{ id: 'flight', question: 'What if my flight time changes?', answer: 'The airline or your travel expert will confirm material schedule changes. Live operational updates also appear in the app when the provider is configured.' }] : []),
-    { id: 'help', question: 'Who do I contact if I need help?', answer: 'Use Help to message your travel expert. While travelling, the emergency contact is shown prominently on your Today screen.' },
+    { id: 'help', question: 'Who do I contact if I need help?', answer: 'Use Help to message your travel expert. While you’re travelling, the emergency number is shown at the top of Home and under Help.' },
   ];
   const suggestions: TripSnapshot['bookingJourney']['suggestedExtras'] = [];
   const add = (id: TripSnapshot['bookingJourney']['suggestedExtras'][number]['id'], title: string, description: string) => suggestions.push({ id, title, description, enquiry: `I would like to know more about ${title.toLowerCase()} for this trip.` });
@@ -518,12 +518,16 @@ function shiftDate(value: string | null, days: number): string | null {
   return parsed.toISOString().slice(0, 10);
 }
 
-function mapTimeline(itinerary: ItineraryItem[], departure: string | null, now: Date): TripSnapshot['timeline'] {
+/**
+ * "Up next" is the first item from now on. On the same day a timed item (a 10:20 flight) comes before an untimed one
+ * (the hotel stay that starts that day), since an untimed item has no time to beat it and usually happens later.
+ */
+export function mapTimeline(itinerary: ItineraryItem[], departure: string | null, now: Date): TripSnapshot['timeline'] {
   const today = now.toISOString().slice(0, 10);
   const currentTime = now.toTimeString().slice(0, 5);
   const next = [...itinerary]
     .filter((item) => item.startDate && (item.startDate > today || (item.startDate === today && (!item.startTime || item.startTime >= currentTime))))
-    .sort((a, b) => `${a.startDate}${a.startTime ?? ''}`.localeCompare(`${b.startDate}${b.startTime ?? ''}`))[0];
+    .sort((a, b) => `${a.startDate}${a.startTime ?? '99:99'}`.localeCompare(`${b.startDate}${b.startTime ?? '99:99'}`))[0];
   const daysUntilDeparture = departure ? Math.ceil((Date.parse(`${departure}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000) : null;
   return {
     daysUntilDeparture,
@@ -851,6 +855,7 @@ function mapProtection(
   brand: AirtableRecord,
   member: AirtableRecord | undefined,
   suppliers: Map<string, AirtableRecord>,
+  stage?: TripSnapshot['stage'],
 ): TripSnapshot['protection'] {
   const selection = safeText(bookingValue('atol'));
   const atolNumber = safeText(bookingValue('atolNumber')) || null;
@@ -883,8 +888,13 @@ function mapProtection(
   else if (mode.startsWith('principal_') && tAtolEnabled && tAtolNumber) holderNumber = tAtolNumber;
   const atolApplies = hasFlight && (mode.startsWith('agent_') || (mode.startsWith('principal_') && mode !== 'principal_package_no_flight')) && contractType !== 'ticket_agent';
   const scheme: TripSnapshot['protection']['scheme'] = atolApplies ? 'atol' : contractType === 'package_no_flight' ? 'non_air_package' : ['accommodation_only', 'agent_services', 'ticket_agent'].includes(contractType) || /not applicable/i.test(selection) ? 'not_applicable' : 'unknown';
+  // A quotation isn't booked yet: there is no ATOL certificate or booking confirmation to point to, so say what will be.
+  const quote = stage === 'quote' || stage === 'quote_expired';
+  const holder = `${holderName || 'the package organiser'}${holderNumber ? ` under ATOL ${holderNumber}` : ''}`;
   const summary = scheme === 'atol'
-    ? `This flight-inclusive booking is protected by ${holderName || 'the package organiser'}${holderNumber ? ` under ATOL ${holderNumber}` : ''}. See your ATOL certificate for full details.`
+    ? quote ? `Once booked, this flight-inclusive trip will be protected by ${holder}. You’ll receive an ATOL certificate when you book.` : `This flight-inclusive booking is protected by ${holder}. See your ATOL certificate for full details.`
+    : quote && scheme === 'non_air_package' ? 'Once booked, this package without a flight will be financially protected; your booking confirmation will give the details.'
+    : quote && scheme === 'unknown' ? 'Your booking confirmation will set out the financial protection that applies once you book.'
     : scheme === 'non_air_package' ? 'This is a package without a flight; check your booking confirmation for its financial protection.'
     : scheme === 'not_applicable' ? 'ATOL protection does not apply to this booking.'
     : 'See your booking confirmation for the financial protection that applies to this trip.';
@@ -923,6 +933,8 @@ export function mapPayments(booking: AirtableRecord, allRecords: AirtableRecord[
   const currency = bookingCode ?? 'GBP';
   const bookingMoney = (key: keyof typeof bookingFields) => (bookingCode === null ? null : moneyValue(pick(booking.fields, bookingFields[key])));
   const now = new Date().toISOString().slice(0, 10);
+  // Nothing is owed on a quotation until it is accepted, so its past due dates are never "overdue".
+  const awaitingAcceptance = stage === 'quote' && !quotationAccepted;
   const items: PaymentItem[] = records.map((record, index) => {
     const value = (key: keyof typeof paymentFields) => pick(record.fields, paymentFields[key]);
     const itemCode = currencyCode(value('currency'));
@@ -937,7 +949,7 @@ export function mapPayments(booking: AirtableRecord, allRecords: AirtableRecord[
     const paymentUrl = safeUrl(value('link'));
     const pointsPayment = isPointsPayment(value('method'));
     const redeemed = pointsPayment ? recordIds(value('loyaltyTransactions')).reduce<number | null>((sum, id) => { const found = pointsByTransaction.get(id); return found === undefined ? sum : (sum ?? 0) + found; }, null) : null;
-    const status: PaymentItem['status'] = refund ? 'refund' : local ? 'local' : paid ? 'paid' : dueDate && dueDate < now ? 'overdue' : 'outstanding';
+    const status: PaymentItem['status'] = refund ? 'refund' : local ? 'local' : paid ? 'paid' : dueDate && dueDate < now && !awaitingAcceptance ? 'overdue' : 'outstanding';
     // Only offer "Pay now" when the amount is known and in a currency the payment provider supports.
     const payable = !pointsPayment && !paid && !local && !refund && signed !== null && signed > 0 && (PAYABLE_CURRENCIES as readonly string[]).includes(itemCurrency) && paymentStageAllows(stage, quotationAccepted);
     return {

@@ -319,8 +319,19 @@ describe('walkthrough before playback', () => {
     expect(airtable.record).toHaveBeenCalledWith('appABCDEFGHIJKLMN', 'Bookings', 'recABCDEFGHIJKLMN');
   });
   it('returns nothing while a surprise trip is concealed', async () => {
-    const { controller, airtable } = setup(true);
+    // The Booking is read alongside the snapshot (for speed), but nothing from it leaves the server while concealed.
+    const { controller } = setup(true);
     await expect(controller.walkthrough('Bearer token')).resolves.toEqual({ video: null });
-    expect(airtable.record).not.toHaveBeenCalled();
+  });
+
+  it('reads the Booking without waiting for the snapshot to be rebuilt', async () => {
+    const { controller, airtable } = setup(false);
+    let finishSnapshot!: () => void;
+    const trips = (controller as unknown as { trips: { snapshot: ReturnType<typeof vi.fn> } }).trips;
+    trips.snapshot.mockReturnValueOnce(new Promise((resolve) => { finishSnapshot = () => resolve({ experience: { agentName: 'Sarah', surprise: { concealed: false } }, agent: null }); }));
+    const pending = controller.walkthrough('Bearer token');
+    await vi.waitFor(() => expect(airtable.record).toHaveBeenCalled());
+    finishSnapshot();
+    await expect(pending).resolves.toEqual({ video: expect.objectContaining({ url: 'https://v5.airtableusercontent.com/fresh.mp4?sig=new' }) });
   });
 });

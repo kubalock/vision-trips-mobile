@@ -24,6 +24,35 @@ describe('TripContentSection', () => {
     expect(element.querySelector('video, iframe')).toBeNull();
   });
 
+  it('says it is opening the walkthrough while its fresh link loads, and ignores more taps', () => {
+    const url = 'https://dl.airtable.com/v.mp4';
+    const fixture = TestBed.createComponent(TripContentSection);
+    fixture.componentRef.setInput('trip', trip({ content: { included: [], notIncluded: [], includedSource: 'none', walkthrough: { kind: 'file', url, mimeType: 'video/mp4', posterUrl: null, title: 'Walkthrough' }, videoMessage: null } }));
+    fixture.componentRef.setInput('opening', url);
+    fixture.detectChanges();
+    const button = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('.vt-video-card__watch')!;
+    expect(button.textContent).toContain('Opening…');
+    // Still focusable (so the viewer can hand focus back to it), but marked unavailable and ignoring taps.
+    expect(button.disabled).toBe(false);
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    let emitted = 0; fixture.componentInstance.watch.subscribe(() => { emitted += 1; });
+    button.click();
+    expect(emitted).toBe(0);
+  });
+
+});
+
+describe('BrandSupportSection', () => {
+  it('shows the basic reassurance points when the brand has an empty list, never an empty card', async () => {
+    const { BrandSupportSection } = await import('./brand-support-section');
+    const fixture = TestBed.createComponent(BrandSupportSection);
+    fixture.componentRef.setInput('trip', trip({ stage: 'countdown', brand: { name: 'Lisbon Travel', profile: { reassurance: [] } } }));
+    fixture.detectChanges();
+    const items = (fixture.nativeElement as HTMLElement).querySelectorAll('.vt-value-props li');
+    expect(items.length).toBe(2);
+    expect(items[0].textContent).toContain('Your own travel expert');
+  });
 });
 
 describe('video embeds', () => {

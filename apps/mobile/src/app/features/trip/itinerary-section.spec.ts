@@ -150,3 +150,32 @@ describe('ItinerarySection day order and wording', () => {
     expect(noteBlocks('  ')).toBeNull();
   });
 });
+
+describe('ItinerarySection flight summary', () => {
+  it('puts the route, flight and direction on one line, without repeating the direction below', () => {
+    const flight = item('f1', '2026-11-19', { kind: 'flight', typeLabel: 'Flight', fromCode: 'LHR', toCode: 'PRG', carrier: 'British Airways', flightNumber: 'BA854', details: [{ label: 'Direction', value: 'Outbound' }, { label: 'Class', value: 'Economy' }] } as Partial<ItineraryItem>);
+    const { element } = render([flight]);
+    expect(element.querySelector('.vt-el__codes')?.textContent?.trim()).toBe('LHR → PRG · British Airways BA854 · Outbound');
+    expect([...element.querySelectorAll('.vt-itinerary-meta dt')].map((term) => term.textContent?.trim())).toEqual(['Class']);
+  });
+});
+
+describe('ItinerarySection long notes', () => {
+  it('collapses long notes behind "Read more" and expands them on request', () => {
+    const long = 'Expect cool, often grey days around 8–11°C with chilly evenings. '.repeat(8);
+    const { fixture, element } = render([item('n1', '2026-11-19', { notes: long }), item('n2', '2026-11-19', { notes: 'Bring an adapter.' })]);
+    const notes = () => [...element.querySelectorAll('.vt-itinerary-notes')];
+    const more = () => element.querySelector<HTMLButtonElement>('.vt-itinerary-notes__more')!;
+    expect(notes().map((note) => note.classList.contains('is-clamped'))).toEqual([true, false]);
+    expect(element.querySelectorAll('.vt-itinerary-notes__more')).toHaveLength(1);
+    expect(more().getAttribute('aria-expanded')).toBe('false');
+    expect(more().getAttribute('aria-controls')).toBe(notes()[0].id);
+
+    more().click(); fixture.detectChanges();
+    expect(notes()[0].classList.contains('is-clamped')).toBe(false);
+    expect(more().textContent).toContain('Show less');
+    more().click(); fixture.detectChanges();
+    expect(more().textContent).toContain('Read more');
+  });
+});
+

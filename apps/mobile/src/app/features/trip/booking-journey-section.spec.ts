@@ -110,9 +110,10 @@ describe('BookingJourneySection on Home', () => {
 });
 
 describe('BookingJourneySection heading', () => {
+  const withStep: BookingJourney = { ...journey, steps: [{ id: 'confirmation', title: 'Booking confirmed', description: '', date: null, status: 'complete' }] };
   const heading = (stage: string | null) => {
     const fixture = TestBed.createComponent(BookingJourneySection);
-    fixture.componentRef.setInput('journey', journey);
+    fixture.componentRef.setInput('journey', withStep);
     fixture.componentRef.setInput('stage', stage);
     fixture.detectChanges();
     return (fixture.nativeElement as HTMLElement).querySelector('#booking-journey-title')?.textContent?.trim();
@@ -123,5 +124,14 @@ describe('BookingJourneySection heading', () => {
     expect(heading('home')).toBe('From booking to home');
     expect(heading('countdown')).toBe('What happens next');
     expect(heading(null)).toBe('What happens next');
+  });
+});
+
+describe('BookingJourneySection empty journey', () => {
+  it('leaves out "What happens next" when there are no steps to show', () => {
+    const fixture = TestBed.createComponent(BookingJourneySection);
+    fixture.componentRef.setInput('journey', journey);
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).querySelector('.vt-booking-journey-card')).toBeNull();
   });
 });

@@ -12,6 +12,7 @@ const ICONS = {
   calendar: Icons.CalendarPlus,
   check: Icons.Check,
   'chevron-down': Icons.ChevronDown,
+  'chevron-up': Icons.ChevronUp,
   'chevron-left': Icons.ChevronLeft,
   'chevron-right': Icons.ChevronRight,
   'circle-dot': Icons.CircleDot,

@@ -15,7 +15,7 @@
   --vt-display-weight: 600;
   --ink: #1B1D1F;
   --ink-2: #4A4F55;
-  --ink-3: #6F757D;
+  --ink-3: #666C74; /* 5.0:1 on --surface-2, 5.3:1 on --surface: muted text stays readable on item backgrounds. */
   --paper: #F4F4F1;
   --surface: #FFFFFF;
   --surface-2: #F8F8F6;
