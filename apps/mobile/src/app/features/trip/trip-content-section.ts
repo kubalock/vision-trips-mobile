@@ -38,7 +38,7 @@ import { VtIcon } from '../../shared/lucide-icon';
           <summary><span>What’s included</span><vt-icon name="chevron-down" [size]="18" /></summary>
           @if (content.included.length) {
             <ul class="vt-inclusions__list vt-inclusions__list--in">@for (item of content.included; track item.text) { <li><vt-icon name="check" [size]="16" /> {{ item.text }}</li> }</ul>
-            @if (content.includedSource === 'itinerary') { <p class="vt-inclusions__note">Based on the items in your itinerary. Your quotation document has the full details.</p> }
+            @if (content.includedSource === 'itinerary') { <p class="vt-inclusions__note">Based on the items in your itinerary. Your {{ isQuote() ? 'quotation document' : 'booking confirmation' }} has the full details.</p> }
           }
           @if (content.notIncluded.length) {
             <h3>Not included</h3>

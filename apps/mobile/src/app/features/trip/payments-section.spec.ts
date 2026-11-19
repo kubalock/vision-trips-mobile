@@ -23,7 +23,7 @@ describe('PaymentsSection', () => {
     expect(text).toContain('Unavailable');
     expect(text).not.toContain('£0.00');
     expect(text).not.toContain('Paid in full');
-    expect(text).toContain('Ask your travel agent');
+    expect(text).toContain('Ask your travel expert');
     expect(text).toContain('Not available');
   });
 
@@ -34,7 +34,7 @@ describe('PaymentsSection', () => {
     expect(pills).toEqual([['paid', 'vt-pay__status--paid'], ['overdue', 'vt-pay__status--overdue'], ['outstanding', 'vt-pay__status--due']]);
     const balance = element.querySelector('.vt-payment-summary__balance')!;
     expect(balance.classList.contains('is-overdue')).toBe(true);
-    expect(balance.querySelector('small')?.textContent?.trim()).toBe('Overdue');
+    expect(balance.querySelector('small')?.textContent?.trim()).toBe('£100.00 overdue'); // Only part of the £200 balance is late.
   });
 
   it('never shows a quotation awaiting acceptance as overdue, even from an older saved copy', () => {
@@ -52,6 +52,22 @@ describe('PaymentsSection', () => {
     expect(element.querySelector('.vt-payment-summary__balance')?.classList.contains('is-quote')).toBe(true);
     expect(element.querySelector('.vt-pay__date')?.textContent).toContain('Was due 01/01/2020');
     expect(element.textContent).not.toMatch(/overdue/i);
+  });
+
+  it('marks only the late amount as overdue and explains a balance with no payment scheduled for it', () => {
+    const row = (id: string, status: string, amount: number) => ({ id, label: id, amount, currency: 'GBP', status, dueDate: '2020-01-01', completedDate: null, canPay: false, actionUrl: null });
+    const element = render(summary({ total: 500, paid: 2, balance: 498, items: [row('Deposit', 'overdue', 1), row('Instalment', 'paid', 1)] } as Partial<PaymentSummary>));
+    expect(element.querySelector('.vt-payment-summary__balance small')?.textContent?.trim()).toBe('£1.00 overdue');
+    expect(element.querySelector('.vt-payment-schedule__unscheduled')?.textContent).toContain('£497.00 of your balance isn’t scheduled yet');
+    const whole = render(summary({ total: 500, paid: 0, balance: 500, items: [row('Balance', 'overdue', 500)] } as Partial<PaymentSummary>));
+    expect(whole.querySelector('.vt-payment-summary__balance small')?.textContent?.trim()).toBe('Overdue');
+    expect(whole.querySelector('.vt-payment-schedule__unscheduled')).toBeNull();
+  });
+
+  it('says "Less than 1% paid" once something is paid and shows when each payment was made', () => {
+    const element = render(summary({ total: 500, paid: 2, balance: 498, items: [{ id: 'i1', label: 'Trip Instalment', amount: 1, currency: 'GBP', status: 'paid', dueDate: null, completedDate: '2026-10-29', canPay: false, actionUrl: null }] } as Partial<PaymentSummary>));
+    expect(element.querySelector('.vt-payment-progress__meta strong')?.textContent?.trim()).toBe('Less than 1% paid');
+    expect(element.querySelector('.vt-pay__date')?.textContent?.trim()).toBe('Paid 29/10/2026');
   });
 
   it('shows known figures in the booking currency', () => {

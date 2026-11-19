@@ -47,7 +47,7 @@ interface DocumentGroup {
                       </span>
                       @if (showDescription(document)) { <span class="vt-doc-button__description">{{ document.description }}</span> }
                       <span class="vt-doc-button__meta">
-                        <small class="vt-doc-badge vt-doc-badge--type">{{ fileType(document) }}</small> Updated {{ document.updatedAt | europeanDate }}
+                        <small class="vt-doc-badge vt-doc-badge--type">{{ fileType(document) }}</small> Dated {{ document.updatedAt | europeanDate }}
                         @if (statuses()[document.id] === 'saved') {
                           <small>Available offline</small>
                         }
@@ -79,7 +79,7 @@ interface DocumentGroup {
                         <strong>{{ displayTitle(document) }}</strong>
                       </span>
                       @if (showDescription(document)) { <span class="vt-doc-button__description">{{ document.description }}</span> }
-                      <span class="vt-doc-button__meta"><small class="vt-doc-badge vt-doc-badge--type">{{ fileType(document) }}</small> Updated {{ document.updatedAt | europeanDate }}</span>
+                      <span class="vt-doc-button__meta"><small class="vt-doc-badge vt-doc-badge--type">{{ fileType(document) }}</small> Dated {{ document.updatedAt | europeanDate }}</span>
                     </span>
                     <span class="vt-doc-badge vt-doc-badge--pending">{{ document.status === 'pending' ? 'Coming soon' : 'Unavailable' }}</span>
                   </div>

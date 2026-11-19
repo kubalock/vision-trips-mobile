@@ -77,7 +77,7 @@ export interface NoteBlocks {
                         <details class="vt-itinerary-disclosure vt-cruise-stops" (toggle)="toggled('ports:' + item.id, $event)"><summary><span>Cruise itinerary <em>{{ item.cruisePorts.length }} {{ item.cruisePorts.length === 1 ? 'stop' : 'stops' }}</em></span><vt-icon name="chevron-down" [size]="18" /></summary>
                           <!-- Port lists can run to 100+ stops: build them only once the traveller opens the list. -->
                           @if (opened().has('ports:' + item.id)) { <ol class="vt-cruise-timeline">
-                          @for (port of item.cruisePorts; track $index) { <li><span class="vt-cruise-timeline__node" aria-hidden="true"></span><div><p class="vt-cruise-timeline__title">{{ port.day ? 'Day ' + port.day + ' · ' : '' }}{{ port.port }}</p>@if (port.arrivalTime || port.departureTime) { <p class="vt-cruise-timeline__time">{{ port.arrivalTime }}{{ port.departureTime ? ' – ' + port.departureTime : '' }}</p> }@if (port.description) { <p class="vt-cruise-timeline__description">{{ port.description }}</p> }</div></li> }
+                          @for (port of item.cruisePorts; track $index) { <li><span class="vt-cruise-timeline__node" aria-hidden="true"></span><div><p class="vt-cruise-timeline__title">{{ port.day ? 'Day ' + port.day + ' · ' : '' }}{{ port.port }}</p>@if (port.arrivalTime || port.departureTime) { <p class="vt-cruise-timeline__time">{{ port.arrivalTime }}{{ port.departureTime ? ' – ' + port.departureTime : '' }}</p> }@if (port.description && port.description.trim().toLowerCase() !== port.port.trim().toLowerCase()) { <p class="vt-cruise-timeline__description">{{ port.description }}</p> }</div></li> }
                         </ol> }</details>
                       }
                       @if (item.supplier || item.reference) { <dl class="vt-itinerary-reference">@if (item.supplier) { <div><dt>Supplier</dt><dd>{{ item.supplier.name }}</dd></div> }@if (item.reference) { <div><dt>Booking reference</dt><dd>{{ item.reference }}</dd></div> }</dl> }
@@ -184,9 +184,11 @@ export function groupByDay(items: ItineraryItem[]): DayGroup[] {
     if (group) group.push(item); else groups.set(key, [item]);
   }
   const firstDate = dated.find(({ date }) => date)?.date ?? null;
+  // A trip that crosses into another year shows the year on every day, so "Sunday 30 May" is never ambiguous.
+  const withYear = new Set(dated.flatMap(({ date }) => (date ? [date.slice(0, 4)] : []))).size > 1;
   return [...groups].map(([date, groupItems]) => ({
     date,
-    dateLabel: dateLabel(date),
+    dateLabel: dateLabel(date, withYear),
     dayLabel: firstDate && date !== TO_BE_CONFIRMED ? `Day ${daysBetween(firstDate, date) + 1}` : 'Trip plan',
     items: groupItems.map((item) => {
       const typeLabel = customerTypeLabel(item);
@@ -231,7 +233,8 @@ const LONG_NOTES = 360;
 
 /** Splits " - First point. - Second point." runs (two or more) into a list; other notes stay as one paragraph. */
 export function noteBlocks(notes: string | null | undefined): NoteBlocks | null {
-  const text = notes?.trim();
+  // Dates typed as 2027-05-31 read as 31/05/2027, like every other date in the app.
+  const text = notes?.trim().replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, '$3/$2/$1');
   if (!text) return null;
   const parts = text.split(/\s+-\s+(?=[A-Z0-9£€$])/);
   if (parts.length < 3) return { intro: text, points: [] };
@@ -242,10 +245,10 @@ function passengerLine(passenger: ItineraryItem['passengers'][number]): string {
   return [passenger.travelClass, passenger.seat ? `Seat ${passenger.seat}` : null, passenger.cabinBaggage, passenger.checkedBaggage, passenger.meal, passenger.assistance].filter(Boolean).join(' · ');
 }
 
-function dateLabel(date: string): string {
+function dateLabel(date: string, withYear = false): string {
   const parsed = calendarDate(date);
   if (!parsed) return 'Date to be confirmed';
-  try { return DAY_LABEL.format(parsed); } catch { return 'Date to be confirmed'; }
+  try { return DAY_LABEL.format(parsed) + (withYear ? ` ${parsed.getFullYear()}` : ''); } catch { return 'Date to be confirmed'; }
 }
 
 function daysBetween(start: string, end: string): number { return Math.round((Date.parse(`${end}T12:00:00Z`) - Date.parse(`${start}T12:00:00Z`)) / 86_400_000); }

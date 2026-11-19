@@ -21,7 +21,7 @@
   --surface-2: #F8F8F6;
   --line: #E4E3DE;
   --line-2: #CFCEC8;
-  --ok: #1F7A4D;
+  --ok: #18693F; /* 5.2:1 even on the green tint of a paid row */
   --warn: #9A4A08;
   --bad: #B42318;
   --tint: color-mix(in srgb, var(--vt-accent) 9%, var(--surface));
@@ -80,7 +80,10 @@ body.vt { margin: 0; font-family: var(--vt-font-family); font-size: var(--fs-1);
 :where(body.vt) :where(p, ul, ol, dl) { margin: 0; }
 :where(body.vt) :where(ul, ol)[role="list"] { list-style: none; padding: 0; }
 :where(body.vt) :where(button, input, select, textarea) { font: inherit; color: inherit; }
-body.vt :where(a, button, summary, input, textarea, select, [tabindex]):focus-visible { outline: 3px solid color-mix(in srgb, var(--link) 78%, var(--ink)); outline-offset: 3px; border-radius: 6px; }
+/* One focus colour for every control: the brand link colour pulled towards the text colour, 3:1+ in both themes. */
+/* Declared on the app element too, where the brand's own colours are set, so the ring stays in the brand colour. */
+body.vt, body.vt .vt-app { --focus-ring: color-mix(in srgb, var(--link) 78%, var(--ink)); }
+body.vt :where(a, button, summary, input, textarea, select, [tabindex]):focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px; border-radius: 6px; }
 .vt-skip { position: absolute; left: -999px; top: 8px; background: var(--surface); padding: 8px 12px; border-radius: 8px; z-index: 100; }
 .vt-skip:focus { left: 8px; }
 .vt-wrap { width: min(100% - 32px, 780px); margin-inline: auto; }

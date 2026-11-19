@@ -327,8 +327,12 @@ export class TripsService {
       if (!['quote', 'quote_expired'].includes(stage)) documents.push(document(`${tripId}:front-file`, 'Booking front file', 'Printable booking overview, travellers, itinerary and payments', 'front_file', 'front-file', versions.frontFile, sourceUpdatedAt));
       if (protection.guaranteeAvailable) documents.push(document(`${tripId}:guarantee`, 'Safe Seat Plan guarantee', 'Travel Trust Association financial guarantee certificate', 'guarantee', 'guarantee', versions.protection, sourceUpdatedAt));
       for (const template of mapLetterTemplates(allRelated.brandTemplates, tripId).filter((letter) => letterFitsStage(letter.name, stage))) documents.push(document(`${tripId}:letter:${template.id}`, template.name, template.subject || 'Personal letter from your travel expert', 'letter', `letter:${template.id}`, contentVersion(template, summary, travellers), sourceUpdatedAt));
-      for (const payment of payments?.items.filter((item) => item.status === 'paid') ?? []) {
-        documents.push(document(`${tripId}:receipt:${payment.id}`, `Payment receipt · ${payment.label}`, `${payment.completedDate ?? 'Payment received'} · ${formatMoney(payment.amount, payment.currency)}`, 'receipt', `receipt:${payment.id}`, contentVersion(payment), payment.completedDate ?? sourceUpdatedAt));
+      const paidItems = payments?.items.filter((item) => item.status === 'paid') ?? [];
+      for (const payment of paidItems) {
+        // Two receipts for payments with the same name ("Trip Instalment") are told apart by their date in the title.
+        const shared = paidItems.filter((item) => item.label === payment.label).length > 1;
+        const paidOn = payment.completedDate ? displayDate(payment.completedDate) : null;
+        documents.push(document(`${tripId}:receipt:${payment.id}`, `Payment receipt · ${payment.label}${shared && paidOn ? ` · ${paidOn}` : ''}`, `${paidOn ? `Paid ${paidOn}` : 'Payment received'} · ${formatMoney(payment.amount, payment.currency)}`, 'receipt', `receipt:${payment.id}`, contentVersion(payment), payment.completedDate ?? sourceUpdatedAt));
       }
       if (protection.scheme === 'atol' && ((payments?.paid ?? 0) > 0 || !['quote', 'quote_expired'].includes(stage))) {
         documents.push(document(`${tripId}:atol`, 'ATOL Certificate', `Financial protection · ATOL ${protection.atolNumber ?? ''}`.trim(), 'atol', 'atol', versions.protection, sourceUpdatedAt));

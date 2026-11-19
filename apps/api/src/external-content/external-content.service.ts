@@ -85,7 +85,9 @@ export class ExternalContentService {
 
   private async weather(snapshot: TripSnapshot): Promise<WeatherForecast[]> {
     if (process.env.WEATHER_ENABLED === 'false') return [];
-    return compact(await Promise.all(snapshot.destinations.slice(0, 4).map(async (destination) => {
+    // A country-level destination ("Hungary") is skipped when a place in that country is listed too ("Budapest").
+    const places = snapshot.destinations.filter((destination) => !isCountryCovered(destination, snapshot.destinations));
+    return compact(await Promise.all(places.slice(0, 4).map(async (destination) => {
       const coordinates = destination.coordinates ?? await this.geocode(destination.name);
       if (!coordinates) return null;
       const cacheKey = `weather:${coordinates.latitude.toFixed(2)}:${coordinates.longitude.toFixed(2)}`;
@@ -324,3 +326,9 @@ function entityKey(value: string): string { return value.toLowerCase().normalize
 function httpUrl(value: unknown): string | null { const url = text(value); return /^https:\/\//i.test(url) ? url : null; }
 function urlFrom(value: unknown): string | null { if (typeof value === 'string') return httpUrl(value); if (object(value)) return httpUrl(value.href || value.url || value.src || value.large || value.original); return null; }
 function urls(value: unknown): string[] { return (Array.isArray(value) ? value : [value]).flatMap((item) => { const url = urlFrom(item); return url ? [url] : []; }); }
+
+export function isCountryCovered(destination: TripSnapshot['destinations'][number], all: TripSnapshot['destinations']): boolean {
+  const country = destination.country?.trim().toLowerCase();
+  if (!country || destination.name.trim().toLowerCase() !== country) return false;
+  return all.some((other) => other !== destination && other.country?.trim().toLowerCase() === country);
+}

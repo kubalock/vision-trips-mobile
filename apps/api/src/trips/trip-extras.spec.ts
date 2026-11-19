@@ -32,6 +32,11 @@ describe('quotation content', () => {
     expect(mapContent(record({ "What's Included": 'Spa access' }), [flight], null)).toMatchObject({ included: [{ text: 'Spa access' }], includedSource: 'booking' });
   });
 
+  it('never writes "Accommodation at Accommodation" and lists each line once', () => {
+    const unnamed = { ...stay, title: 'Accommodation', details: [] } as unknown as ItineraryItem;
+    expect(derivedInclusions([unnamed, unnamed, unnamed, stay, stay]).map((item) => item.text)).toEqual(['7 nights at Hotel Avenida, Half board', 'Accommodation as listed in your itinerary']);
+  });
+
   it('does not claim a stay without a name or ambiguous items', () => {
     expect(derivedInclusions([{ ...stay, title: '' } as ItineraryItem, { kind: 'misc', title: 'Something', details: [], rooms: [], cabins: [] } as unknown as ItineraryItem])).toEqual([]);
   });

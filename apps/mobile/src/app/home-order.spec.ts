@@ -46,18 +46,38 @@ describe('Home order', () => {
     expect(show('confirmed')).not.toBeNull();
   });
 
+  it('tucks the message button away while scrolling down and brings it back on scroll up', async () => {
+    const fixture = TestBed.createComponent(App);
+    await fixture.whenStable();
+    const app = fixture.componentInstance as unknown as { trip: { set: (value: unknown) => void } };
+    const element = fixture.nativeElement as HTMLElement;
+    app.trip.set(parseTripSnapshot({ schemaVersion: 4, tripId: 'trp_1', stage: 'confirmed', accessScope: 'primary_customer', summary: { name: 'Prague', reference: 'R' } }));
+    fixture.detectChanges();
+    Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 5000 });
+    const scrollTo = (y: number) => { Object.defineProperty(window, 'scrollY', { configurable: true, value: y }); window.dispatchEvent(new Event('scroll')); fixture.detectChanges(); return element.querySelector('.vt-message-fab')!.classList.contains('is-tucked'); };
+    expect(scrollTo(600)).toBe(true);
+    expect(scrollTo(400)).toBe(false);
+    expect(scrollTo(4990)).toBe(false); // At the end of the page nothing is left for it to cover.
+    expect(scrollTo(0)).toBe(false);
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 0 });
+    delete (document.documentElement as unknown as Record<string, unknown>)['scrollHeight'];
+  });
+
   it('says "Departs tomorrow" rather than "1 days until departure"', async () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const app = fixture.componentInstance as unknown as { trip: { set: (value: unknown) => void } };
     const element = fixture.nativeElement as HTMLElement;
-    const countdown = (days: number) => {
-      app.trip.set(parseTripSnapshot({ schemaVersion: 4, tripId: 'trp_1', stage: 'countdown', accessScope: 'primary_customer', summary: { name: 'Prague', reference: 'R' }, timeline: { daysUntilDeparture: days, nextItemTitle: 'Flight' } }));
+    const countdown = (days: number, stage = 'confirmed') => {
+      app.trip.set(parseTripSnapshot({ schemaVersion: 4, tripId: 'trp_1', stage, accessScope: 'primary_customer', summary: { name: 'Prague', reference: 'R', departureDate: '2030-01-01' }, timeline: { daysUntilDeparture: days, nextItemTitle: 'Flight' } }));
       fixture.detectChanges();
       return element.querySelector('.vt-home-up-next__countdown')?.textContent?.trim();
     };
     expect(countdown(1)).toBe('Departs tomorrow');
     expect(countdown(5)).toBe('5 days until departure');
+    // Beside the "Until you leave" card a whole-day count would disagree with it, so only "Departs tomorrow" stays.
+    expect(countdown(5, 'countdown')).toBeUndefined();
+    expect(countdown(1, 'countdown')).toBe('Departs tomorrow');
   });
 });
 

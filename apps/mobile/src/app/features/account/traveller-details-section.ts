@@ -50,7 +50,7 @@ export const TRAVELLER_FIELDS: ReadonlyArray<{ key: EditableKey; label: string; 
               </fieldset>
             }
             @if (traveller.airlineLoyalty || traveller.cruiseLoyalty) {
-              <p class="vt-traveller-edit__readonly">Loyalty programmes: {{ loyaltyText(traveller) }}. Ask your travel agent to add or change a programme.</p>
+              <p class="vt-traveller-edit__readonly">Loyalty programmes: {{ loyaltyText(traveller) }}. Ask your travel expert to add or change a programme.</p>
             }
             <button type="submit" class="vt-primary-action" [disabled]="saving() !== null || !hasChanges()">{{ saving() === traveller.travellerId ? 'Saving…' : 'Save changes' }}</button>
             @if (savedId() === traveller.travellerId) { <p role="status" class="vt-traveller-edit__status">Saved. Your travel agent has been told.</p> }

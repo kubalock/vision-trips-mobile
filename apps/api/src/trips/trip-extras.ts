@@ -77,19 +77,25 @@ export function derivedInclusions(itinerary: ItineraryItem[]): ContentListItem[]
     const classes = [...new Set(flights.flatMap((item) => item.details.filter((detail) => /class/i.test(detail.label)).map((detail) => detail.value)))];
     items.push(`Flights as listed in your itinerary${classes.length === 1 ? ` (${classes[0]})` : ''}`);
   }
-  for (const stay of itinerary.filter((item) => item.kind === 'stay' && item.title)) {
+  // A stay without its own name (titled just "Accommodation", "Hotel" …) is never written as "Accommodation at
+  // Accommodation": unnamed stays share one line pointing at the itinerary.
+  const stays = itinerary.filter((item) => item.kind === 'stay' && item.title);
+  for (const stay of stays.filter((item) => !GENERIC_STAY.test(item.title.trim()))) {
     const nights = stay.details.find((detail) => /^nights$/i.test(detail.label))?.value;
     const board = stay.rooms.map((room) => room.board).find(Boolean);
     items.push(`${nights ? `${nights} night${nights === '1' ? '' : 's'} at ` : 'Accommodation at '}${stay.title}${board ? `, ${board}` : ''}`);
   }
+  if (stays.some((item) => GENERIC_STAY.test(item.title.trim()))) items.push('Accommodation as listed in your itinerary');
   for (const cruise of itinerary.filter((item) => item.kind === 'cruise' && item.title)) {
     const cabin = cruise.cabins.map((entry) => entry.grade || entry.name).find(Boolean);
     items.push(`${cruise.title}${cabin ? ` (${cabin})` : ''}`);
   }
   if (itinerary.some((item) => item.kind === 'transfer')) items.push('Transfers as listed in your itinerary');
   if (itinerary.some((item) => item.kind === 'carhire')) items.push('Car hire as listed in your itinerary');
-  return items.slice(0, 30).map((text) => ({ text }));
+  return [...new Set(items)].slice(0, 30).map((text) => ({ text }));
 }
+
+const GENERIC_STAY = /^(accommodation|hotel|stay|lodging|room|rooms|resort|apartment|villa)$/i;
 
 const VIDEO_FILE = /^video\/(mp4|quicktime|webm|ogg|x-m4v)$/i;
 

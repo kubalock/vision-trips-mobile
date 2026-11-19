@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import type { ItineraryItem } from '@vision-trips/contracts';
 import { calendarDate, formatEuropeanDate } from '../../shared/european-date.pipe';
-import { ItinerarySection, noteBlocks } from './itinerary-section';
+import { groupByDay, ItinerarySection, noteBlocks } from './itinerary-section';
 
 const item = (id: string, startDate: string | null, extra: Partial<ItineraryItem> = {}): ItineraryItem => ({
   id, startDate, startTime: null, typeLabel: 'Hotel', title: `Item ${id}`, images: [], details: [], rooms: [], cabins: [], passengers: [], cruisePorts: [],
@@ -179,3 +179,16 @@ describe('ItinerarySection long notes', () => {
   });
 });
 
+
+describe('itinerary day headings', () => {
+  it('adds the year to every day when the trip crosses into another year, and leaves it off otherwise', () => {
+    expect(groupByDay([item('a', '2026-12-11'), item('b', '2027-05-30')]).map((day) => day.dateLabel)).toEqual(['Friday 11 December 2026', 'Sunday 30 May 2027']);
+    expect(groupByDay([item('a', '2026-11-20'), item('b', '2026-11-22')]).map((day) => day.dateLabel)).toEqual(['Friday 20 November', 'Sunday 22 November']);
+  });
+});
+
+describe('itinerary notes', () => {
+  it('shows ISO dates typed into notes the way the rest of the app does', () => {
+    expect(noteBlocks('Board basis varies: 2027-05-31 breakfast included')?.intro).toBe('Board basis varies: 31/05/2027 breakfast included');
+  });
+});

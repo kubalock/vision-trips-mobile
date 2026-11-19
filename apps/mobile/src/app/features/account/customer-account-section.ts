@@ -56,8 +56,8 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
             <h2 id="account-loyalty-title"><span aria-hidden="true">★</span> Loyalty @if (data.vip) { <span class="vt-vip-pill">VIP</span> }</h2>
             @if (data.loyalty; as loyalty) {
               <dl class="vt-loyalty-account__stats">
-                <div><dt>Available</dt><dd>{{ loyalty.available !== null ? points(loyalty.available) : 'Ask your travel agent' }}@if (loyalty.availableValue !== null && loyalty.availableValue > 0) { <small> · worth {{ money(loyalty.availableValue, loyalty.currency) }}</small> }</dd></div>
-                @if (loyalty.expiresAt) { <div><dt>Expire on</dt><dd>{{ loyalty.expiresAt | europeanDate }}</dd></div> }
+                <div><dt>Available</dt><dd>{{ loyalty.available !== null ? points(loyalty.available) : 'Ask your travel expert' }}@if (loyalty.availableValue !== null && loyalty.availableValue > 0) { <small> · worth {{ money(loyalty.availableValue, loyalty.currency) }}</small> }</dd></div>
+                @if (loyalty.expiresAt) { <div><dt>Expires on</dt><dd>{{ loyalty.expiresAt | europeanDate }}</dd></div> }
                 @if (loyalty.lifetime !== null) { <div><dt>Lifetime</dt><dd>{{ points(loyalty.lifetime) }}</dd></div> }
               </dl>
               @if (loyalty.transactions.length) {

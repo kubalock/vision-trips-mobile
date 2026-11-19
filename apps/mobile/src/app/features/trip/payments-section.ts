@@ -32,11 +32,11 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
           <div class="vt-payment-summary__balance" [class.is-paid]="payments().balance !== null && payments().balance! <= 0" [class.is-overdue]="hasOverdue() && payments().balance !== null && payments().balance! > 0" [class.is-unknown]="payments().balance === null" [class.is-quote]="awaitingAcceptance() && !hasOverdue()">
             <span>Balance</span>
             <strong [class.vt-money--unavailable]="payments().balance === null">{{ money(payments().balance, payments().currency) }}</strong>
-            <small>{{ payments().balance === null ? 'Ask your travel agent' : payments().balance! > 0 ? (hasOverdue() ? 'Overdue' : awaitingAcceptance() ? 'On acceptance' : 'Outstanding') : 'Paid in full' }}</small>
+            <small>{{ payments().balance === null ? 'Ask your travel expert' : payments().balance! > 0 ? (hasOverdue() ? overdueLabel() : awaitingAcceptance() ? 'On acceptance' : 'Outstanding') : 'Paid in full' }}</small>
           </div>
         </div>
         <div class="vt-payment-progress__footer">
-          <div class="vt-payment-progress__meta"><span>Payment progress</span><strong>{{ paidPercent() === null ? 'Not available' : paidPercent() + '% paid' }}</strong></div>
+          <div class="vt-payment-progress__meta"><span>Payment progress</span><strong>{{ paidLabel() }}</strong></div>
           <div class="vt-payment-progress" role="progressbar" aria-label="Trip price paid" aria-valuemin="0" aria-valuemax="100" [attr.aria-valuenow]="paidPercent()">
             <span [style.width.%]="paidPercent() ?? 0"></span>
           </div>
@@ -71,7 +71,9 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
                 } @else {
                   <strong [class.vt-money--unavailable]="payment.amount === null">{{ money(payment.amount, payment.currency) }}</strong>
                 }
-                @if (payment.dueDate) {
+                @if (payment.status === 'paid' && payment.completedDate) {
+                  <span class="vt-pay__date">Paid {{ payment.completedDate | europeanDate }}</span>
+                } @else if (payment.dueDate) {
                   @let due = dueState(payment);
                   <span class="vt-pay__date" [class.is-overdue]="due === 'overdue'" [class.is-today]="due === 'today'">{{ due === 'overdue' ? 'Overdue · was due' : due === 'today' ? 'Due today ·' : due === 'lapsed' ? 'Was due' : 'Due' }} {{ payment.dueDate | europeanDate }}{{ due === 'lapsed' ? ' · your travel expert will confirm new dates when you accept' : '' }}</span>
                 }
@@ -91,6 +93,9 @@ import { EuropeanDatePipe } from '../../shared/european-date.pipe';
             <li class="vt-payment-schedule__empty">No scheduled payments yet.</li>
           }
         </ul>
+        @if (unscheduled(); as rest) {
+          <p class="vt-payment-schedule__unscheduled">{{ money(rest, payments().currency) }} of your balance isn’t scheduled yet. Your travel expert will let you know when it’s due.</p>
+        }
       </section>
 
       @if (payments().customPayments.enabled && !awaitingAcceptance() && stage() !== 'quote') {
@@ -146,6 +151,25 @@ export class PaymentsSection {
     return total !== null && total > 0 ? Math.round(total / this.travellerCount() * 100) / 100 : null;
   });
   /** The summary pill and the row pills use the same states: paid (green), due (amber), overdue (red), other (grey). */
+  /** Owed amounts on the schedule; null when any is unknown or in another currency, so nothing is guessed. */
+  private readonly scheduledOwed = computed(() => {
+    const { items, currency } = this.payments();
+    const owed = items.filter((item) => item.status === 'outstanding' || item.status === 'overdue');
+    if (owed.some((item) => item.kind === 'points' || item.amount === null || item.currency !== currency)) return null;
+    return { all: owed.reduce((sum, item) => sum + (item.amount ?? 0), 0), overdue: owed.filter((item) => this.isOverdue(item)).reduce((sum, item) => sum + (item.amount ?? 0), 0) };
+  });
+  /** "£1.00 overdue" when only part of the balance is late, so the whole balance never reads as overdue. */
+  protected overdueLabel(): string {
+    const owed = this.scheduledOwed(); const balance = this.payments().balance;
+    return owed && balance !== null && owed.overdue > 0 && owed.overdue < balance - 0.005 ? `${this.money(owed.overdue, this.payments().currency)} overdue` : 'Overdue';
+  }
+  /** The part of the balance with no payment on the schedule (e.g. a balance the agent hasn't set a date for yet). */
+  protected readonly unscheduled = computed(() => {
+    const owed = this.scheduledOwed(); const balance = this.payments().balance;
+    if (!owed || balance === null) return null;
+    const rest = Math.round((balance - owed.all) * 100) / 100;
+    return rest > 0.005 ? rest : null;
+  });
   protected hasOverdue(): boolean { return this.payments().items.some((item) => this.isOverdue(item)); }
   /** Nothing is owed on a quotation until it is accepted, so it is never overdue (even from an older saved copy). */
   protected isOverdue(payment: PaymentSummary['items'][number]): boolean { return payment.status === 'overdue' && !this.awaitingAcceptance(); }
@@ -154,6 +178,14 @@ export class PaymentsSection {
   readonly payCustom = output<number>();
   protected readonly customAmount = signal('');
   protected readonly validCustom = computed(() => { const amount = Number(this.customAmount()); return Number.isFinite(amount) && amount >= 0.01 && amount <= this.payments().customPayments.maximum; });
+  /** "Less than 1% paid" rather than "0% paid" once something is paid, and never "100%" while money is still owed. */
+  protected paidLabel(): string {
+    const percent = this.paidPercent(); const { paid, balance } = this.payments();
+    if (percent === null) return 'Not available';
+    if (percent === 0 && (paid ?? 0) > 0) return 'Less than 1% paid';
+    if (percent === 100 && (balance ?? 0) > 0) return '99% paid';
+    return `${percent}% paid`;
+  }
   /** Null when either figure is unknown, so the bar never claims 0% or 100% by accident. */
   readonly paidPercent = computed(() => { const { total, paid } = this.payments(); return total !== null && paid !== null && total > 0 ? Math.min(100, Math.round(paid / total * 100)) : null; });
   /** A missing amount reads "Unavailable", never £0.00. */

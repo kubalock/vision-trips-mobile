@@ -592,7 +592,7 @@ export class App implements OnInit, OnDestroy {
     } catch (error) {
       if (generation !== this.linkGeneration) return;
       const linkRejected = error instanceof HttpErrorResponse && [400, 401, 403, 404, 409, 410].includes(error.status);
-      this.error.set(linkRejected ? 'This trip link has expired or is no longer valid. Ask your travel agent for a new invitation.' : this.apiError(error, 'We could not open that trip link. Please try again.'));
+      this.error.set(linkRejected ? 'This trip link has expired or is no longer valid. Ask your travel expert for a new invitation.' : this.apiError(error, 'We could not open that trip link. Please try again.'));
       // Don't strand someone on the entry screen when they already have trips saved on this device.
       if (!this.trip() && !this.invitationToken()) {
         if (!this.savedTripList().length) await this.reloadSavedTrips();
@@ -1115,7 +1115,7 @@ export class App implements OnInit, OnDestroy {
   protected async bookExtra(choice: { extra: TripExtra; url: string }): Promise<void> {
     this.trackEngagement('action_clicked', `extra_affiliate:${choice.extra.id}`);
     try { await this.externalPages.open(choice.url); }
-    catch { this.error.set('We couldn’t open that page. Ask your travel agent instead.'); }
+    catch { this.error.set('We couldn’t open that page. Ask your travel expert instead.'); }
   }
 
   protected async openRelatedQuotation(comparisonId: string): Promise<void> {
@@ -1181,6 +1181,17 @@ export class App implements OnInit, OnDestroy {
     this.scrollToTop(); // A trip opens at its hero, not at the library's scroll position.
     await this.activateSavedTrip(saved, this.online());
   }
+
+  /**
+   * The "Until you leave" card counts down to the departure date (days, hours, minutes), so Up next doesn't repeat a
+   * whole-day count beside it that can read one higher ("22 days" next to "21 days 7 hours").
+   */
+  protected hasCountdownCard(trip: TripSnapshot): boolean {
+    return (trip.stage === 'countdown' || trip.stage === 'prep') && Boolean(trip.summary.departureDate);
+  }
+
+  /** A phone link with only digits and a leading +, so "01483 545780" dials on every device. */
+  protected telHref(phone: string): string { return `tel:${phone.replace(/[^0-9+]/g, '')}`; }
 
   private scrollToTop(): void {
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -1434,6 +1445,27 @@ export class App implements OnInit, OnDestroy {
     if (returnFocus) requestAnimationFrame(() => document.querySelector<HTMLElement>('[aria-controls="customer-notifications"]')?.focus({ preventScroll: true }));
   }
 
+  /**
+   * The floating "Message" button slides away while the traveller scrolls down, so it never sits over a card, a
+   * download button or a toggle they are reading, and comes back on any scroll up, at the top and at the end of the page.
+   */
+  protected readonly fabTucked = signal(false);
+  private lastScrollY = 0;
+  @HostListener('window:scroll')
+  protected onWindowScroll(): void {
+    const y = window.scrollY;
+    // At either end it always shows, even when smooth scrolling arrives there in steps too small to count below.
+    if (y <= 120 || window.innerHeight + y >= document.documentElement.scrollHeight - 120) {
+      this.lastScrollY = y;
+      this.fabTucked.set(false);
+      return;
+    }
+    const delta = y - this.lastScrollY;
+    if (Math.abs(delta) < 8) return;
+    this.lastScrollY = y;
+    this.fabTucked.set(delta > 0);
+  }
+
   @HostListener('document:keydown.escape')
   protected onEscape(): void {
     this.closeNotifications();
@@ -1671,7 +1703,7 @@ export function isVerificationRequired(error: unknown): boolean {
 const ACCESS_REVOKED_MESSAGE = 'You no longer have access to this trip, so it has been removed from this device. Please contact your travel agent if you think this is a mistake.';
 
 export function customerErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof DocumentTooLargeError) return 'This document is too large to download in the app. Ask your travel agent to email it to you.';
+  if (error instanceof DocumentTooLargeError) return 'This document is too large to download in the app. Ask your travel expert to email it to you.';
   // A response that failed its schema: say it's temporary rather than showing half-read data or a generic failure.
   if (isResponseFormatError(error)) return 'This information is temporarily unavailable. Please try again in a moment.';
   if (isTripDataError(error)) return error.reason === 'unsupported_version'

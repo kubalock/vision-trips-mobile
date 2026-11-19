@@ -1,6 +1,6 @@
 import type { TripSnapshot } from '@vision-trips/contracts';
 import { ExternalCacheService } from './external-cache.service.js';
-import { ExternalContentService } from './external-content.service.js';
+import { ExternalContentService, isCountryCovered } from './external-content.service.js';
 
 describe('ExternalContentService', () => {
   it('reports provider configuration and applicability without leaking credentials', async () => {
@@ -22,5 +22,13 @@ describe('ExternalContentService', () => {
     expect(result.diagnostics.cache).toEqual(expect.objectContaining({ entries: expect.any(Number), hits: expect.any(Number), misses: expect.any(Number), writes: expect.any(Number) }));
     expect(JSON.stringify(result)).not.toContain('API_KEY');
     process.env = previous;
+  });
+});
+
+describe('weather places', () => {
+  const place = (name: string, country: string | null) => ({ id: name, name, country }) as unknown as TripSnapshot['destinations'][number];
+  it('skips a country card when a place in that country is listed, and keeps it otherwise', () => {
+    const all = [place('Hungary', 'Hungary'), place('Budapest', 'Hungary'), place('Peru', 'Peru')];
+    expect(all.filter((destination) => !isCountryCovered(destination, all)).map((destination) => destination.name)).toEqual(['Budapest', 'Peru']);
   });
 });

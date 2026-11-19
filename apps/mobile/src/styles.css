@@ -74,9 +74,9 @@ button { font: inherit; }
 .vt-app .vt-top__actions .vt-iconbtn { position: relative; display: grid; place-items: center; flex: 0 0 auto; width: 40px; height: 40px; min-width: 40px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--ink-2); box-shadow: none; transition: color .18s ease, background-color .18s ease, transform .12s ease; }
 .vt-app .vt-top__actions .vt-iconbtn:hover { background: color-mix(in srgb, var(--vt-accent) 8%, var(--surface)); color: var(--vt-accent-text); }
 .vt-app .vt-top__actions .vt-iconbtn:active { background: color-mix(in srgb, var(--vt-accent) 13%, var(--surface)); transform: scale(.94); }
-.vt-app .vt-top__actions .vt-iconbtn:focus-visible { outline: 3px solid var(--tint-2); outline-offset: 1px; }
+.vt-app .vt-top__actions .vt-iconbtn:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 1px; }
 .vt-app .vt-top__meta .vt-iconbtn.is-active { color: var(--vt-accent-text); background: var(--tint); }
-.vt-app .vt-notification-count { position: absolute; top: -2px; right: -2px; display: grid; place-items: center; min-width: 17px; height: 17px; padding: 0 4px; border: 2px solid var(--surface); border-radius: var(--r-pill); background: var(--bad); color: white; font-size: .6rem; font-weight: 800; line-height: 1; }
+.vt-app .vt-notification-count { position: absolute; top: -4px; right: -4px; display: grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border: 2px solid var(--surface); border-radius: var(--r-pill); background: #B42318; color: white; font-size: max(.75rem, 12px); font-weight: 800; line-height: 1; }
 .vt-app .vt-action-icon { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .vt-app .vt-hero__img { width: 100%; height: 100%; object-fit: cover; }
 .vt-app .vt-nav { padding-left: max(4px, env(safe-area-inset-left)); padding-right: max(4px, env(safe-area-inset-right)); }
@@ -243,7 +243,7 @@ button { font: inherit; }
 .vt-app .vt-trip-status-card__refresh { flex: 0 0 auto; min-width: 88px; min-height: 40px; padding: 8px 15px; border: 1px solid color-mix(in srgb, var(--vt-accent) 28%, transparent); border-radius: var(--r-pill); background: var(--tint); color: var(--vt-accent-text); font-size: .78rem; font-weight: 800; cursor: pointer; transition: background-color .18s ease, border-color .18s ease, color .18s ease, transform .12s ease; }
 .vt-app .vt-trip-status-card__refresh:hover { border-color: var(--vt-accent); background: color-mix(in srgb, var(--vt-accent) 14%, var(--surface)); }
 .vt-app .vt-trip-status-card__refresh:active { transform: scale(.97); }
-.vt-app .vt-trip-status-card__refresh:focus-visible { outline: 3px solid var(--tint-2); outline-offset: 2px; }
+.vt-app .vt-trip-status-card__refresh:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
 .vt-app .vt-trip-status-card__refresh:disabled { border-color: var(--line-2); background: var(--surface-2); color: var(--ink-3); cursor: not-allowed; opacity: 1; }
 .vt-app .vt-notifications { position: relative; margin: 12px var(--vt-flat-gutter) 24px; padding: 20px; border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-raised); }
 .vt-app .vt-notifications__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; min-height: 40px; padding: 0 52px 14px 0; }
@@ -252,14 +252,14 @@ button { font: inherit; }
 .vt-app .vt-notifications__close { position: absolute; top: 20px; right: 20px; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 1px solid color-mix(in srgb, var(--ink) 7%, transparent); border-radius: 50%; background: var(--surface-2); color: var(--ink-2); cursor: pointer; transition: background-color .18s ease, color .18s ease, transform .12s ease; }
 .vt-app .vt-notifications__close:hover { background: var(--tint); color: var(--vt-accent-text); }
 .vt-app .vt-notifications__close:active { transform: scale(.94); }
-.vt-app .vt-notifications__close:focus-visible { outline: 3px solid var(--tint-2); outline-offset: 2px; }
+.vt-app .vt-notifications__close:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
 .vt-app .vt-notifications__device { display: flex; align-items: center; gap: 14px; padding: 14px; border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent); border-left: 4px solid var(--vt-accent); border-radius: var(--r); background: var(--surface-2); cursor: pointer; }
 .vt-app .vt-notifications__device > input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
 .vt-app .vt-notifications__switch { display: block; position: relative; flex: 0 0 auto; width: 46px; height: 28px; border: 1px solid var(--line-2); border-radius: var(--r-pill); background: color-mix(in srgb, var(--ink-3) 22%, var(--surface)); transition: border-color .2s ease, background-color .2s ease, box-shadow .2s ease; }
 .vt-app .vt-notifications__switch > span { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: white; box-shadow: 0 2px 6px rgba(0, 0, 0, .2); transition: transform .2s ease; }
 .vt-app .vt-notifications__device > input:checked + .vt-notifications__switch { border-color: var(--accent-action); background: var(--accent-action); }
 .vt-app .vt-notifications__device > input:checked + .vt-notifications__switch > span { transform: translateX(18px); }
-.vt-app .vt-notifications__device > input:focus-visible + .vt-notifications__switch { outline: 3px solid var(--tint-2); outline-offset: 2px; }
+.vt-app .vt-notifications__device > input:focus-visible + .vt-notifications__switch { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
 .vt-app .vt-notifications__device-copy { display: grid; gap: 4px; min-width: 0; }
 .vt-app .vt-notifications__device-copy strong { color: var(--ink); font-size: .86rem; }
 .vt-app .vt-notifications__device-copy > span { color: var(--ink-2); font-size: .76rem; line-height: 1.45; }
@@ -540,6 +540,8 @@ button { font: inherit; }
 .vt-app .vt-inspiration-gallery { margin-top: 18px; }
 .vt-app .vt-inspiration-gallery app-photo-gallery > .vt-photo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; overflow: visible; border-radius: 0; }
 .vt-app .vt-inspiration-gallery app-photo-gallery > .vt-photo-grid > button { grid-column: auto !important; min-height: 0; aspect-ratio: 4 / 3; border: 0; border-radius: var(--r); background: var(--surface-2); box-shadow: 0 4px 20px rgba(0, 0, 0, .08); cursor: pointer; transform: translateZ(0); transition: box-shadow .2s ease, transform .16s ease; }
+/* The photo fills its 4:3 tile (a percentage height can't resolve against an aspect-ratio box, so it is pinned). */
+.vt-app .vt-inspiration-gallery app-photo-gallery > .vt-photo-grid > button > img { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; object-fit: cover; }
 .vt-app .vt-inspiration-gallery app-photo-gallery > .vt-photo-grid > button:hover { box-shadow: 0 9px 26px rgba(0, 0, 0, .13); transform: translateY(-2px); }
 .vt-app .vt-inspiration-gallery app-photo-gallery > .vt-photo-grid > button:active { transform: scale(.98); }
 .vt-app .vt-inspiration-gallery app-photo-gallery img { min-height: 0; transition: transform .35s ease; }
@@ -674,7 +676,7 @@ button { font: inherit; }
 }
 .vt-app .vt-main--itinerary .vt-days__more span { color: var(--ink-2); font-size: var(--fs-0); font-weight: 600; }
 .vt-app .vt-main--itinerary .vt-days__more:hover { background: var(--tint-2); }
-.vt-app .vt-main--itinerary .vt-days__more:focus-visible { outline: 2px solid var(--vt-accent); outline-offset: 2px; }
+.vt-app .vt-main--itinerary .vt-days__more:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .vt-app .vt-main--itinerary .vt-day__head { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; }
 .vt-app .vt-main--itinerary .vt-day__n { flex: 0 0 auto; margin: 0; padding: 6px 10px; border-radius: var(--r-pill); background: var(--tint); color: var(--vt-accent-text); font-size: .7rem; font-weight: 850; letter-spacing: .06em; line-height: 1; text-transform: uppercase; }
 .vt-app .vt-main--itinerary .vt-day__label { margin: 0; color: var(--ink); font-family: var(--vt-body); font-size: 1rem; font-weight: 800; line-height: 1.3; }
@@ -785,8 +787,10 @@ button { font: inherit; }
 .vt-app .vt-main--payments .vt-pay__action { flex: 0 0 auto; min-width: 104px; min-height: 42px; padding: 9px 16px; border: 1px solid var(--accent-action); border-radius: var(--r-pill); background: var(--accent-action); color: var(--accent-action-ink); font-size: .82rem; font-weight: 800; box-shadow: 0 6px 16px color-mix(in srgb, var(--accent-action) 28%, transparent); cursor: pointer; transition: filter .18s ease, opacity .18s ease, transform .12s ease; }
 .vt-app .vt-main--payments .vt-pay__action:hover { filter: brightness(.9); }
 .vt-app .vt-main--payments .vt-pay__action:active { filter: brightness(.82); transform: scale(.97); }
-.vt-app .vt-main--payments .vt-pay__action:focus-visible { outline: 3px solid var(--tint-2); outline-offset: 2px; }
+.vt-app .vt-main--payments .vt-pay__action:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
 .vt-app .vt-main--payments .vt-pay__action:disabled { border-color: var(--line-2); background: var(--surface-2); color: var(--ink-3); box-shadow: none; cursor: not-allowed; opacity: 1; }
+/* Part of the balance with no payment on the schedule yet. */
+.vt-app .vt-payment-schedule__unscheduled { margin-top: 12px; padding: 12px 14px; border: 1px dashed var(--line-2); border-radius: var(--r-s); color: var(--ink-2); font-size: .875rem; line-height: 1.5; }
 .vt-app .vt-payment-schedule__empty { padding: 20px; border: 1px dashed var(--line-2); border-radius: var(--r-s); color: var(--ink-2); font-size: .86rem; text-align: center; }
 .vt-app .vt-custom-payment { display: grid; gap: 12px; }
 .vt-app .vt-custom-payment label { margin-top: 6px; color: var(--ink); font-size: .86rem; font-weight: 750; }
@@ -799,7 +803,7 @@ button { font: inherit; }
 .vt-app .vt-custom-payment__submit { width: 100%; min-height: 50px; margin-top: 4px; padding: 10px 18px; border: 1px solid var(--accent-action); border-radius: var(--r-pill); background: var(--accent-action); color: var(--accent-action-ink); font-weight: 800; box-shadow: 0 8px 20px color-mix(in srgb, var(--accent-action) 30%, transparent); cursor: pointer; transition: filter .18s ease, opacity .18s ease, transform .12s ease; }
 .vt-app .vt-custom-payment__submit:hover { filter: brightness(.9); }
 .vt-app .vt-custom-payment__submit:active { filter: brightness(.82); transform: scale(.99); }
-.vt-app .vt-custom-payment__submit:focus-visible { outline: 3px solid var(--tint-2); outline-offset: 2px; }
+.vt-app .vt-custom-payment__submit:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
 .vt-app .vt-custom-payment__submit:disabled { border-color: var(--line-2); background: var(--surface-2); color: var(--ink-3); box-shadow: none; cursor: not-allowed; opacity: 1; }
 @media (max-width: 520px) {
   .vt-app .vt-main--payments .vt-pay { align-items: stretch; }
@@ -838,14 +842,14 @@ button { font: inherit; }
 .vt-app .vt-main--documents .vt-doc-button { min-height: 76px; padding: 13px 14px; border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent); border-radius: var(--r); background: var(--surface-2); box-shadow: var(--shadow-card); transition: border-color .18s ease, background-color .18s ease, box-shadow .18s ease, transform .15s ease; }
 .vt-app .vt-main--documents button.vt-doc-button:hover { border-color: color-mix(in srgb, var(--vt-accent) 25%, transparent); background: color-mix(in srgb, var(--vt-accent) 5%, var(--surface)); box-shadow: 0 7px 24px rgba(0, 0, 0, .05); transform: scale(1.006); }
 .vt-app .vt-main--documents button.vt-doc-button:active { background: color-mix(in srgb, var(--vt-accent) 8%, var(--surface)); transform: scale(.992); }
-.vt-app .vt-main--documents button.vt-doc-button:focus-visible { border-color: var(--vt-accent); outline: 3px solid var(--tint-2); outline-offset: 2px; }
+.vt-app .vt-main--documents button.vt-doc-button:focus-visible { border-color: var(--vt-accent); outline: 3px solid var(--focus-ring); outline-offset: 2px; }
 .vt-app .vt-main--documents button.vt-doc-button:disabled { cursor: wait; opacity: .7; transform: none; }
 .vt-app .vt-doc-button__icon, .vt-app .vt-doc-button__action { display: grid; place-items: center; flex: 0 0 auto; width: 40px; height: 40px; border-radius: var(--r-s); background: var(--tint); color: var(--vt-accent-text); }
 .vt-app .vt-doc-button__action { border-radius: 50%; background: color-mix(in srgb, var(--vt-accent) 10%, var(--surface)); }
 .vt-app div.vt-doc-button { cursor: default; }
 .vt-app .vt-doc-download { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: var(--tint); color: var(--vt-accent-text); cursor: pointer; transition: background-color .15s ease; }
 .vt-app .vt-doc-download:hover { background: var(--tint-2); }
-.vt-app .vt-doc-download:focus-visible { outline: 3px solid var(--tint-2); outline-offset: 2px; }
+.vt-app .vt-doc-download:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
 .vt-app .vt-doc-download:disabled { cursor: wait; }
 .vt-app .vt-doc-button__copy { display: grid; gap: 4px; min-width: 0; }
 .vt-app .vt-doc-button__title { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
@@ -995,7 +999,7 @@ button { font: inherit; }
 .vt-app .vt-channel-tile { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 68px; padding: 12px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface-2); cursor: pointer; transition: border-color .18s ease, background-color .18s ease, transform .12s ease; }
 .vt-app .vt-channel-tile.is-selected { border-color: color-mix(in srgb, var(--vt-accent) 38%, var(--line)); background: color-mix(in srgb, var(--vt-accent) 5%, var(--surface)); }
 .vt-app .vt-channel-tile:active { transform: scale(.985); }
-.vt-app .vt-channel-tile:has(input:focus-visible), .vt-app .vt-month-chip:has(input:focus-visible) { outline: 3px solid var(--tint-2); outline-offset: 2px; }
+.vt-app .vt-channel-tile:has(input:focus-visible), .vt-app .vt-month-chip:has(input:focus-visible) { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
 .vt-app .vt-channel-tile__icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: var(--r-s); background: var(--tint); color: var(--vt-accent-text); }
 .vt-app .vt-channel-tile__copy { display: grid; gap: 3px; min-width: 0; }
 .vt-app .vt-channel-tile__copy strong { color: var(--ink); font-size: .9rem; }
@@ -1422,7 +1426,7 @@ body.vt .vt-app :is(.vt-iconbtn, .vt-saved-trip__icon-button, .vt-notifications_
 }
 body.vt .vt-app :is(.vt-iconbtn, .vt-saved-trip__icon-button, .vt-notifications__close):active { transform: scale(.94); }
 body.vt .vt-app :is(.vt-iconbtn, .vt-saved-trip__icon-button, .vt-notifications__close):focus-visible {
-  outline: 3px solid var(--tint-2);
+  outline: 3px solid var(--focus-ring);
   outline-offset: 2px;
 }
 body.vt .vt-app .vt-saved-trip__utilities { gap: 8px; }
@@ -1530,7 +1534,7 @@ body.vt .vt-app .vt-account-danger button {
   box-shadow: 0 5px 14px color-mix(in srgb, var(--bad) 24%, transparent);
 }
 body.vt .vt-app .vt-account-danger button:hover { background: color-mix(in srgb, var(--bad) 88%, #651712); }
-body.vt .vt-app .vt-account-danger button:focus-visible { outline: 3px solid color-mix(in srgb, var(--bad) 28%, transparent); outline-offset: 2px; }
+body.vt .vt-app .vt-account-danger button:focus-visible { outline: 3px solid var(--bad); outline-offset: 2px; }
 body.vt .vt-app .vt-account-danger button:active { transform: scale(.97); }
 
 @media (max-width: 768px) {
@@ -1832,7 +1836,7 @@ body.vt .vt-app .vt-account-danger button:active { transform: scale(.97); }
 .vt-app .vt-page-head__kicker { margin: 0; color: var(--vt-accent-text); font-size: .72rem; font-weight: 800; letter-spacing: .14em; line-height: 1.2; text-transform: uppercase; }
 .vt-app .vt-page-head__title { margin: 5px 0 0; color: var(--ink); font-size: clamp(2rem, 7vw, 2.5rem); font-weight: 650; line-height: 1.08; }
 .vt-app .vt-page-head__title:focus { outline: none; }
-.vt-app .vt-page-head__title:focus-visible { outline: 2px solid var(--vt-accent); outline-offset: 4px; border-radius: 4px; }
+.vt-app .vt-page-head__title:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 4px; border-radius: 4px; }
 .vt-app .vt-page-head__lead { margin: 9px 0 0; color: var(--ink-2); font-size: .9rem; line-height: 1.55; }
 
 /* Entry screen. */
@@ -1907,7 +1911,7 @@ body.vt .vt-app .vt-account-danger button:active { transform: scale(.97); }
 .vt-app .vt-accept-item summary::-webkit-details-marker { display: none; }
 .vt-app .vt-accept-item summary:hover .vt-faq-item__chevron { background: var(--tint); }
 .vt-app .vt-accept-item[open] .vt-faq-item__chevron { background: var(--tint); transform: rotate(180deg); }
-.vt-app .vt-accept-item summary:focus-visible { outline: 2px solid var(--vt-accent); outline-offset: 2px; border-radius: var(--r-s); }
+.vt-app .vt-accept-item summary:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: var(--r-s); }
 .vt-app .vt-accept-item__status { display: grid; place-items: center; width: 30px; height: 30px; border: 1.5px solid var(--line-2); border-radius: 50%; color: var(--ink-2); font-size: .78rem; font-weight: 800; }
 .vt-app .vt-accept-item.is-read .vt-accept-item__status { border-color: var(--vt-accent); color: var(--vt-accent-text); }
 .vt-app .vt-accept-item.is-confirmed .vt-accept-item__status { border-color: var(--ok); background: var(--ok); color: var(--surface); }
@@ -1979,7 +1983,7 @@ body.vt .vt-app .vt-account-danger button:active { transform: scale(.97); }
 .vt-app .vt-freshness.vt-freshness--quiet { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin: 10px var(--vt-flat-gutter, 0) 0; padding: 0; border: 0; background: none; color: var(--ink-2); font-size: .78rem; font-weight: 550; }
 .vt-app .vt-freshness__refresh { min-height: 32px; padding: 4px 12px; border: 1px solid var(--line-2); border-radius: var(--r-pill); background: var(--surface); color: var(--ink); font-size: .78rem; font-weight: 650; }
 .vt-app .vt-freshness__refresh:hover:not(:disabled) { border-color: var(--vt-accent); }
-.vt-app .vt-freshness__refresh:focus-visible { outline: 3px solid var(--tint-2); outline-offset: 2px; }
+.vt-app .vt-freshness__refresh:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
 .vt-app .vt-freshness__refresh:disabled { color: var(--ink-3); cursor: not-allowed; }
 
 /* My Trips: a group holding a single trip spans the row as a horizontal card on wider screens, instead of a phone card
@@ -2110,6 +2114,10 @@ body.vt .vt-app .vt-account-danger__icon { width: 40px; height: 40px; }
 /* Room under the last section so the floating button never covers it at the bottom of a page. */
 .vt-app:has(> .vt-message-fab) .vt-main { padding-bottom: 88px; }
 .vt-app .vt-message-fab { position: fixed; right: max(16px, env(safe-area-inset-right)); bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 30; box-shadow: var(--shadow-card); }
+/* Tucked away while scrolling down; it returns on scroll up, at either end of the page, or when it gets keyboard focus. */
+.vt-app .vt-message-fab { transition: transform .2s ease, opacity .2s ease; }
+.vt-app .vt-message-fab.is-tucked:not(:focus-visible) { transform: translateY(calc(100% + 100px)); opacity: 0; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .vt-app .vt-message-fab { transition: none; } }
 .vt-app .vt-inclusions { margin: 16px var(--vt-flat-gutter) 0; padding: 4px 16px; border: 1px solid var(--card-border, var(--line)); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-card); }
 .vt-app .vt-inclusions summary { display: flex; align-items: center; justify-content: space-between; min-height: 48px; font-weight: 700; cursor: pointer; list-style: none; }
 .vt-app .vt-inclusions h3 { margin: 12px 0 6px; font-size: .9rem; }
@@ -2336,11 +2344,12 @@ body.vt .vt-app :is(.vt-pay__status, .vt-payment-summary__stats small) { min-hei
 
 /* Metadata never drops under 12px (it still scales with the text-size setting): freshness line, notification times,
    journey step dates, "Lead traveller", the "Travel only" badge, My Trips brand and reference, the hero's trip tags,
-   "N% paid" and the payment schedule count. */
+   "N% paid", the payment schedule count, cruise stop counts, countdown units, "New" tags and gallery captions. */
 body.vt .vt-app :is(
   .vt-trip-status-card__copy > div > div, .vt-notification-row time, .vt-booking-step__title time,
   .vt-traveller__lead, .vt-contact-card__copy strong small, .vt-saved-trip__brand, .vt-saved-trip h3 + p,
-  .vt-hero__facts li, .vt-payment-progress__meta, .vt-payment-progress__meta strong, .vt-payment-card__heading > span
+  .vt-hero__facts li, .vt-payment-progress__meta, .vt-payment-progress__meta strong, .vt-payment-card__heading > span,
+  .vt-itinerary-disclosure summary em, .vt-countdown-card__unit span, .vt-notification-row__new, .vt-gallery-caption
 ) { font-size: max(.75rem, 12px); }
 
 /* Full 44 × 44 targets: an airport chip's Remove button (negative margins keep the chip its usual height) and the
@@ -2351,3 +2360,10 @@ body.vt .vt-app .vt-account-danger button { min-height: 44px; }
 /* Long itinerary notes: about six lines, fading out, then "Read more". The full text stays in the page for screen readers. */
 .vt-app .vt-itinerary-notes.is-clamped { max-height: calc(1.6em * 6 + 14px); overflow: hidden; -webkit-mask-image: linear-gradient(#000 70%, transparent); mask-image: linear-gradient(#000 70%, transparent); }
 .vt-app .vt-itinerary-notes__more { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; margin-top: 2px; padding: 0 2px; border: 0; background: none; color: var(--vt-accent-text); font: inherit; font-size: .875rem; font-weight: 650; cursor: pointer; }
+
+/* Brand logos are drawn for light backgrounds (a navy logo vanishes on the dark header), so in dark mode the logo sits
+   on a small light plate. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) body.vt .vt-app .vt-top__logo { padding: 3px 6px; border-radius: 8px; background: #fff; }
+}
+:root[data-theme="dark"] body.vt .vt-app .vt-top__logo { padding: 3px 6px; border-radius: 8px; background: #fff; }
