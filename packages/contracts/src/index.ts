@@ -53,6 +53,8 @@ export interface TripSummary {
   travellerType: string | null;
   sector: string | null;
   totalTravellers: number;
+  /** Passengers on the booking who are not yet named. */
+  unnamedTravellers?: number;
   groupBooking: boolean;
   giftVoucher: boolean;
 }
@@ -184,10 +186,17 @@ export interface BrandProfile {
   footerImages: string[];
   footerText: string | null;
   letterTemplates: Array<{ id: string; name: string; subject: string | null; body: string }>;
+  /**
+   * The brand's own legal / information texts (plain text, paragraphs separated by blank lines) shown on the booking
+   * confirmation and quotation: correct names, total price, financial protection, terms, PTR, flight, insurance…
+   */
+  legalTemplates?: Array<{ id: BrandLegalTemplateId; title: string; text: string }>;
   /** "Why choose…" heading set on the brand; the app falls back to About & Bio when absent. */
   whyChooseHeader?: string | null;
   whyChooseSubheader?: string | null;
 }
+
+export type BrandLegalTemplateId = 'correct_names' | 'total_price' | 'financial' | 'terms' | 'ptr' | 'flight' | 'insurance' | 'travel_aware' | 'important';
 
 export interface TripCommunication {
   id: string;
@@ -218,7 +227,12 @@ export interface WeatherForecast {
 }
 export interface ExternalImage { url: string; attribution: string | null; official: boolean; variants?: ImageVariant[] }
 export interface PlaceProfile {
+  /** `rating` is null when Google has none or it is below the minimum shown to customers (4 by default). */
   itineraryItemId: string; placeId: string; name: string; address: string | null; rating: number | null; ratingCount: number;
+  /**
+   * Always null: the property's own website is never linked, so customers are not sent to book direct.
+   * Kept for older clients.
+   */
   websiteUrl: string | null; phone: string | null; summary: string | null; mapsUrl: string | null; directionsUrl: string;
   coordinates: { latitude: number; longitude: number }; images: ExternalImage[]; aiDescription: string | null; aiPending: boolean;
   /** Up to eight short facility labels from the brochure writer (plain text, 40 characters max). Indicative only. */
@@ -537,10 +551,26 @@ export interface TripProtection {
   organiserName: string | null;
   hasFlight: boolean;
   guaranteeAvailable: boolean;
+  /** The member company making the booking (the retailer); the organiser when it sells as principal. */
+  retailerName?: string | null;
+  /** Who issues the ATOL certificate: the retailer when selling as an agent, otherwise the ATOL holder. */
+  certificateIssuer?: string | null;
+  /** How the client trust account is described, or null when no trust arrangement can be vouched for. */
+  trustLabel?: string | null;
+  /** The member's registered office, one line per part. */
+  retailerAddress?: string[];
+  /** The member's membership number (e.g. TTA / Worldchoice), when set. */
+  retailerMemberNumber?: string | null;
+  /** The member's Companies House registration number, when set. */
+  retailerCompanyNumber?: string | null;
+  /** The member's VAT registration number, when set. */
+  retailerVatNumber?: string | null;
 }
 
 export interface BookingStatus {
   sourceStatus: string;
+  /** When the booking record was created (ISO date-time), used for document issue dates. */
+  createdAt?: string | null;
   cancellationDate: string | null;
   cancellationReason: string | null;
   supplierTicketsReceived: boolean;
@@ -608,6 +638,11 @@ export interface ItineraryItem {
   arrivalTerminal?: string | null;
   /** Where the terminal came from, so live data can supplement but never silently overwrite it. */
   terminalSource?: 'booking' | 'notes' | null;
+  /** ISO country code of the departure / arrival airport (flights only), as in the airport record. */
+  fromCountry?: string | null;
+  toCountry?: string | null;
+  /** The element's linked location record: its name and, when known, coordinates (used to check map matches). */
+  location?: { name: string; coordinates: { latitude: number; longitude: number } | null } | null;
   packageIncluded: boolean;
   termsUrl: string | null;
   confirmationReceived: boolean;
@@ -727,6 +762,8 @@ export interface PaymentSummary {
   customPayments: { enabled: boolean; minimum: number; maximum: number };
   /** Per person, shown when more than one traveller: the booking's own figure or the total shared out. */
   perPerson?: number | null;
+  /** The brand's client trust account for bank transfers; only when the brand has one set. */
+  bankTransfer?: { accountName: string | null; sortCode: string | null; accountNumber: string } | null;
 }
 
 export interface CustomPaymentLinkRequest { amount: number }

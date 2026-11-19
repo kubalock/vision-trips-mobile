@@ -39,11 +39,11 @@ describe('snapshot and document versions', () => {
     expect(docVersion(after, 'invoice')).toBe(docVersion(before, 'invoice'));
   });
 
-  it('changes the invoice, not the confirmation, when only a payment changes', () => {
+  it('changes the invoice and the confirmation (which carries the payment schedule) when only a payment changes', () => {
     const before = map(); const after = map({ payments: [payment('Complete', '2026-11-10T12:00:00.000Z')] });
     expect(after.version).not.toBe(before.version);
     expect(docVersion(after, 'invoice')).not.toBe(docVersion(before, 'invoice'));
-    expect(docVersion(after, 'confirmation')).toBe(docVersion(before, 'confirmation'));
+    expect(docVersion(after, 'confirmation')).not.toBe(docVersion(before, 'confirmation'));
     expect(after.documents.some((document) => document.kind === 'receipt')).toBe(true);
   });
 

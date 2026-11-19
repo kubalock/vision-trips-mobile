@@ -4,6 +4,7 @@ import { ExternalCacheService } from './external-cache.service.js';
 import { PLACE_PHOTO_REF, resolvePlacePhoto } from './place-photos.js';
 import { arrivalFlightFor, climateFromArchive, climateWindow, haversineKm, parseDestinationFacts, parseFacilities, reassuringRating, roundedDistance, routeMapUrl } from './enrichment.js';
 import { videoFromUrl } from '../trips/trip-extras.js';
+import { placeSearchQuery, shownPlaceRating, verifyPlaceMatch } from './place-match.js';
 
 @Injectable()
 export class ExternalContentService {
@@ -108,9 +109,10 @@ export class ExternalContentService {
   private async stays(snapshot: TripSnapshot, apiBase: string): Promise<PlaceProfile[]> {
     const key = process.env.GOOGLE_PLACES_API_KEY?.trim(); if (!key) return [];
     return compact(await Promise.all(snapshot.itinerary.filter((item) => item.kind === 'stay').map(async (item) => {
-      const cacheKey = `place-v2:${entityKey(item.title)}:${entityKey(item.address || '')}`; let profile = this.cache.get<PlaceProfile | null>(cacheKey);
+      const query = placeSearchQuery(item.title, item.address, item.location?.name ?? null); if (!query) return null;
+      const cacheKey = `place-v3:${entityKey(query)}`; let profile = this.cache.get<PlaceProfile | null>(cacheKey);
       if (profile === undefined) {
-        try { profile = await this.googlePlace(item, key); this.cache.set(cacheKey, profile, profile ? 604_800_000 : 1_800_000); }
+        try { profile = await this.googlePlace(item, query, key); this.cache.set(cacheKey, profile, profile ? 604_800_000 : 1_800_000); }
         catch (error) { this.warn('Google Places', error); profile = null; }
       }
       if (!profile) return null;
@@ -119,18 +121,24 @@ export class ExternalContentService {
       const airportDistance = await this.airportDistance(item, snapshot.itinerary, profile.coordinates, key).catch((error: unknown) => { this.warn('Airport distance', error); return null; });
       // Photos are cached as Google photo names and only become (signed, key-free) links here.
       const images = compact(profile.images.map((image) => resolvePlacePhoto(image, apiBase)));
-      return { ...profile, images, aiDescription: ai.text || profile.summary, aiPending: ai.pending, facilities: facts.text ? parseFacilities(facts.text) : [], airportDistance };
+      // Never a poor score, and never the property's own website (customers are not sent to book direct).
+      return { ...profile, itineraryItemId: item.id, rating: shownPlaceRating(profile.rating), websiteUrl: null, images, aiDescription: ai.text || profile.summary, aiPending: ai.pending, facilities: facts.text ? parseFacilities(facts.text) : [], airportDistance };
     })));
   }
 
-  private async googlePlace(item: ItineraryItem, key: string): Promise<PlaceProfile | null> {
-    const response = await fetch('https://places.googleapis.com/v1/places:searchText', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': key, 'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.websiteUri,places.internationalPhoneNumber,places.editorialSummary,places.googleMapsUri,places.location,places.photos,places.types' }, body: JSON.stringify({ textQuery: [item.title, item.address].filter(Boolean).join(', '), maxResultCount: 1, languageCode: 'en-GB' }), signal: AbortSignal.timeout(12_000) });
+  private async googlePlace(item: ItineraryItem, query: string, key: string): Promise<PlaceProfile | null> {
+    const bias = item.location?.coordinates ?? null;
+    const body = { textQuery: query, maxResultCount: 1, languageCode: 'en-GB', ...(bias ? { locationBias: { circle: { center: bias, radius: 20_000 } } } : {}) };
+    const response = await fetch('https://places.googleapis.com/v1/places:searchText', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': key, 'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.internationalPhoneNumber,places.editorialSummary,places.googleMapsUri,places.location,places.photos,places.types' }, body: JSON.stringify(body), signal: AbortSignal.timeout(12_000) });
     if (!response.ok) throw new Error(`Google Places ${response.status}`); const place = array(obj(await response.json()).places)[0]; if (!object(place)) return null;
     const name = text(obj(place.displayName).text); const address = text(place.formattedAddress);
-    if (!safePlaceMatch(item.title, item.address, name, address)) return null;
-    const location = obj(place.location); const placeId = text(place.id); const photos = array(place.photos).flatMap((photo) => { if (!object(photo) || !text(photo.name)) return []; const attribution = text(array(photo.authorAttributions)[0] && obj(array(photo.authorAttributions)[0]).displayName) || null; return [{ url: `${PLACE_PHOTO_REF}${text(photo.name)}`, attribution, official: Boolean(attribution && entityKey(attribution).includes(entityKey(name))) }]; }).sort((left, right) => Number(right.official) - Number(left.official)).slice(0, 6);
-    const lat = number(location.latitude); const lng = number(location.longitude); const query = encodeURIComponent(`${name}, ${address}`);
-    return { itineraryItemId: item.id, placeId, name, address: address || null, rating: place.rating === undefined ? null : number(place.rating), ratingCount: number(place.userRatingCount), websiteUrl: httpUrl(place.websiteUri), phone: text(place.internationalPhoneNumber) || null, summary: text(obj(place.editorialSummary).text) || null, mapsUrl: httpUrl(place.googleMapsUri), directionsUrl: `https://www.google.com/maps/dir/?api=1&destination=${query}${placeId ? `&destination_place_id=${encodeURIComponent(placeId)}` : ''}`, coordinates: { latitude: lat, longitude: lng }, images: photos, aiDescription: null, aiPending: false };
+    const location = obj(place.location);
+    // Never show the wrong hotel: name, lodging type and distance from the stay's own location are all checked.
+    const verdict = verifyPlaceMatch(query, { name, address, types: strings(place.types), coordinates: location.latitude === undefined ? null : { latitude: number(location.latitude), longitude: number(location.longitude) } }, bias);
+    if (!verdict.ok) { this.logger.log(`Google Places result rejected (${verdict.reason})`); return null; }
+    const placeId = text(place.id); const photos = array(place.photos).flatMap((photo) => { if (!object(photo) || !text(photo.name)) return []; const attribution = text(array(photo.authorAttributions)[0] && obj(array(photo.authorAttributions)[0]).displayName) || null; return [{ url: `${PLACE_PHOTO_REF}${text(photo.name)}`, attribution, official: Boolean(attribution && entityKey(attribution).includes(entityKey(name))) }]; }).sort((left, right) => Number(right.official) - Number(left.official)).slice(0, 6);
+    const lat = number(location.latitude); const lng = number(location.longitude); const destination = encodeURIComponent(`${name}, ${address}`);
+    return { itineraryItemId: item.id, placeId, name, address: address || null, rating: place.rating === undefined ? null : number(place.rating), ratingCount: number(place.userRatingCount), websiteUrl: null, phone: text(place.internationalPhoneNumber) || null, summary: text(obj(place.editorialSummary).text) || null, mapsUrl: httpUrl(place.googleMapsUri), directionsUrl: `https://www.google.com/maps/dir/?api=1&destination=${destination}${placeId ? `&destination_place_id=${encodeURIComponent(placeId)}` : ''}`, coordinates: { latitude: lat, longitude: lng }, images: photos, aiDescription: null, aiPending: false };
   }
 
   private async cruises(snapshot: TripSnapshot): Promise<CruiseProfile[]> {

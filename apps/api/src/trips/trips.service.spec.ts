@@ -170,6 +170,38 @@ describe('TripsService', () => {
     expect(snapshot.protection.summary).toContain('once you book');
   });
 
+  it('maps what the confirmation and ATOL certificate need: airport countries, locations, retailer, trust account and brand texts', () => {
+    const service = new TripsService({} as never);
+    const snapshot = service.mapSnapshot(
+      'appABCDEFGHIJKLMN',
+      { id: 'recABCDEFGHIJKLMN', createdTime: '2026-10-01T09:00:00.000Z', fields: { Status: 'Confirmed', ATOL: 'Agent of ATOL Holder (Single-Contract)', 'Unknown Passengers': 2, 'Bookings [Elements]': ['recFLIGHT00000001', 'recSTAY0000000001'], 'Members | Company Name': 'Sunny Days Ltd', Members: ['recMEMBER00000001'] } },
+      { id: 'recBRAND', fields: { 'Trading Name': 'Sunny Days Travel', 'Trust Account | Account Number': '12345678', 'Trust Account | Sort Code': '12-34-56', 'Template | Correct Names Notice': '<p>Names must match passports.</p>' } },
+      'primary_customer',
+      {
+        elements: [
+          { id: 'recFLIGHT00000001', fields: { Type: 'Flight', 'Dep. Airport Name': ['recLGWAIRPORT0001'], 'Arr. Airport Name': ['recLISAIRPORT0001'] } },
+          { id: 'recSTAY0000000001', fields: { Type: 'Accommodation', 'Accommodation Name': 'Avenida Palace', Location: ['recLOCATION000001'] } },
+        ],
+        airports: [{ id: 'recLGWAIRPORT0001', fields: { Name: 'London Gatwick', 'ISO Country': 'gb' } }, { id: 'recLISAIRPORT0001', fields: { Name: 'Lisbon', 'ISO Country': 'PT' } }],
+        members: [{ id: 'recMEMBER00000001', fields: { 'Member Number': 'W1234', 'Company Registration Number': '01234567', 'VAT Registration Number': 'GB123456789' } }],
+        locations: [{ id: 'recLOCATION000001', fields: { Name: 'Lisbon', Latitude: 38.72, Longitude: -9.14 } }],
+      },
+    );
+    const flight = snapshot.itinerary.find((entry) => entry.kind === 'flight');
+    expect([flight?.fromCountry, flight?.toCountry]).toEqual(['GB', 'PT']);
+    expect(snapshot.itinerary.find((entry) => entry.kind === 'stay')?.location).toEqual({ name: 'Lisbon', coordinates: { latitude: 38.72, longitude: -9.14 } });
+    expect(snapshot.bookingStatus.createdAt).toBe('2026-10-01T09:00:00.000Z');
+    expect(snapshot.summary.unnamedTravellers).toBe(2);
+    expect(snapshot.protection.retailerName).toBe('Sunny Days Ltd');
+    expect(snapshot.protection.certificateIssuer).toBe('Sunny Days Ltd');
+    expect(snapshot.protection.trustLabel).toBe('client trust account');
+    expect(snapshot.protection.retailerMemberNumber).toBe('W1234');
+    expect(snapshot.protection.retailerCompanyNumber).toBe('01234567');
+    expect(snapshot.protection.retailerVatNumber).toBe('GB123456789');
+    expect(snapshot.payments?.bankTransfer).toEqual({ accountName: null, sortCode: '12-34-56', accountNumber: '12345678' });
+    expect(snapshot.brand.profile.legalTemplates).toEqual([{ id: 'correct_names', title: 'Correct names notice', text: 'Names must match passports.' }]);
+  });
+
   it('removes financial capabilities from fellow-traveller snapshots', () => {
     const service = new TripsService({} as never);
     const snapshot = service.mapSnapshot(

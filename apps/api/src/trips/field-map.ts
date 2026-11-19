@@ -19,7 +19,7 @@ export const bookingFields = {
   emergencyPhone: ['Customer | Emergency Telephone'], outOfHoursLink: ['Out of Hours Link'], outOfHoursEmail: ['Out of Hours Email'],
   supplierTickets: ['Supplier Tickets Received'], supplierConfirmations: ['Supplier Confirmations Received'],
   taskConfirmation: ['Booking Confirmation'], taskReconfirmed: ['Booking Reconfirmed'], taskDocuments: ['Travel Documents'], taskPredeparture: ['Pre-Departure Call'], taskFollowup: ['Post-Travel Follow-Up'],
-  group: ['Group Booking'], giftVoucher: ['Gift Voucher'], totalTravellers: ['Total Passengers & Guests', 'Total Passengers'],
+  group: ['Group Booking'], giftVoucher: ['Gift Voucher'], totalTravellers: ['Total Passengers & Guests', 'Total Passengers'], unknownPax: ['Unknown Passengers'],
   surprise: ['Surprise Booking'],
   hero: ['Hero Image', 'Featured Image', 'Hero'],
   gallery: ['Gallery', 'Accommodation Gallery', 'Cruise Ship Gallery'],
@@ -66,7 +66,10 @@ export const brandFields = {
   logo: ['Transparent Logo', 'Logo'],
   tone: ['Member Tone'],
   theme: ['Theme'],
-  company: ['Company Name'], proposition: ['Proposition'], trustNumber: ['Trust Account | Account Number'],
+  company: ['Company Name'], proposition: ['Proposition'], trustNumber: ['Trust Account | Account Number'], trustName: ['Trust Account | Account Name'], trustSortCode: ['Trust Account | Sort Code'],
+  tplImportant: ['Template | Important Information'], tplInsurance: ['Template | Travel Insurance'], tplTravelAware: ['Template | Travel Aware'], tplCorrectNames: ['Template | Correct Names Notice'],
+  tplTotalPrice: ['Template | Total Price Information'], tplFinancial: ['Template | Financial Protection Information'], tplTerms: ['Template | Terms & Conditions'], tplFlight: ['Template | Flight Information'],
+  tplPtr: ['Template | Package Travel and Linked Travel Arrangements Regulations'],
   slogan: ['Slogan'], about: ['About & Bio'], physicalAddress: ['Physical Address'], address1: ['Shop | Address Line 1', 'Address Line 1'], address2: ['Address Line 2'], town: ['Shop | Town/City', 'Town/City'], postcode: ['Shop | Post Code', 'Post Code'], country: ['Shop | Country', 'Country'], hours: ['Opening Hours'],
   instagram: ['Social Media: Instagram'], facebook: ['Social Media: Facebook'], linkedin: ['Social Media: LinkedIn'], x: ['Social Media: X/Twitter'], trustpilot: ['Trustpilot Reviews URL'], googleReviews: ['Google Reviews URL'], privacy: ['Privacy Policy'], complaints: ['Complaints'],
   phone: ['Customer | Telephone', 'Telephone', 'Phone'], email: ['Customer | Email Address', 'Email'], website: ['Customer | Website', 'Website'],
@@ -107,7 +110,7 @@ export const elementFields = {
 } as const;
 
 export const supplierFields = { name: ['Name', 'Supplier Name(s)'], logo: ['Logo'], terms: ['Legal Notices URL'] } as const;
-export const airportFields = { name: ['Name', 'Airport'], iata: ['IATA Code'] } as const;
+export const airportFields = { name: ['Name', 'Airport'], iata: ['IATA Code'], country: ['ISO Country'] } as const;
 export const airlineFields = { name: ['Airline', 'Name'], iata: ['iata'], logo: ['Logo', 'Airline Logo', 'logo'] } as const;
 export const roomFields = { type: ['Room Type', 'Name', 'Room'], board: ['Board Basis', 'Board', 'Meal Plan'], view: ['Room Views'], requests: ['Special Requests'] } as const;
 export const cabinFields = { name: ['Cabin Name', 'Name'], grade: ['Cabin Grade'], number: ['Cabin Number'], deck: ['Cabin Deck', 'Deck'], side: ['Ship Side'], position: ['Cabin Position'], bed: ['Bed Type'], seating: ['Seating'], table: ['Table Size'], dining: ['Dining Option'] } as const;
@@ -153,7 +156,8 @@ export const customerFields = {
   marketingSms: ['SMS Marketing'], marketingPost: ['Postal Marketing'],
   preferredAirports: ['Preferred Departure Airport(s)'], preferredMonths: ['Preferred Travel Month(s)'],
 } as const;
-export const memberFields = { loyaltyEnabled: ['Loyalty Scheme Enabled'], company: ['Company Name'], proposition: ['Proposition'], tAtolEnabled: ['T-ATOL Enabled'], tAtolNumber: ['T-ATOL Number'], number: ['Members | Number', 'Member Number'] } as const;
+export const memberFields = { loyaltyEnabled: ['Loyalty Scheme Enabled'], company: ['Company Name'], proposition: ['Proposition'], tAtolEnabled: ['T-ATOL Enabled'], tAtolNumber: ['T-ATOL Number'], number: ['Members | Number', 'Member Number'],
+  office1: ['Registered Office | Address Line 1'], office2: ['Registered Office | Address Line 2'], officeTown: ['Registered Office | Town/City'], officePostcode: ['Registered Office | Post Code'], companyNumber: ['Company Registration Number'], vatNumber: ['VAT Registration Number'] } as const;
 
 export const loyaltyTransactionFields = { type: ['Transaction Type'], points: ['Points'], date: ['Date'], notes: ['Notes'], booking: ['Booking'], customer: ['Customer', 'Customers'] } as const;
 

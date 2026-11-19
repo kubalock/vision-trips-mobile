@@ -81,6 +81,15 @@ describe('enrichment UI', () => {
     expect(watched).toEqual(['Take a look around Iona', 'The Glass House']);
   });
 
+  it('never links a stay to its own website and hides a poor Google rating', () => {
+    const element = renderContent(base({ stays: [stay({ websiteUrl: 'https://hotel-avenida.example', rating: 3.6, ratingCount: 900 })] })).nativeElement as HTMLElement;
+    expect(element.querySelector('a[href="https://hotel-avenida.example"]')).toBeNull();
+    expect(element.textContent).not.toContain('Official website');
+    expect(element.textContent).not.toContain('3.6');
+    const good = renderContent(base({ stays: [stay({ rating: 4.6, ratingCount: 120 })] })).nativeElement as HTMLElement;
+    expect(good.textContent).toContain('4.6');
+  });
+
   it('shows destination facts as approximate and the travel-month climate', () => {
     const fixture = TestBed.createComponent(DestinationsSection);
     fixture.componentRef.setInput('destinations', [destination({ facts: { currency: 'Euro (EUR)', language: null, timeDifference: 'Same as the UK', flightTimeFromLondon: null, plugs: null, bestTime: null }, climate: { month: 'March', highC: 19, lowC: 10, sunshineHours: 1, rainyDays: null, years: 3 } })]);

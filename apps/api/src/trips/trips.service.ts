@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import type { AccessScope, TripSection, ItineraryImage, PaymentStatusResponse, CabinDetail, CruisePort, ItineraryItem, ItineraryKind, PassengerAllocation, PaymentItem, RoomDetail, TravellerSummary, TripDocument, TripSnapshot } from '@vision-trips/contracts';
+import type { AccessScope, BrandLegalTemplateId, TripSection, ItineraryImage, PaymentStatusResponse, CabinDetail, CruisePort, ItineraryItem, ItineraryKind, PassengerAllocation, PaymentItem, PaymentSummary, RoomDetail, TravellerSummary, TripDocument, TripSnapshot } from '@vision-trips/contracts';
 import { TRIP_SNAPSHOT_SCHEMA_VERSION } from '@vision-trips/contracts';
 import { withMediaLinks } from '../media/attachment-media.js';
 import { affiliateUrl, isPointsPayment, isSchemeFunding, mapAgent, mapContent, mapTripLoyalty, redeemedPoints, terminals, travellerDetails } from './trip-extras.js';
@@ -296,7 +296,7 @@ export class TripsService {
     const travellers = mapTravellers(allRelated.customers, allRelated.people, accessScope, departure, returns);
     const mintReady = Boolean(firstString(brandValue('mintApiKey')) && firstString(brandValue('mintBusinessUnit')) && firstString(bookingValue('mintBookingId')).startsWith('BK.'));
     const payments = accessScope === 'primary_customer'
-      ? mapPayments(booking, allRelated.payments, stage, tripId, mintReady, truthy(brandValue('mintAllowCustom')), quotationAccepted, redeemedPoints(allRelated.loyaltyTransactions))
+      ? { ...mapPayments(booking, allRelated.payments, stage, tripId, mintReady, truthy(brandValue('mintAllowCustom')), quotationAccepted, redeemedPoints(allRelated.loyaltyTransactions)), bankTransfer: bankTransfer(brandValue) }
       : undefined;
     const destinations = mapDestinations(allRelated.locations, tripId);
     const extras = mapExtras(allRelated.upsells, graph.suppliers, tripId, hideSupplierInfo);
@@ -308,12 +308,12 @@ export class TripsService {
       departureDate: departure, returnDate: returns, heroImageUrl: firstAttachmentUrl(bookingValue('hero')), heroImage: heroImage(firstAttachmentImage(bookingValue('hero'))), gallery: attachmentImages(bookingValue('gallery')),
       durationDays: tripDuration(bookingValue('duration'), departure, returns), countries: strings(bookingValue('countries')).map(safeText).filter(Boolean),
       holidayTypes: strings(bookingValue('holidayTypes')).map(safeText).filter(Boolean), travellerType: safeText(bookingValue('travellerType')) || null,
-      sector: safeText(bookingValue('sector')) || null, totalTravellers: Math.max(numberValue(bookingValue('totalTravellers')), travellers.length),
+      sector: safeText(bookingValue('sector')) || null, totalTravellers: Math.max(numberValue(bookingValue('totalTravellers')), travellers.length), unnamedTravellers: Math.max(0, Math.round(numberValue(bookingValue('unknownPax')))),
       groupBooking: truthy(bookingValue('group')), giftVoucher: truthy(bookingValue('giftVoucher')),
     };
     // Each document is versioned on what it shows, so the wallet flags (and notifies about) only documents that changed.
     const versions = {
-      confirmation: contentVersion(stage, summary, itinerary, travellers, protection),
+      confirmation: contentVersion(stage, summary, itinerary, travellers, protection, payments ?? null, brandValue('trustNumber') ?? null),
       invoice: contentVersion(summary.reference, summary.name, payments ?? null),
       frontFile: contentVersion(stage, summary, itinerary, travellers, payments ?? null, protection),
       protection: contentVersion(summary, travellers, itinerary, protection),
@@ -392,6 +392,7 @@ export class TripsService {
       protection,
       bookingStatus: {
         sourceStatus: status,
+        createdAt: booking.createdTime ?? dateTimeString(booking.fields['Created time'] ?? booking.fields.Created),
         cancellationDate: dateString(bookingValue('cancellationDate')),
         cancellationReason: stage === 'cancelled' ? safeText(bookingValue('cancellationReason')) || null : null,
         supplierTicketsReceived: truthy(bookingValue('supplierTickets')),
@@ -448,6 +449,11 @@ export class TripsService {
       },
     };
   }
+}
+
+function bankTransfer(brandValue: (key: keyof typeof brandFields) => unknown): PaymentSummary['bankTransfer'] {
+  const accountNumber = safeText(brandValue('trustNumber'));
+  return accountNumber ? { accountName: safeText(brandValue('trustName')) || null, sortCode: safeText(brandValue('trustSortCode')) || null, accountNumber } : null;
 }
 
 function mapBookingJourney(input: {
@@ -570,10 +576,18 @@ function mapBrandProfile(brandValue: (key: keyof typeof brandFields) => unknown,
     footerImages: attachmentImages(brandValue('footerImages')).map((image) => image.url),
     footerText: safeText(brandValue('footerContent')) || null,
     letterTemplates: mapLetterTemplates(brandTemplates, tripId),
+    legalTemplates: BRAND_LEGAL_TEMPLATES.flatMap(([id, title, key]) => { const text = letterText(brandValue(key)); return text ? [{ id, title, text }] : []; }),
     whyChooseHeader: safeText(brandValue('whyHeader')) || null,
     whyChooseSubheader: safeText(brandValue('whySubheader')) || null,
   };
 }
+
+/** The brand's legal texts, in the order the PHP confirmation prints them. */
+const BRAND_LEGAL_TEMPLATES: ReadonlyArray<[BrandLegalTemplateId, string, keyof typeof brandFields]> = [
+  ['correct_names', 'Correct names notice', 'tplCorrectNames'], ['total_price', 'Total price information', 'tplTotalPrice'], ['financial', 'Financial protection', 'tplFinancial'],
+  ['terms', 'Terms & conditions', 'tplTerms'], ['ptr', 'Package travel regulations', 'tplPtr'], ['flight', 'Flight information', 'tplFlight'],
+  ['insurance', 'Travel insurance', 'tplInsurance'], ['travel_aware', 'Travel aware', 'tplTravelAware'], ['important', 'Important information', 'tplImportant'],
+];
 
 /**
  * Brand letter templates are shared by every booking, so a letter is only offered at the stage it's written for: a
@@ -798,6 +812,9 @@ function mapElement(record: AirtableRecord, tripId: string, index: number, graph
     rooms, cabins, passengers, cruisePorts,
     emergencyContact: emergencyContact(value('emergencyName'), value('emergencyPhone')),
     details: elementDetails(kind, value),
+    fromCountry: kind === 'flight' ? recordText(fromAirport, airportFields.country).toUpperCase() || null : null,
+    toCountry: kind === 'flight' ? recordText(toAirport, airportFields.country).toUpperCase() || null : null,
+    location: elementLocation(firstLinked(value('location'), graph.locations)),
     fromCode: (recordText(fromAirport, airportFields.iata) || safeText(value('fromCode'))).toUpperCase() || null,
     toCode: (recordText(toAirport, airportFields.iata) || safeText(value('toCode'))).toUpperCase() || null,
     carrierCode,
@@ -809,6 +826,15 @@ function mapElement(record: AirtableRecord, tripId: string, index: number, graph
     confirmationReceived: truthy(value('confirmationReceived')),
     ticketsReceived: truthy(value('ticketsReceived')),
   };
+}
+
+function elementLocation(record: AirtableRecord | undefined): ItineraryItem['location'] {
+  if (!record) return null;
+  const name = recordText(record, locationFields.name);
+  const latitude = optionalNumber(pick(record.fields, locationFields.latitude));
+  const longitude = optionalNumber(pick(record.fields, locationFields.longitude));
+  if (!name && (latitude === null || longitude === null)) return null;
+  return { name, coordinates: latitude !== null && longitude !== null ? { latitude, longitude } : null };
 }
 
 function mapRoom(record: AirtableRecord): RoomDetail | null {
@@ -898,7 +924,16 @@ function mapProtection(
     : scheme === 'non_air_package' ? 'This is a package without a flight; check your booking confirmation for its financial protection.'
     : scheme === 'not_applicable' ? 'ATOL protection does not apply to this booking.'
     : 'See your booking confirmation for the financial protection that applies to this trip.';
-  return { scheme, atolNumber: holderNumber, licensing, summary, mode, contractType, holderName: holderName || null, organiserName: (mode.startsWith('agent_') ? leadSupplierName : memberName) || null, hasFlight, guaranteeAvailable: proposition.includes('tta') || proposition.includes('travel trust') };
+  const isTta = proposition.includes('tta') || proposition.includes('travel trust');
+  // As the PHP Atol domain: an agent issues the certificate itself; a principal's certificate is issued by the holder.
+  const certificateIssuer = mode.startsWith('agent_') ? memberName : mode.startsWith('principal_') && proposition === 'ite' ? 'Independent Travel Experts Ltd' : holderName || memberName;
+  const trustLabel = isTta ? 'Travel Trust Association trust account' : recordText(brand, brandFields.trustNumber) ? 'client trust account' : null;
+  const retailerAddress = member ? [memberFields.office1, memberFields.office2, memberFields.officeTown, memberFields.officePostcode].map((field) => recordText(member, field)).filter(Boolean) : [];
+  return {
+    scheme, atolNumber: holderNumber, licensing, summary, mode, contractType, holderName: holderName || null, organiserName: (mode.startsWith('agent_') ? leadSupplierName : memberName) || null, hasFlight, guaranteeAvailable: isTta,
+    retailerName: memberName || null, certificateIssuer: certificateIssuer || null, trustLabel, retailerAddress,
+    retailerMemberNumber: recordText(member, memberFields.number) || null, retailerCompanyNumber: recordText(member, memberFields.companyNumber) || null, retailerVatNumber: recordText(member, memberFields.vatNumber) || null,
+  };
 }
 
 function resolveProtectionMode(selection: string, hasFlight: boolean, isGlobal: boolean): string {
