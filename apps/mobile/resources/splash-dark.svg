@@ -1,0 +1,11 @@
+<!-- Launch screen (dark): the same tile on the same background as the app's own start-up screen (src/index.html). -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2732 2732" width="2732" height="2732">
+  <rect width="2732" height="2732" fill="#121415"/>
+  <g transform="translate(1216 1216) scale(4.6875)">
+    <rect width="64" height="64" rx="16" fill="#0b3b38"/>
+    <path d="M32 53C24 44 17 37 17 28a15 15 0 0 1 30 0c0 9-7 16-15 25Z" fill="#fff"/>
+    <circle cx="32" cy="28" r="10" fill="#0b3b38"/>
+    <path d="M25.5 31.9a6.5 6.5 0 0 1 13 0Z" fill="#ffb35c"/>
+    <path d="M21 33.2H43" stroke="#fff" stroke-width="3.2"/>
+  </g>
+</svg>

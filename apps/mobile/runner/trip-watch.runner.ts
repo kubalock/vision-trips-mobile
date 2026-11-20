@@ -8,7 +8,7 @@ import { checkTrips, configure, drain, type WatchHost } from '../src/background/
 type Handler = (resolve: (value?: unknown) => void, reject: (reason?: unknown) => void, args: unknown) => void;
 declare function addEventListener(event: string, handler: Handler): void;
 declare const CapacitorKV: { get(key: string): { value?: string | null } | null | undefined; set(key: string, value: string): void };
-declare const CapacitorNotifications: { schedule(notifications: Array<{ id: number; title: string; body: string; scheduleAt: Date; extra?: unknown; autoCancel?: boolean }>): void };
+declare const CapacitorNotifications: { schedule(notifications: Array<{ id: number; title: string; body: string; scheduleAt: Date; extra?: unknown; autoCancel?: boolean; smallIcon?: string }>): void };
 
 const host: WatchHost = {
   get: (key) => CapacitorKV.get(key)?.value ?? null,
@@ -16,6 +16,8 @@ const host: WatchHost = {
   fetch: (url, init) => fetch(url, init),
   notify: (notifications) => CapacitorNotifications.schedule(notifications.map((item) => ({
     id: item.id, title: item.title, body: item.body, scheduleAt: new Date(Date.now() + 1_000), extra: { tripId: item.tripId }, autoCancel: true,
+    // Android status-bar icon (see capacitor.config.ts LocalNotifications.smallIcon); iOS uses the app icon.
+    smallIcon: 'ic_stat_vision',
   }))),
   now: () => new Date(),
 };

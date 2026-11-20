@@ -11,6 +11,8 @@ const config: CapacitorConfig = {
   // Send HttpClient requests through the native layer: no browser CORS or mixed-content blocking inside the app.
   plugins: {
     CapacitorHttp: { enabled: true },
+    // Android status-bar icon (resources/notification.svg, copied into android/ by scripts/native-setup.mjs).
+    LocalNotifications: { smallIcon: 'ic_stat_vision', iconColor: '#0b3b38' },
     // Checks saved trips for changes while the app isn't open (src/background/trip-watch.ts). 15 minutes is
     // Android's minimum; both systems decide the real timing. The label is also the iOS background task identifier
     // (scripts/native-setup.mjs adds it to Info.plist).

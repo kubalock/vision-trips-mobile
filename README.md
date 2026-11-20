@@ -47,7 +47,12 @@ The Vision Trips mark, "Golden hour" (a map pin framing an amber sun setting on 
 
 - `apps/mobile/public/brand/logo-mark.svg`: the mark on its rounded tile; the app draws the same artwork with `vt-logo-mark` (`apps/mobile/src/app/shared/logo-mark.ts`) and inline on the start-up screen in `index.html`.
 - `apps/mobile/public/favicon.svg` and `favicon.ico`, `brand/apple-touch-icon.png`, `brand/icon-192.png`, `brand/icon-512.png`, `brand/icon-maskable-512.png` and `manifest.webmanifest`: browser tabs, home-screen bookmarks and installed web apps.
-- `apps/mobile/resources/icon.png` (1024×1024, full-bleed) and `icon-maskable.png`, with their SVG sources: for the native apps. After `npx cap add ios` / `npx cap add android`, generate every platform size with `npx @capacitor/assets generate --iconBackgroundColor '#0b3b38'` from `apps/mobile`.
+- `apps/mobile/resources/`: the native app's artwork. The SVGs are the sources; `npm run icons:render --workspace @vision-trips/mobile` renders the PNGs next to them (committed):
+  - `icon.svg` → `icon-only.png`: the iOS app icon (full-bleed; iOS rounds the corners).
+  - `icon-foreground.svg` + `icon-background.svg`: the Android adaptive icon (launchers crop it to a circle, squircle or square).
+  - `splash.svg` / `splash-dark.svg`: launch screens, the same tile on the same background as the app's own start-up screen. Android 12+ draws its own launch screen from the app icon on `#f6f6f5` (`#121415` in dark mode).
+  - `notification.svg` → `android/notification/`: Android's status-bar icon (white on transparent), used by phone notifications and the background check. iOS uses the app icon.
+- `npx cap sync` (through `scripts/native-setup.mjs`) generates every native size with `@capacitor/assets` when that artwork changed or a platform was added, and copies the notification icon in, so `android/` and `ios/` never keep Capacitor's placeholder icons.
 
 A travel agency's own logo still replaces the mark in the header when its trip is open.
 

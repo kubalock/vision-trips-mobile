@@ -1,0 +1,10 @@
+<!-- Android adaptive icon foreground: the mark alone. @capacitor/assets insets this image by 16.7%, so it fills the 72dp
+     visible area; the mark stays inside the 66dp safe circle that launchers never crop. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="1024" height="1024">
+  <g transform="translate(32 32) scale(.8) translate(-32 -33)">
+    <path d="M32 53C24 44 17 37 17 28a15 15 0 0 1 30 0c0 9-7 16-15 25Z" fill="#fff"/>
+    <circle cx="32" cy="28" r="10" fill="#0b3b38"/>
+    <path d="M25.5 31.9a6.5 6.5 0 0 1 13 0Z" fill="#ffb35c"/>
+    <path d="M21 33.2H43" stroke="#fff" stroke-width="3.2"/>
+  </g>
+</svg>

@@ -1,0 +1,9 @@
+<!-- Android status-bar icon: one colour on transparent (Android draws it white or tinted). The pin with the sunset
+     cut out of it; the horizon line and half sun stay solid inside the opening. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="96" height="96">
+  <g transform="translate(32 32) scale(1.36) translate(-32 -33)" fill="#fff">
+    <path fill-rule="evenodd" d="M32 53C24 44 17 37 17 28a15 15 0 0 1 30 0c0 9-7 16-15 25Z M32 18a10 10 0 1 0 0 20a10 10 0 1 0 0-20Z"/>
+    <path d="M25.5 31.9a6.5 6.5 0 0 1 13 0Z"/>
+    <rect x="21" y="31.6" width="22" height="3.2"/>
+  </g>
+</svg>
