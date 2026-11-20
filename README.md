@@ -41,6 +41,19 @@ npm run build:device --workspace @vision-trips/mobile   # bakes in http://<this 
 
 The app sends API requests through Capacitor's native HTTP layer (`CapacitorHttp`), so browser CORS and mixed-content rules don't apply inside it. iOS still blocks plain HTTP to local addresses unless `NSAllowsLocalNetworking` is set in `Info.plist`.
 
+## Store builds
+
+```sh
+VISION_API_URL=https://api.example.com/v1 npm run build:release --workspace @vision-trips/mobile
+```
+
+builds the production app for that API and copies it into `android/` and `ios/`. It refuses a missing, `http://` or local address, never includes the local-testing switches (`CAP_DEV`: plain HTTP and the `http://localhost` origin), and checks the synced config afterwards. Add `VISION_TRIP_LINK_HOSTS=trips.example.com` once the link domain exists. Then sign and upload from Android Studio (Build › Generate Signed App Bundle) and Xcode (Product › Archive). Signing keys and certificates stay out of git.
+
+- **Versions** come from `apps/mobile/package.json`: `version` is what customers see, and the store build number is `major × 10000 + minor × 100 + patch` (1.2.3 → 10203), so raise the version for every upload. `VISION_BUILD_NUMBER` overrides the number for a re-upload of the same version.
+- **Backups**: Android backup and phone-to-phone transfer are off. Saved sign-ins are encrypted with keys that never leave the phone, so a restored copy couldn't be used anyway. On a new phone, customers open their invitation link again.
+- **iOS privacy manifest**: `apps/mobile/resources/ios/PrivacyInfo.xcprivacy` declares the data the app sends (names and phone numbers from traveller profiles and callbacks, messages to the agent, passport and licence details, the session identity, engagement events) and why plugins use `UserDefaults` and file dates. Keep it and the App Store privacy labels in step when data handling changes.
+- All of this, like the icons and the background check, is applied to the native projects by `scripts/native-setup.mjs` on every `npx cap sync`.
+
 ## Logo and app icons
 
 The Vision Trips mark, "Golden hour" (a map pin framing an amber sun setting on the horizon: any destination, however you travel there), has one source per use:

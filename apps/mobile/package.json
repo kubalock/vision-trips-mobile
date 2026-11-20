@@ -1,6 +1,6 @@
 {
   "name": "@vision-trips/mobile",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
@@ -10,6 +10,7 @@
     "start:device": "ng serve --host 0.0.0.0",
     "build:device": "npm run build:runner && ng build --configuration development --define VISION_API_URL=\\\"http://$(ipconfig getifaddr en0):3000/v1\\\"",
     "build:runner": "node scripts/build-runner.mjs",
+    "build:release": "node scripts/build-release.mjs",
     "native:setup": "node scripts/native-setup.mjs",
     "capacitor:sync:after": "node scripts/native-setup.mjs",
     "icons:render": "node scripts/render-icons.mjs",
