@@ -64,6 +64,16 @@ Customers open a trip from an invitation link (`https://<host>/trip/vt_<token>`)
 - Fellow-traveller share links last seven days, and so do the sessions opened from them: refreshing never extends a share session past its link's expiry. Revoking a booking's invitations (`POST /v1/customer-invitations/revoke` without a `customerRecordId`) also revokes its share links, which ends sessions already opened from them (`access_revoked`).
 - Because the cookies are `SameSite=Strict`, the web app and the API must be served from the same site in production (for example `trips.example.com` and `api.example.com`).
 
+## In-app and phone notifications
+
+"Payment received", "Document ready" and the payment and departure reminders are worked out on the device by comparing two versions of a trip, with the rules in `packages/contracts/src/trip-notifications.ts`. Nothing is sent from the server yet (no push notifications).
+
+- **While the app is open**, the trip is checked again when it starts, when the connection comes back, on **Refresh**, after a payment, and when the app returns to the foreground if the saved copy is more than 5 minutes old (the API's `nextRefreshAfter`).
+- **While it isn't**, the installed app's background check (`apps/mobile/src/background/trip-watch.ts`, run by `@capacitor/background-runner`) asks `GET /v1/trips/current/watch` about every saved, signed-in trip. Android runs it every 15 minutes at the earliest and iOS when it chooses, and battery savers can delay it further. It shows what changed as a phone notification (when the customer turned them on) and hands it to the app, which adds it to the trip's list without showing it twice.
+- The background check can't read the app's secure storage, and the session's refresh token rotates, so it uses its own read-only **watch token** (`POST /v1/trips/current/watch`). The token is tied to the session, works only while that session could still be refreshed, can read only the notification summary (payment states, document versions, dates, balance), and is limited to 12 checks an hour.
+- `android/` and `ios/` aren't in git: `npx cap sync` runs `scripts/native-setup.mjs`, which adds what the plugin needs (the Android library path; iOS background modes, the task identifier and the `AppDelegate` registration). The runner script itself is built into `public/runners/` by `npm run build`.
+- To test on the Android emulator without waiting: change something in Airtable (or wait for a reminder date), put the app in the background, and after the 15 minutes run `adb shell cmd jobscheduler run -f -n androidx.work.systemjobscheduler uk.co.visiontrips.app <job id>` (`adb shell dumpsys jobscheduler` shows the id). iOS never runs background tasks in the Simulator.
+
 ## Mint payments
 
 Mint credentials and the Airtable automation webhook remain in the Airtable `Brands & Branches` record (`Mint | API Key`, `Mint | Business Unit`, `Webhook URL`, allowed methods and custom-payment setting). The booking must contain a `Mint | Booking ID` beginning with `BK.`. Every generated Mint link includes that brand's HTTPS webhook URL. Mint posts successful payment data directly to Airtable; the mobile app then refreshes the Airtable-backed snapshot until the completed payment and receipt appear.

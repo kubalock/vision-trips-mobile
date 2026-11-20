@@ -833,3 +833,10 @@ export interface RefreshSessionRequest {
 export * from './invitations.js';
 export * from './responses.js';
 export * from './format.js';
+export * from './trip-notifications.js';
+
+/** `POST /v1/trips/current/watch`: a read-only token for the background check (`GET /v1/trips/current/watch`). */
+export interface TripWatchRegistration {
+  /** Sent as `Authorization: Watch <token>`. Works while the session it came from can still be refreshed. */
+  watchToken: string;
+}

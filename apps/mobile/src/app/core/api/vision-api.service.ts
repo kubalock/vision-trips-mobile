@@ -130,6 +130,18 @@ export class VisionApiService {
     })), parseTripSnapshot);
   }
 
+  /** A read-only token the background check uses for this trip (`Authorization: Watch <token>`). */
+  registerWatch(accessToken: string): Promise<string> {
+    return parsed(firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/trips/current/watch`, {}, this.writeOptions(accessToken))), (value) => {
+      const token = (value as { watchToken?: unknown } | null)?.watchToken;
+      if (typeof token !== 'string' || !/^vtw_[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/.test(token)) throw new Error('Invalid watch registration.');
+      return token;
+    }, 'watch registration');
+  }
+
+  /** The API address, for the background check, which makes its own requests outside the web view. */
+  get apiBaseUrl(): string { return this.baseUrl; }
+
   paymentStatus(accessToken: string): Promise<PaymentStatusResponse> {
     return parsed(firstValueFrom(this.http.get<unknown>(`${this.baseUrl}/trips/current/payment-status`, this.readOptions(accessToken))), (value) => paymentStatusResponseSchema.parse(value), 'payment status');
   }

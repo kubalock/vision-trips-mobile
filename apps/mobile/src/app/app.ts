@@ -9,6 +9,7 @@ import { SavedTripsStore, type SavedTrip } from './core/storage/saved-trips.stor
 import { BrandAssetsStore } from './core/storage/brand-assets.store';
 import { groupSavedTrips } from './core/storage/trip-library';
 import { CustomerNotificationsStore, type CustomerNotification } from './core/storage/customer-notifications.store';
+import { BackgroundWatch } from './core/platform/background-watch';
 import { DocumentWalletStore, type WalletStatus } from './core/storage/document-wallet.store';
 import { ExternalPages, type PendingExternalPage } from './core/platform/external-pages';
 import { ShareSheet } from './core/platform/share-sheet';
@@ -64,6 +65,7 @@ export class App implements OnInit, OnDestroy {
   private readonly operationKeys = inject(OperationKeys);
   private readonly documentWallet = inject(DocumentWalletStore);
   private readonly customerNotifications = inject(CustomerNotificationsStore);
+  private readonly backgroundWatch = inject(BackgroundWatch);
   private readonly externalPages = inject(ExternalPages);
   private readonly shareSheet = inject(ShareSheet);
   private readonly pendingTasks = inject(PendingTasks);
@@ -269,7 +271,7 @@ export class App implements OnInit, OnDestroy {
       void CapacitorApp.addListener('appUrlOpen', ({ url }) => this.handleOpenedUrl(url)).then((listener) => { this.appUrlListener = listener; });
       void CapacitorApp.getLaunchUrl().then((launch) => { if (launch?.url) this.handleOpenedUrl(launch.url); }).catch(() => undefined);
       void CapacitorApp.addListener('appStateChange', ({ isActive }) => {
-        if (isActive) void this.checkPaymentReturn();
+        if (isActive) void this.onResume();
       }).then((listener) => { this.resumeListener = listener; });
       void this.externalPages.onClosed(() => void this.checkPaymentReturn()).then((listener) => { this.browserClosedListener = listener; });
       if (Capacitor.getPlatform() === 'android') {
@@ -603,6 +605,23 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Back in the foreground: first add what the background check showed meanwhile (so it isn't shown again), then
+   * either finish a payment check or, when the saved copy is past the time the API said to check again, refresh.
+   */
+  private async onResume(): Promise<void> {
+    await this.collectBackgroundNotifications();
+    if (this.paymentAwaitingReturn) { void this.checkPaymentReturn(); return; }
+    const trip = this.trip();
+    if (trip && this.session() && this.online() && !this.refreshing() && isSnapshotStale(trip)) void this.refreshCurrentTrip(false);
+  }
+
+  private async collectBackgroundNotifications(): Promise<void> {
+    const tripIds = await this.backgroundWatch.collect().catch(() => [] as string[]);
+    const open = this.trip()?.tripId;
+    if (open && tripIds.includes(open)) this.loadCustomerNotifications(open);
+  }
+
   private async checkPaymentReturn(): Promise<void> {
     if (!this.paymentAwaitingReturn || Date.now() - this.paymentOpenedAt < 1_000) return;
     const currentSession = this.session();
@@ -743,6 +762,8 @@ export class App implements OnInit, OnDestroy {
   }
 
   private async initializeOfflineState(activateSaved = true): Promise<void> {
+    // Before any trip is opened, so the app's own check after a refresh finds these already recorded.
+    await this.collectBackgroundNotifications();
     const status = await Network.getStatus();
     this.online.set(status.connected);
     this.networkListener = await Network.addListener('networkStatusChange', ({ connected }) => {
@@ -1381,6 +1402,7 @@ export class App implements OnInit, OnDestroy {
 
   private setSavedTripList(saved: SavedTrip[], connected: boolean): void {
     this.savedTripList.set(saved);
+    void this.backgroundWatch.update(saved);
     this.tripRefreshStates.update((states) => Object.fromEntries(saved.map((trip) => [
       trip.snapshot.tripId,
       states[trip.snapshot.tripId] === 'refreshing' ? 'refreshing' : !trip.session ? 'signed_out' : connected ? (isSnapshotStale(trip.snapshot) ? 'stale' : 'fresh') : 'offline',
@@ -1475,6 +1497,7 @@ export class App implements OnInit, OnDestroy {
     const requested = (event.target as HTMLInputElement).checked;
     const enabled = await this.customerNotifications.setDeviceEnabled(requested);
     this.deviceNotificationsEnabled.set(enabled);
+    void this.backgroundWatch.update(this.savedTripList());
   }
 
   /**
@@ -1615,7 +1638,7 @@ export class App implements OnInit, OnDestroy {
     try {
       // Documents saved for offline use open without a session, so they keep working after signing out.
       if (this.documentStatuses()[document.id] === 'saved') {
-        const uri = await this.documentWallet.uri(trip.tripId, document.id);
+        const uri = await this.documentWallet.shareUri(trip.tripId, document.id, document.title);
         if (uri) { await this.shareSheet.share({ title: document.title, files: [uri], dialogTitle: 'Open or share document' }); return; }
       }
       if (!session) { this.documentFailure.set({ id: document.id, message: 'Sign in again to download it: open your newest invitation link on this device. Documents you’ve already saved still open offline.' }); return; }
@@ -1624,7 +1647,7 @@ export class App implements OnInit, OnDestroy {
       const blob = await this.withSession(session, (accessToken) => this.api.downloadDocument(action, accessToken));
       if (await this.documentWallet.save(trip.tripId, document, blob)) {
         await this.refreshDocumentStatuses(trip);
-        const uri = await this.documentWallet.uri(trip.tripId, document.id);
+        const uri = await this.documentWallet.shareUri(trip.tripId, document.id, document.title);
         if (uri) await this.shareSheet.share({ title: document.title, files: [uri], dialogTitle: 'Document saved offline' });
       } else {
         this.downloadBlob(blob, `${trip.summary.reference.replace(/[^A-Za-z0-9_-]+/g, '-')}-${document.title.replace(/[^A-Za-z0-9_-]+/g, '-')}${fileExtension(blob.type)}`);

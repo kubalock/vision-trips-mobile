@@ -28,11 +28,22 @@ export class DocumentWalletStore {
     return true;
   }
 
-  async uri(tripId: string, documentId: string): Promise<string | null> {
+  /**
+   * A file URI the share sheet can hand to other apps. The saved copy stays private in Directory.Data; Android's
+   * FileProvider only shares the cache folder, so the document is copied there first (as on iOS, where it's harmless),
+   * under a readable name such as "Booking confirmation.pdf".
+   */
+  async shareUri(tripId: string, documentId: string, title?: string): Promise<string | null> {
     const entry = (await this.entries()).find((item) => item.tripId === tripId && item.documentId === documentId);
     if (!entry) return null;
-    try { return (await Filesystem.getUri({ path: entry.path, directory: Directory.Data })).uri; }
-    catch { return null; }
+    const name = (title ?? '').replace(/[^A-Za-z0-9 _-]+/g, ' ').replace(/\s+/g, ' ').trim() || entry.path.split('/').pop()!.replace(/\.[^.]+$/, '');
+    const to = `document-share/${name}${extension(entry.mimeType)}`;
+    try {
+      await Filesystem.mkdir({ path: 'document-share', directory: Directory.Cache, recursive: true }).catch(() => undefined); // Already there.
+      await Filesystem.deleteFile({ path: to, directory: Directory.Cache }).catch(() => undefined); // An older copy.
+      await Filesystem.copy({ from: entry.path, directory: Directory.Data, to, toDirectory: Directory.Cache });
+      return (await Filesystem.getUri({ path: to, directory: Directory.Cache })).uri;
+    } catch { return null; }
   }
 
   /** Deletes every saved file for one trip (or all trips when tripId is omitted) and drops their index entries. */

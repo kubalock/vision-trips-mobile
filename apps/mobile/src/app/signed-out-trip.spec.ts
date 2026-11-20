@@ -79,7 +79,7 @@ describe('signed-out saved trip', () => {
   it('still opens saved documents, and explains why an unsaved one cannot download', async () => {
     const { app } = await render();
     const wallet = TestBed.inject(DocumentWalletStore);
-    vi.spyOn(wallet, 'uri').mockResolvedValue('file:///saved.pdf');
+    vi.spyOn(wallet, 'shareUri').mockResolvedValue('file:///saved.pdf');
     const share = vi.spyOn(TestBed.inject(ShareSheet), 'share').mockResolvedValue(undefined as never);
     app.documentStatuses.set({ doc_saved: 'saved', doc_new: 'not_saved' });
     await app.downloadDocument('confirmation');

@@ -22,7 +22,7 @@ import { type AcceptanceEvidence, parseAcceptanceEvidence, signedInAs, signedInA
 import { customerEmail, customersTable } from './customer-identity.js';
 import { walkthroughVideo } from '../trips/trip-extras.js';
 import { bookingFields, pick } from '../trips/field-map.js';
-import { maskEmail } from '@vision-trips/contracts';
+import { maskEmail, notificationBasis, type NotificationBasis, type TripWatchRegistration } from '@vision-trips/contracts';
 
 const REVIEW_SECTION_IDS: readonly QuotationReviewSectionId[] = ['package', 'names', 'important', 'protection', 'terms'];
 const EMAIL_PATTERN = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
@@ -135,6 +135,26 @@ export class TripActionsController {
     // none, so tapping "Pay" asks the API, which asks the customer to confirm by email first.
     if (isVerified(principal) || !snapshot.payments) return snapshot;
     return { ...snapshot, payments: { ...snapshot.payments, items: snapshot.payments.items.map((item) => ({ ...item, actionUrl: null })) } };
+  }
+
+  /** A read-only token for the app's background check of this trip (see SessionsService.watchToken). */
+  @Post('watch')
+  @NoStoredReplay()
+  @ApiBearerAuth()
+  async registerWatch(@Headers('authorization') authorization: string | undefined): Promise<TripWatchRegistration> {
+    return { watchToken: this.sessions.watchToken(await this.live(authorization)) };
+  }
+
+  /**
+   * What the background check needs to work out notifications (`Authorization: Watch <token>`): payment states,
+   * document versions and dates, without links, travellers or prices beyond the balance.
+   */
+  @Get('watch')
+  async watch(@Headers('authorization') authorization: string | undefined): Promise<NotificationBasis> {
+    const principal = this.sessions.validateWatch(authorization);
+    await this.entitlements?.assertCurrent(principal);
+    const snapshot = await this.trips.snapshot(principal.baseId, principal.recordId, principal.fellowTraveller ? 'fellow_traveller' : 'primary_customer', { maxAgeMs: SNAPSHOT_CACHE_MS });
+    return notificationBasis(snapshot);
   }
 
   /**

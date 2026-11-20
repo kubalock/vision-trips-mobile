@@ -211,6 +211,10 @@ export class DurableAuthStore implements OnModuleDestroy {
     return mapSession(this.database.prepare('SELECT * FROM auth_sessions WHERE refresh_hash = ?').get(hash) as unknown as SessionRow | undefined);
   }
 
+  sessionById(id: string): StoredSession | null {
+    return mapSession(this.database.prepare('SELECT * FROM auth_sessions WHERE id = ?').get(id) as unknown as SessionRow | undefined);
+  }
+
   sessionByAccessHash(hash: string): StoredSession | null {
     return mapSession(this.database.prepare('SELECT * FROM auth_sessions WHERE access_hash = ?').get(hash) as unknown as SessionRow | undefined);
   }

@@ -1,9 +1,9 @@
 import { Injectable } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import type { TripSnapshot } from '@vision-trips/contracts';
+import { notificationBasis, notificationNumber, reminderTitle, tripNotifications, type CustomerNotificationKind, type NotificationDraft, type TripSnapshot } from '@vision-trips/contracts';
 
-export type CustomerNotificationKind = 'quote_accepted' | 'payment_received' | 'documents_ready' | 'balance_reminder' | 'departure_reminder';
+export type { CustomerNotificationKind };
 
 export interface CustomerNotification {
   id: string;
@@ -49,44 +49,24 @@ export class CustomerNotificationsStore {
     await this.add(snapshot.tripId, 'quote_accepted', `Quotation accepted`, `${snapshot.summary.name} has been accepted. Your agent will confirm the booking with the suppliers.`, `quote:${snapshot.version}`);
   }
 
+  /** Records (and shows) what changed between two versions of a trip, using the rules shared with the background check. */
   async sync(previous: TripSnapshot | null, snapshot: TripSnapshot): Promise<void> {
-    if (previous?.payments && snapshot.payments) {
-      const previousItems = new Map(previous.payments.items.map((item) => [item.id, item]));
-      for (const payment of snapshot.payments.items) {
-        if (payment.status === 'paid' && previousItems.get(payment.id)?.status !== 'paid') {
-          await this.add(snapshot.tripId, 'payment_received', 'Payment received', `${payment.label} has been received.${snapshot.payments.balance === null ? '' : ` Your balance is now ${money(snapshot.payments.balance, snapshot.payments.currency)}.`}`, `payment:${payment.id}:${payment.completedDate ?? snapshot.version}`);
-        }
-      }
+    for (const draft of tripNotifications(previous ? notificationBasis(previous) : null, notificationBasis(snapshot))) {
+      await this.add(snapshot.tripId, draft.kind, draft.title, draft.body, draft.id.slice(draft.kind.length + 1));
     }
+  }
 
-    if (previous) {
-      const previousDocuments = new Map(previous.documents.map((document) => [document.id, document]));
-      const ready = snapshot.documents.filter((document) => document.status === 'ready' && (previousDocuments.get(document.id)?.status !== 'ready' || previousDocuments.get(document.id)?.version !== document.version));
-      if (ready.length) await this.add(snapshot.tripId, 'documents_ready', ready.length === 1 ? 'Document ready' : 'Documents ready', ready.length === 1 ? `${ready[0].title} is ready to download.` : `${ready.length} travel documents are ready to download.`, `documents:${ready.map((document) => `${document.id}:${document.version}`).sort().join('|')}`);
-    }
+  /** Records notifications the background check already showed on the device, without showing them a second time. */
+  recordShown(tripId: string, drafts: Array<NotificationDraft & { createdAt?: string }>): void {
+    const notifications = this.read(tripId);
+    const known = new Set(notifications.map((notification) => notification.id));
+    const added = drafts.filter((draft) => !known.has(draft.id)).map((draft): CustomerNotification => ({ id: draft.id, tripId, kind: draft.kind, title: draft.title, body: draft.body, createdAt: draft.createdAt ?? new Date().toISOString(), readAt: null }));
+    if (added.length) this.write(tripId, [...added, ...notifications].slice(0, 100));
+  }
 
-    const nextPayment = snapshot.payments?.items
-      .filter((payment) => payment.status === 'outstanding' || payment.status === 'overdue')
-      .filter((payment) => payment.dueDate)
-      .sort((left, right) => (left.dueDate ?? '').localeCompare(right.dueDate ?? ''))[0];
-    if (nextPayment?.dueDate) {
-      const days = daysFromToday(nextPayment.dueDate);
-      // A quotation not yet accepted owes nothing, so a lapsed due date is not a reminder.
-      const awaitingAcceptance = snapshot.stage === 'quote' && !snapshot.quotation?.accepted;
-      if (days <= 7 && !(awaitingAcceptance && days < 0)) {
-        const timing = days < 0 ? 'is overdue' : days === 0 ? 'is due today' : `is due in ${days} day${days === 1 ? '' : 's'}`;
-        await this.add(snapshot.tripId, 'balance_reminder', reminderTitle(nextPayment.label), `${nextPayment.label} ${timing}.`, `balance:${nextPayment.id}:${nextPayment.dueDate}:${days < 0 ? 'overdue' : days}`);
-      }
-    }
-
-    if (snapshot.summary.departureDate) {
-      const days = daysFromToday(snapshot.summary.departureDate);
-      const threshold = [1, 7, 30].find((value) => days >= 0 && days <= value);
-      if (threshold) {
-        const timing = days === 0 ? 'today' : `in ${days} day${days === 1 ? '' : 's'}`;
-        await this.add(snapshot.tripId, 'departure_reminder', 'Your trip is nearly here', `${snapshot.summary.name} departs ${timing}. Check your documents and final travel details.`, `departure:${snapshot.summary.departureDate}:${threshold}`);
-      }
-    }
+  /** Ids of every notification recorded for a trip, so the background check never shows one of them again. */
+  ids(tripId: string): string[] {
+    return this.read(tripId).map((notification) => notification.id);
   }
 
   markAllRead(tripId: string): void {
@@ -115,7 +95,7 @@ export class CustomerNotificationsStore {
 
   private async present(notification: CustomerNotification): Promise<void> {
     if (Capacitor.isNativePlatform()) {
-      await LocalNotifications.schedule({ notifications: [{ id: notificationId(notification.id), title: notification.title, body: notification.body, schedule: { at: new Date(Date.now() + 500) }, extra: { tripId: notification.tripId } }] });
+      await LocalNotifications.schedule({ notifications: [{ id: notificationNumber(notification.id), title: notification.title, body: notification.body, schedule: { at: new Date(Date.now() + 500) }, extra: { tripId: notification.tripId } }] });
     } else if ('Notification' in window && Notification.permission === 'granted') new Notification(notification.title, { body: notification.body, tag: notification.id });
   }
 
@@ -139,11 +119,6 @@ function isCustomerNotification(value: unknown): value is CustomerNotification {
   return typeof item.id === 'string' && typeof item.tripId === 'string' && typeof item.title === 'string' && typeof item.createdAt === 'string';
 }
 
-/** A reminder is a "Balance reminder" only for the balance; a deposit or instalment is a "Payment reminder". */
-function reminderTitle(label: string): string {
-  return /balance/i.test(label) ? 'Balance reminder' : 'Payment reminder';
-}
-
 /**
  * Reminders saved by older versions were all titled "Balance reminder", even for a deposit. The body starts with the
  * payment's label ("Deposit is overdue."), so the title is worked out again when shown instead of trusting the stored one.
@@ -153,20 +128,4 @@ function withCurrentTitle(notification: CustomerNotification): CustomerNotificat
   const label = notification.body.replace(/ is (overdue|due today|due in \d+ days?)\.$/, '');
   const title = reminderTitle(label);
   return title === notification.title ? notification : { ...notification, title };
-}
-
-function daysFromToday(date: string): number {
-  const today = new Date();
-  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-  return Math.floor((new Date(`${date}T00:00:00`).getTime() - start) / 86_400_000);
-}
-
-function money(amount: number, currency: string): string {
-  return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(amount);
-}
-
-function notificationId(value: string): number {
-  let hash = 0;
-  for (const character of value) hash = ((hash << 5) - hash + character.charCodeAt(0)) | 0;
-  return Math.abs(hash) || 1;
 }

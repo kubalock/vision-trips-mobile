@@ -1,6 +1,6 @@
-import { Inject, Injectable, Logger, Optional, UnauthorizedException } from '@nestjs/common';
+import { HttpException, HttpStatus, Inject, Injectable, Logger, Optional, UnauthorizedException } from '@nestjs/common';
 import type { MobileSession, SessionAssurance } from '@vision-trips/contracts';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { identityKey } from '../security/identity-key.js';
 import { DurableAuthStore, type StoredSession } from './durable-auth.store.js';
 import { TripEntitlementsService, accessRevoked } from './trip-entitlements.service.js';
@@ -102,6 +102,34 @@ export class SessionsService {
     return principalOf(stored);
   }
 
+  /**
+   * A read-only token for the app's background check (`GET /v1/trips/current/watch`). It is separate from the
+   * session's tokens because the background runner can't share the app's secure storage, and using the rotating
+   * refresh token there would end the session as a replayed token. It never changes for a session (an HMAC of the
+   * session id), works only while that session could still be refreshed, and ends with it.
+   */
+  watchToken(principal: Pick<SessionPrincipal, 'sessionId'>): string {
+    if (!principal.sessionId) throw invalidSession();
+    return `vtw_${principal.sessionId}.${watchSignature(principal.sessionId)}`;
+  }
+
+  /** The session behind `Authorization: Watch <token>`, if that session is still live. */
+  validateWatch(authorization: unknown): SessionPrincipal {
+    if (typeof authorization !== 'string' || !authorization.startsWith('Watch ')) throw invalidSession();
+    const match = /^vtw_([0-9a-f-]{36})\.([A-Za-z0-9_-]{43})$/.exec(authorization.slice(6).trim());
+    const [, sessionId, signature] = match ?? [];
+    if (!sessionId || !signature) throw invalidSession();
+    const expected = Buffer.from(watchSignature(sessionId));
+    const presented = Buffer.from(signature);
+    if (expected.length !== presented.length || !timingSafeEqual(expected, presented)) throw invalidSession();
+    const stored = this.store.sessionById(sessionId);
+    if (stored?.accessRevoked) throw accessRevoked();
+    if (!stored || stored.revoked || stored.refreshExpiresAt < Date.now()) throw new UnauthorizedException('The session has expired.');
+    // Phones check every 15 minutes at most; anything much faster is not the background check.
+    if (!this.store.consumeRateLimit(`watch:${stored.id}`, WATCH_CHECKS_PER_HOUR, 3_600_000).allowed) throw new HttpException('Too many checks. Try again later.', HttpStatus.TOO_MANY_REQUESTS);
+    return principalOf(stored);
+  }
+
   /** Ends a session by its internal id (used when a step-up verification replaces it). */
   revokeById(sessionId: string): void {
     this.store.revokeSession(sessionId);
@@ -135,6 +163,9 @@ export class SessionsService {
   }
 }
 
+/** Background checks allowed per session per hour (Android's minimum interval is 15 minutes; this leaves room for retries). */
+const WATCH_CHECKS_PER_HOUR = 12;
+
 /** Two requests racing with the same refresh token is normal; only treat reuse after this as theft. */
 const REFRESH_REUSE_GRACE_MS = 10_000;
 
@@ -149,6 +180,14 @@ function isAccessRevoked(error: unknown): boolean {
 /** A rolling expiry, never past the session's fixed end. */
 function capped(expiresAt: number, absoluteExpiresAt: number | null | undefined): number {
   return absoluteExpiresAt == null ? expiresAt : Math.min(expiresAt, absoluteExpiresAt);
+}
+function watchSignature(sessionId: string): string {
+  return createHmac('sha256', watchKey()).update(`trip-watch:${sessionId}`).digest('base64url');
+}
+function watchKey(): Buffer {
+  const secret = process.env.VISION_WATCH_SECRET?.trim() || process.env.VISION_LINK_SECRET?.trim();
+  if (!secret && process.env.NODE_ENV === 'production') throw new Error('VISION_WATCH_SECRET or VISION_LINK_SECRET is required.');
+  return createHash('sha256').update(`vision-trip-watch:${secret || 'local-development-only'}`).digest();
 }
 function token(prefix: string): string { return `${prefix}_${randomBytes(32).toString('base64url')}`; }
 function hash(value: string): string { return createHash('sha256').update(value).digest('base64url'); }

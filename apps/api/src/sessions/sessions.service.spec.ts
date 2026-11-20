@@ -107,3 +107,44 @@ describe('SessionsService assurance', () => {
     rmSync(directory, { recursive: true });
   });
 });
+
+describe('SessionsService background-check (watch) tokens', () => {
+  const grant = { baseId: 'appABCDEFGHIJKLMN', recordId: 'recABCDEFGHIJKLMN', fellowTraveller: false, customerRecordId: null, assurance: 'otp' as const };
+
+  it('identifies the session, keeps working across refresh-token rotation and never touches the session tokens', async () => {
+    const service = serviceInMemory();
+    const session = service.issue(grant);
+    const principal = service.validateAccess(`Bearer ${session.accessToken}`);
+    const watch = service.watchToken(principal);
+
+    expect(watch).toMatch(/^vtw_/);
+    expect(service.validateWatch(`Watch ${watch}`)).toMatchObject({ baseId: grant.baseId, recordId: grant.recordId, sessionId: principal.sessionId });
+    const refreshed = await service.refresh(session.refreshToken);
+    expect(service.validateWatch(`Watch ${watch}`).sessionId).toBe(principal.sessionId);
+    // Using the watch token must not count as replaying a refresh token.
+    expect(() => service.validateAccess(`Bearer ${refreshed.accessToken}`)).not.toThrow();
+  });
+
+  it('rejects altered tokens, other schemes and tokens for ended sessions', () => {
+    const service = serviceInMemory();
+    const session = service.issue(grant);
+    const watch = service.watchToken(service.validateAccess(`Bearer ${session.accessToken}`));
+    const other = service.issue(grant);
+    const otherId = service.validateAccess(`Bearer ${other.accessToken}`).sessionId!;
+
+    expect(() => service.validateWatch(`Bearer ${watch}`)).toThrow();
+    expect(() => service.validateWatch(`Watch ${watch.slice(0, -2)}xx`)).toThrow();
+    // A signature from one session can't be moved onto another session id.
+    expect(() => service.validateWatch(`Watch vtw_${otherId}.${watch.split('.')[1]}`)).toThrow();
+    service.revoke(session.refreshToken);
+    expect(() => service.validateWatch(`Watch ${watch}`)).toThrow('expired');
+  });
+
+  it('limits how often a session can be checked', () => {
+    const service = serviceInMemory();
+    const session = service.issue(grant);
+    const watch = service.watchToken(service.validateAccess(`Bearer ${session.accessToken}`));
+    for (let check = 0; check < 12; check += 1) service.validateWatch(`Watch ${watch}`);
+    expect(() => service.validateWatch(`Watch ${watch}`)).toThrow('Too many checks');
+  });
+});
