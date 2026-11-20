@@ -2368,3 +2368,119 @@ body.vt .vt-app .vt-account-danger button { min-height: 44px; }
   :root:not([data-theme="light"]) body.vt .vt-app .vt-top__logo { padding: 3px 6px; border-radius: 8px; background: #fff; }
 }
 :root[data-theme="dark"] body.vt .vt-app .vt-top__logo { padding: 3px 6px; border-radius: 8px; background: #fff; }
+
+/* ── Compact phone layout ────────────────────────────────────────────────────────────────────────────────────────────
+   Phones get the density of the platforms' own apps: lighter chrome, smaller buttons and chips, tighter cards and gaps.
+   Body text stays at 14px and the type scale returns to the desktop one (the phone scale above was larger). Touch
+   targets stay at least 40px (the bottom bar 54px). Tablets and desktop (560px and wider) are unchanged. Kept last, with
+   `body.vt .vt-app`, so it wins over the earlier phone rules. */
+@media (max-width: 559px) {
+  :root { --fs-1: .875rem; --fs-2: 1rem; --fs-3: 1.125rem; --fs-4: 1.3rem; --fs-5: clamp(1.6rem, 7vw, 2rem); --nav-h: 54px; --card-pad: 14px; --card-gap: 10px; }
+
+  /* Never wider than the screen: an unbreakable line in one card must not widen the whole page, which made it slide
+     sideways. Columns can't grow past the screen, and anything that still overflows is clipped (clip, unlike hidden,
+     keeps the sticky header working). Sideways scrollers inside the page (tailor-made ideas) are unaffected. */
+  body.vt { overflow-x: clip; }
+  body.vt .vt-app :is(.vt-trip-library, .vt-trip-group, .vt-trip-grid) { grid-template-columns: minmax(0, 1fr); }
+  body.vt .vt-app :is(.vt-trip-library, .vt-trip-group, .vt-trip-grid) > * { min-width: 0; }
+
+  /* Header: plain icons instead of a shaded tray of circles. */
+  body.vt .vt-app .vt-top__inner { min-height: 52px; }
+  body.vt .vt-app .vt-top__logo { max-height: 30px; }
+  body.vt .vt-app .vt-top__mark { width: 32px; height: 32px; }
+  body.vt .vt-app .vt-top__actions { gap: 0; padding: 0; border: 0; background: transparent; box-shadow: none; }
+  body.vt .vt-app .vt-top__actions .vt-iconbtn { width: 40px; height: 40px; min-width: 40px; min-height: 40px; border-color: transparent; background: transparent; }
+
+  /* Bottom bar: shorter, no shaded block behind the active tab (the underline marks it). */
+  body.vt .vt-app .vt-nav button { min-height: var(--nav-h); padding: 3px 2px; gap: 1px; font-size: 11px; }
+  body.vt .vt-app .vt-nav button.is-active { background: transparent; }
+  body.vt .vt-app .vt-nav button.is-active::after { bottom: 2px; width: 20px; }
+  body.vt .vt-app .vt-nav__icon { width: 26px; height: 26px; font-size: 1.05rem; }
+
+  /* Buttons: the shared primary-action shape is 40px tall instead of 44px. */
+  body.vt .vt-app :is(.vt-primary-action, .vt-btn--primary, .vt-hero__calendar, .vt-account-save, .vt-account-trip__action) { height: 40px; min-height: 40px; padding: 0 16px; }
+  body.vt .vt-app :is(.vt-saved-trip__icon-button, .vt-notifications__close) { width: 40px; height: 40px; min-width: 40px; min-height: 40px; }
+  body.vt .vt-app .vt-btn { min-height: 40px; }
+  body.vt .vt-app .vt-message-fab { min-height: 40px; padding: 0 14px; gap: 6px; font-size: 13px; }
+  body.vt .vt-app .vt-trip-library__add { min-height: 44px; padding: 8px 16px; }
+  body.vt .vt-app .vt-saved-trip__open { min-height: 42px; padding: 8px 16px; }
+  body.vt .vt-app .vt-status-card__action { min-height: 34px; padding: 0 var(--sp-3); }
+
+  /* "Trip up to date" card. */
+  body.vt .vt-app .vt-trip-status-card { margin-top: 10px; padding: 9px 12px; }
+  body.vt .vt-app .vt-trip-status-card__refresh { min-width: 0; min-height: 34px; padding: 4px 12px; font-size: 13px; }
+
+  /* Trip hero. */
+  body.vt .vt-app .vt-hero { min-height: 230px; margin-top: 12px; }
+  body.vt .vt-app .vt-hero__body { padding: 16px; gap: 6px; }
+  body.vt .vt-app .vt-hero__title { font-size: 1.375rem; }
+  body.vt .vt-app .vt-hero__kicker { padding: 4px 9px; font-size: 11px; }
+  body.vt .vt-app .vt-hero__facts li { padding: 3px 8px; font-size: 12px; }
+  body.vt .vt-app .vt-main--home .vt-hero__calendar { height: 38px; min-height: 38px; padding: 0 14px; gap: 7px; font-size: 13px; }
+
+  /* Countdown. */
+  body.vt .vt-app .vt-countdown-card { margin-top: 16px; }
+  body.vt .vt-app .vt-countdown-card__unit { padding: 8px 4px; gap: 2px; }
+  body.vt .vt-app .vt-countdown-card__unit strong { font-size: 1.4rem; }
+
+  /* Sections, cards and titles: the shared card inset is 14px instead of 16px. */
+  body.vt .vt-app :is(
+    .vt-countdown-card, .vt-booking-journey-card, .vt-faq-card, .vt-home-info-card,
+    .vt-travellers-card, .vt-weather-card, .vt-guide-card, .vt-value-props,
+    .vt-home-footer, .vt-update-card, .vt-why-book-card, .vt-tailor-card,
+    .vt-payment-card, .vt-main--itinerary .vt-day-card,
+    .vt-main--help .vt-help-card, .vt-doc-group, .vt-saved-trip__body
+  ) { padding: 14px; }
+  body.vt .vt-app :is(.vt-main--itinerary .vt-el__row, .vt-main--documents .vt-doc-button) { padding: 12px 14px; }
+  body.vt .vt-app .vt-section { padding-top: 20px; }
+  body.vt .vt-app .vt-card, body.vt .vt-app .vt-status-card { padding: 12px 14px; }
+  body.vt .vt-app .vt-page-title { font-size: 1.3rem; line-height: 1.7rem; }
+  body.vt .vt-app main h2 { font-size: 1.125rem; }
+
+  /* My Trips: same rhythm as the trip screens. */
+  body.vt .vt-app .vt-main--trips .vt-trip-library { gap: 18px; padding: 16px var(--vt-flat-gutter) 32px; }
+  body.vt .vt-app .vt-trip-library__back { margin: -8px 0 -10px -6px; min-height: 40px; }
+  body.vt .vt-app .vt-trip-library__header { gap: 14px; }
+  body.vt .vt-app .vt-trip-library__header h1 { margin-top: 2px; font-size: 1.3rem; line-height: 1.7rem; }
+  body.vt .vt-app .vt-trip-library__header p:last-child { margin-top: 6px; font-size: .875rem; line-height: 1.45; }
+  body.vt .vt-app :is(.vt-trip-group, .vt-trip-grid) { gap: 10px; }
+  /* One card per row: each hugs its content instead of matching the tallest card (which left empty gaps). */
+  body.vt .vt-app .vt-trip-grid { grid-auto-rows: auto; }
+  body.vt .vt-app .vt-trip-group__heading h2 { font-size: 1.05rem; }
+  body.vt .vt-app .vt-trip-group__heading > span { min-height: 24px; padding: 2px 9px; font-size: .75rem; }
+  body.vt .vt-app .vt-saved-trip__media, body.vt .vt-app .vt-saved-trip__image { flex-basis: 96px; height: 96px; }
+  body.vt .vt-app .vt-saved-trip__header { gap: 10px; }
+  body.vt .vt-app .vt-saved-trip__header h3 { font-size: 1rem; }
+  body.vt .vt-app .vt-saved-trip__aside { gap: 8px; }
+  body.vt .vt-app .vt-saved-trip__utilities { gap: 6px; }
+  /* The card body's gap spaces its rows; the extra margins on dates and freshness doubled it. */
+  body.vt .vt-app .vt-saved-trip__body { gap: 10px; }
+  body.vt .vt-app .vt-saved-trip__dates { margin: 0; font-size: .84rem; }
+  body.vt .vt-app .vt-saved-trip__freshness { margin: -6px 0 4px; }
+
+  /* Status pills (trip stage) were raised to body size by a shared rule; on phones they are small labels again. */
+  /* (`:is(span, p)` matches the shared rule's specificity, which includes `.vt-trip-group__heading > span`.) */
+  body.vt .vt-app :is(span, p):is(.vt-saved-trip__status, .vt-account-status) { padding: 4px 9px; font-size: .68rem; line-height: 1rem; }
+
+  /* Account. */
+  body.vt .vt-app .vt-main--account .vt-account-page { gap: 12px; padding-bottom: 24px; }
+  body.vt .vt-app .vt-account-heading h1 { font-size: 1.3rem; line-height: 1.7rem; }
+  body.vt .vt-app .vt-account-card__header { gap: 10px; }
+  body.vt .vt-app :is(.vt-account-card__icon, .vt-account-danger__icon) { width: 36px; height: 36px; }
+  body.vt .vt-app :is(.vt-account-intro, .vt-account-muted) { margin-top: 10px; font-size: .875rem; line-height: 1.45; }
+  body.vt .vt-app .vt-account-trips { gap: 10px; margin-top: 12px; }
+  body.vt .vt-app .vt-account-trip__image { height: 96px; }
+  body.vt .vt-app .vt-account-trip__body { padding: 12px 14px; }
+  body.vt .vt-app .vt-account-trip__dates { margin-top: 8px; padding-bottom: 10px; }
+  body.vt .vt-app .vt-account-form { gap: 12px; }
+  body.vt .vt-app .vt-account-fieldset { margin-top: 16px; }
+  body.vt .vt-app .vt-account-fieldset--divided { padding-top: 16px; }
+  body.vt .vt-app .vt-account-save { margin-top: 16px; }
+  body.vt .vt-app .vt-account-danger { gap: 10px; padding: 14px; }
+  body.vt .vt-app .vt-account-empty { padding: 14px; }
+}
+
+/* Account and My Trips use the same side margins as the trip screens (16px up to 768px, 12px up to 480px); they had
+   kept the wider default, so their cards looked narrower than Home's. */
+@media (max-width: 768px) { body.vt .vt-app main:is(.vt-main--account, .vt-main--trips) { --vt-flat-gutter: 16px; } }
+@media (max-width: 480px) { body.vt .vt-app main:is(.vt-main--account, .vt-main--trips) { --vt-flat-gutter: 12px; } }
