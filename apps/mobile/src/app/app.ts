@@ -10,6 +10,7 @@ import { BrandAssetsStore } from './core/storage/brand-assets.store';
 import { groupSavedTrips } from './core/storage/trip-library';
 import { CustomerNotificationsStore, type CustomerNotification } from './core/storage/customer-notifications.store';
 import { BackgroundWatch } from './core/platform/background-watch';
+import { AppUpdate } from './core/platform/app-update';
 import { DocumentWalletStore, type WalletStatus } from './core/storage/document-wallet.store';
 import { ExternalPages, type PendingExternalPage } from './core/platform/external-pages';
 import { ShareSheet } from './core/platform/share-sheet';
@@ -34,6 +35,7 @@ import { InvitationFlow } from './features/invitation/invitation-flow';
 import { VtIcon, type VtIconName } from './shared/lucide-icon';
 import { VtLogoMark } from './shared/logo-mark';
 import { VtSignInAgain } from './shared/sign-in-again';
+import { VtUpdateRequired } from './shared/update-required';
 import { incompleteSectionsText, withLastKnownGood } from './core/api/partial-snapshot';
 import { brandPalette } from './shared/brand-palette';
 import { memberFontsUrl, themeStyle } from './shared/theme-style';
@@ -54,7 +56,7 @@ import { TravellerDetailsSection } from './features/account/traveller-details-se
 import { withEarlierEnrichment } from './core/api/external-merge';
 @Component({
   selector: 'app-root',
-  imports: [BookingJourneySection, BrandSupportSection, CommunicationsSection, CustomerAccountSection, DestinationsSection, DocumentsSection, EuropeanDatePipe, ExtrasSection, ExternalContentSection, InvitationFlow, ItinerarySection, PaymentsSection, StageExperienceSection, TravellerDetailsSection, TripContentSection, VideoViewer, VtIcon, VtLogoMark, VtSignInAgain],
+  imports: [BookingJourneySection, BrandSupportSection, CommunicationsSection, CustomerAccountSection, DestinationsSection, DocumentsSection, EuropeanDatePipe, ExtrasSection, ExternalContentSection, InvitationFlow, ItinerarySection, PaymentsSection, StageExperienceSection, TravellerDetailsSection, TripContentSection, VideoViewer, VtIcon, VtLogoMark, VtSignInAgain, VtUpdateRequired],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -66,6 +68,8 @@ export class App implements OnInit, OnDestroy {
   private readonly documentWallet = inject(DocumentWalletStore);
   private readonly customerNotifications = inject(CustomerNotificationsStore);
   private readonly backgroundWatch = inject(BackgroundWatch);
+  private readonly appUpdate = inject(AppUpdate);
+  private refreshingSavedTrips = false;
   private readonly externalPages = inject(ExternalPages);
   private readonly shareSheet = inject(ShareSheet);
   private readonly pendingTasks = inject(PendingTasks);
@@ -612,6 +616,7 @@ export class App implements OnInit, OnDestroy {
   private async onResume(): Promise<void> {
     await this.collectBackgroundNotifications();
     if (this.paymentAwaitingReturn) { void this.checkPaymentReturn(); return; }
+    if (this.showTripLibrary()) { void this.refreshStaleSavedTrips(); return; }
     const trip = this.trip();
     if (trip && this.session() && this.online() && !this.refreshing() && isSnapshotStale(trip)) void this.refreshCurrentTrip(false);
   }
@@ -778,6 +783,9 @@ export class App implements OnInit, OnDestroy {
     if (saved.length > 1) {
       this.showTripLibrary.set(true); // Before activating, so the last trip's Home never flashes on the way to My Trips.
       await this.activateSavedTrip(saved[0], false);
+      // My Trips opens without loading anything; bring stale trips up to date behind it. This also renews their
+      // sessions, which the background check needs before it can follow them.
+      if (status.connected) void this.refreshStaleSavedTrips();
       return;
     }
     // Show the saved copy straight away; the network refresh carries on in the background.
@@ -1268,6 +1276,24 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Refreshes, one at a time, every saved trip that is signed in and past the time the API said to check again,
+   * as if its refresh button had been pressed. Stops when the device goes offline or the app must be updated.
+   */
+  private async refreshStaleSavedTrips(): Promise<void> {
+    if (this.refreshingSavedTrips) return;
+    this.refreshingSavedTrips = true;
+    try {
+      for (const saved of this.savedTripList()) {
+        if (!this.online() || this.appUpdate.required()) return;
+        if (!saved.session || this.tripBusy(saved) || !isSnapshotStale(saved.snapshot)) continue;
+        await this.refreshSavedTrip(saved);
+      }
+    } finally {
+      this.refreshingSavedTrips = false;
+    }
+  }
+
   /** A saved trip is busy while it is being refreshed or removed; its refresh and remove controls wait. */
   protected tripBusy(saved: SavedTrip): boolean {
     return this.tripRefreshStates()[saved.snapshot.tripId] === 'refreshing' || this.removingTrips().has(saved.snapshot.tripId);
@@ -1735,6 +1761,7 @@ export function customerErrorMessage(error: unknown, fallback: string): string {
   if (isTerminalSessionError(error)) return error.reason === 'revoked' ? ACCESS_REVOKED_MESSAGE : 'You’ve been signed out of this trip. Open your trip link again to continue.';
   if (!(error instanceof HttpErrorResponse)) return fallback;
   if (error.status === 0) return 'We can’t reach Vision Trips right now. Check your connection and try again.';
+  if (error.status === 426) return 'This version of the app needs updating before your trip can refresh. Your saved copy is still here.';
   if (error.status === 401 && error.error?.code === 'access_revoked') return ACCESS_REVOKED_MESSAGE;
   if (error.status === 401) return 'For your security, please open your trip link again to continue.';
   // A partial save is a 503 too, but the traveller needs to know some changes did save and to save again.

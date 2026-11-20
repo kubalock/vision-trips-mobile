@@ -3,6 +3,7 @@ import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { SessionsModule } from '../sessions/sessions.module.js';
 import { IdempotencyInterceptor } from './idempotency.interceptor.js';
 import { PersistentRateLimitGuard } from './persistent-rate-limit.guard.js';
+import { AppVersionGuard } from './app-version.guard.js';
 import { RequestLoggingInterceptor } from './request-logging.interceptor.js';
 import { SnapshotVersionInterceptor } from './snapshot-version.interceptor.js';
 import { MediaUrlInterceptor } from './media-url.interceptor.js';
@@ -12,6 +13,7 @@ import { WebSessionCookiesInterceptor } from '../security/web-session-cookies.in
   imports: [SessionsModule],
   providers: [
     { provide: APP_GUARD, useClass: PersistentRateLimitGuard },
+    { provide: APP_GUARD, useClass: AppVersionGuard },
     { provide: APP_INTERCEPTOR, useClass: RequestLoggingInterceptor },
     { provide: APP_INTERCEPTOR, useClass: SnapshotVersionInterceptor },
     { provide: APP_INTERCEPTOR, useClass: MediaUrlInterceptor },

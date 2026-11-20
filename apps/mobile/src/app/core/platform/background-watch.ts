@@ -7,6 +7,7 @@ import { VisionApiService } from '../api/vision-api.service';
 import type { SavedTrip } from '../storage/saved-trips.store';
 import { CustomerNotificationsStore } from '../storage/customer-notifications.store';
 import type { ShownNotification, WatchConfiguration } from '../../../background/trip-watch';
+import { appClientHeaders } from './app-update';
 
 /** Must match `plugins.BackgroundRunner.label` in capacitor.config.ts. */
 export const TRIP_WATCH_LABEL = 'uk.co.visiontrips.app.trip-check';
@@ -66,6 +67,7 @@ export class BackgroundWatch {
 
     const configuration: WatchConfiguration = {
       enabled: this.notifications.deviceEnabled(),
+      client: await appClientHeaders(),
       trips: signedIn.filter((trip) => tokens[trip.snapshot.tripId]).map((trip) => ({
         tripId: trip.snapshot.tripId,
         apiBase: this.api.apiBaseUrl,

@@ -840,3 +840,13 @@ export interface TripWatchRegistration {
   /** Sent as `Authorization: Watch <token>`. Works while the session it came from can still be refreshed. */
   watchToken: string;
 }
+
+/** 426 from any API call: this installed app is older than the minimum version the API supports. */
+export interface AppUpdateRequired {
+  statusCode: 426;
+  code: 'app_update_required';
+  message: string;
+  minimumVersion: string;
+  /** The app's store page; null when none is configured (iOS before the App Store listing exists). */
+  updateUrl: string | null;
+}

@@ -33,6 +33,8 @@ export interface WatchConfiguration {
   /** The customer's "Notifications on this device" choice. Off: trips are still followed, but nothing is shown. */
   enabled: boolean;
   trips: WatchedTrip[];
+  /** The installed app's version headers (`X-Vision-App-Version`, `X-Vision-Platform`), sent with every check. */
+  client?: Record<string, string>;
 }
 
 export interface WatchHost {
@@ -52,7 +54,8 @@ const MAX_PENDING = 100;
 export function configure(host: WatchHost, details: unknown): void {
   const value = details as Partial<WatchConfiguration> | null;
   const trips = Array.isArray(value?.trips) ? value.trips.filter(isWatchedTrip) : [];
-  host.set(CONFIGURATION_KEY, JSON.stringify({ enabled: value?.enabled === true, trips } satisfies WatchConfiguration));
+  const client = Object.fromEntries(Object.entries(value?.client ?? {}).filter(([name, item]) => /^X-Vision-(App-Version|Platform)$/.test(name) && typeof item === 'string'));
+  host.set(CONFIGURATION_KEY, JSON.stringify({ enabled: value?.enabled === true, trips, client } satisfies WatchConfiguration));
 }
 
 /** For the app: notifications this check showed since the app last asked. Each is handed over once. */
@@ -72,10 +75,11 @@ export async function checkTrips(host: WatchHost): Promise<void> {
   for (const trip of configuration.trips) {
     let response: { status: number; json(): Promise<unknown> };
     try {
-      response = await host.fetch(`${trip.apiBase}/trips/current/watch`, { method: 'GET', headers: { Authorization: `Watch ${trip.watchToken}`, Accept: 'application/json' } });
+      response = await host.fetch(`${trip.apiBase}/trips/current/watch`, { method: 'GET', headers: { ...configuration.client, Authorization: `Watch ${trip.watchToken}`, Accept: 'application/json' } });
     } catch { continue; } // Offline: try again next time.
     // The session ended or the customer was unlinked: stop following the trip until the app registers it again.
     if (response.status === 401 || response.status === 403) { ended.add(trip.watchToken); continue; }
+    // Anything else (including 426 "update the app") means try again next time.
     if (response.status !== 200) continue;
     let next: unknown;
     try { next = await response.json(); } catch { continue; }

@@ -46,6 +46,29 @@ describe('start-up', () => {
     expect(await screensSeen()).toEqual(['loading', 'my-trips']);
   });
 
+  it('brings stale signed-in trips up to date behind My Trips, one at a time, and leaves fresh or signed-out ones', async () => {
+    const store = TestBed.inject(SavedTripsStore);
+    const fresh = parseTripSnapshot({ schemaVersion: 3, tripId: 'trp_fresh', stage: 'confirmed', accessScope: 'primary_customer', summary: { name: 'trp_fresh', reference: 'trp_fresh' }, freshness: { status: 'fresh', sourceUpdatedAt: null, nextRefreshAfter: future() } });
+    await store.save(trip('trp_a'), session('a'));
+    await store.save(fresh, session('fresh'));
+    await store.save(trip('trp_b'), session('b'));
+    await store.save(trip('trp_signed_out'), session('signed-out'));
+    await store.signOut('trp_signed_out');
+    let running = 0;
+    let overlapped = false;
+    const refreshed: string[] = [];
+    vi.spyOn(App.prototype as unknown as { refreshSavedTrip: (saved: { snapshot: { tripId: string } }) => Promise<void> }, 'refreshSavedTrip').mockImplementation(async (saved) => {
+      running += 1; overlapped ||= running > 1;
+      refreshed.push(saved.snapshot.tripId);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      running -= 1;
+    });
+
+    expect(await screensSeen()).toEqual(['loading', 'my-trips']);
+    await vi.waitFor(() => expect(refreshed.sort()).toEqual(['trp_a', 'trp_b']));
+    expect(overlapped).toBe(false);
+  });
+
   it('goes from loading straight to the entry screen when nothing is saved', async () => {
     expect(await screensSeen()).toEqual(['loading', 'entry']);
   });

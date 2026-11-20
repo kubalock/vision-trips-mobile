@@ -20,12 +20,14 @@ function host(responses: Record<string, { status: number; body?: unknown } | Err
   const kv = new Map<string, string>();
   const shown: Array<{ id: number; title: string; body: string; tripId: string }> = [];
   const requests: Array<{ url: string; authorization: string }> = [];
+  const headers: Array<Record<string, string>> = [];
   const value: WatchHost = {
     get: (key) => kv.get(key) ?? null,
     set: (key, item) => { kv.set(key, item); },
     fetch: async (url, init) => {
       const token = init.headers['Authorization'].replace('Watch ', '');
       requests.push({ url, authorization: init.headers['Authorization'] });
+      headers.push(init.headers);
       const response = responses[token];
       if (!response || response instanceof Error) throw response ?? new Error('offline');
       return { status: response.status, json: async () => response.body };
@@ -33,7 +35,7 @@ function host(responses: Record<string, { status: number; body?: unknown } | Err
     notify: (items) => { shown.push(...items); },
     now: () => TODAY,
   };
-  return { value, kv, shown, requests, trips: () => (JSON.parse(kv.get('trip-watch:configuration') ?? '{}') as { trips: WatchedTrip[] }).trips };
+  return { value, kv, shown, requests, headers, trips: () => (JSON.parse(kv.get('trip-watch:configuration') ?? '{}') as { trips: WatchedTrip[] }).trips };
 }
 
 describe('background trip check', () => {
@@ -99,6 +101,18 @@ describe('background trip check', () => {
     expect(device.trips().map((trip) => trip.tripId)).toEqual(['trp_one']);
     expect(device.trips()[0].basis.version).toBe('v1');
     expect(device.shown).toEqual([]);
+  });
+
+  it('sends the app version headers it was given, and nothing else from the app', async () => {
+    const device = host({ vtw_one: { status: 426, body: { code: 'app_update_required' } } });
+    configure(device.value, { enabled: true, trips: [watched()], client: { 'X-Vision-App-Version': '1.0.0', 'X-Vision-Platform': 'android', Authorization: 'Bearer stolen', Cookie: 'x' } });
+
+    await checkTrips(device.value);
+
+    expect(device.headers[0]).toEqual({ 'X-Vision-App-Version': '1.0.0', 'X-Vision-Platform': 'android', Authorization: 'Watch vtw_one', Accept: 'application/json' });
+    // An outdated app's check is refused: nothing is shown and the trip is kept for after the update.
+    expect(device.shown).toEqual([]);
+    expect(device.trips().map((trip) => trip.tripId)).toEqual(['trp_one']);
   });
 
   it('keeps a newer trip list the app sent while a check was running', async () => {
