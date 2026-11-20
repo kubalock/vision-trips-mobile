@@ -1,4 +1,5 @@
-// Applies the native changes the app needs to the generated android/ and ios/ projects, which are not in git: what
+// Applies the native changes the app needs to the android/ and ios/ projects (committed since 2026-11-20; the script
+// still rebuilds everything if a platform is removed and added again with `npx cap add`): what
 // @capacitor/background-runner needs, the app icons and launch screens, the notification icon, backup rules, the iOS
 // privacy manifest and the version numbers. Safe to run any number of times; runs after every `npx cap sync`
 // (package.json "capacitor:sync:after"). Projects that haven't been added yet are skipped.

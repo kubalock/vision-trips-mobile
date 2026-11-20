@@ -5,8 +5,6 @@ coverage/
 .env
 .env.*
 !.env.example
-apps/mobile/android/
-apps/mobile/ios/
 # Built from apps/mobile/runner by scripts/build-runner.mjs
 apps/mobile/public/runners/
 *.log
